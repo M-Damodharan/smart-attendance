@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Leave Application · Sri Balaji Gears{% endblock %}
+{% block content %}
+<section class="card">
+  <h3>Leave balance {{ today.year }}</h3>
+  <div class="stats">{% for b in balances %}<div><b>{{ '%g'|format(b['balance']) }}</b><span>{{ b['code'] }} left</span></div>{% endfor %}</div>
+</section>
+<section class="card">
+  <h3>Apply for leave</h3>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="apply">
+    <label>Type<select name="type_id" required>{% for t in types %}<option value="{{ t['id'] }}">{{ t['name'] }} ({{ t['code'] }})</option>{% endfor %}</select></label>
+    <div class="two"><label>From<input type="date" name="from_date" required value="{{ today }}"></label><label>To<input type="date" name="to_date" required value="{{ today }}"></label></div>
+    <label class="check"><input type="checkbox" name="half_day" value="1"> Half day (single date only)</label>
+    <label>Reason<textarea name="reason" rows="2" maxlength="500" required></textarea></label>
+    <button class="btn primary">Send to HR</button>
+  </form>
+</section>
+<section class="card">
+  <h3>My requests</h3>
+  {% if not rows %}<p class="muted">No leave requests yet.</p>{% endif %}
+  <ul class="rows tall">
+  {% for r in rows %}
+    <li><span><b>{{ r['code'] }}</b> · {{ r['from_date']|dmy }}{% if r['to_date'] != r['from_date'] %} → {{ r['to_date']|dmy }}{% endif %}<br><span class="muted small">{{ '%g'|format(r['days']) }} day(s){% if r['half_day'] %} (half){% endif %} · {{ r['reason'] }}{% if r['hr_remarks'] %} · HR: {{ r['hr_remarks'] }}{% endif %}</span></span>
+      <span class="r">{{ badge(r['status']) }}
+      {% if r['status']=='Pending' %}<form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="cancel"><input type="hidden" name="id" value="{{ r['id'] }}"><button class="link danger">Cancel</button></form>{% endif %}</span></li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

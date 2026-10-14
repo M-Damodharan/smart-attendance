@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Attendance Corrections · Sri Balaji Gears{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Attendance correction</h2>
+  <p class="muted small">Fix a missed punch or wrong time. Status is recalculated automatically; every change is written to the audit log with your reason.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Employee<select name="emp_id" required>{% for e in emps %}<option value="{{ e['id'] }}">{{ e['emp_code'] }} · {{ e['name'] }} ({{ e['shift_name'] }})</option>{% endfor %}</select></label>
+    <label>Date<input type="date" name="date" max="{{ today }}" value="{{ today }}" required></label>
+    <div class="two"><label>Check-in<input type="time" name="check_in"></label><label>Check-out<input type="time" name="check_out"></label></div>
+    <label>Reason (mandatory)<textarea name="reason" rows="2" required minlength="5" maxlength="300"></textarea></label>
+    <label class="check"><input type="checkbox" name="delete" value="1"> Delete this day's record instead (marks the day Absent)</label>
+    <button class="btn primary">Apply correction</button>
+  </form>
+</section>
+<section class="card">
+  <h3>Recent corrections</h3>
+  <ul class="rows tall">{% for r in recent %}<li><span><b>{{ r['actor_name'] }}</b> · {{ r['entity_id'] }}<br><span class="muted small">{{ r['details'] }}</span></span><span class="r muted small">{{ r['ts'] }}</span></li>{% else %}<li class="muted">None yet.</li>{% endfor %}</ul>
+</section>
+{% endblock %}

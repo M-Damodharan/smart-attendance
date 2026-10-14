@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card narrow center">
+  <h2>{{ e.code }} · {{ {400:'Bad request',403:'Not allowed',404:'Page not found',500:'Server error'}.get(e.code, 'Error') }}</h2>
+  <p class="muted">{{ e.description if e.code != 404 else "That page doesn't exist." }}</p>
+  <a class="btn" href="{{ url_for('auth.index') }}">Go home</a>
+</section>
+{% endblock %}

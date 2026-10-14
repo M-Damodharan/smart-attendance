@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}On-Duty (OD) · Sri Balaji Gears{% endblock %}
+{% block content %}
+<section class="card">
+  <h3>Apply for On Duty (OD)</h3>
+  <p class="muted small">Working at a client site or outside the office? Once HR approves, you can check in/out from that day's field location (selfie + GPS are still recorded).</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="apply">
+    <label>Date<input type="date" name="od_date" value="{{ today }}" required></label>
+    <div class="two"><label>From<input type="time" name="from_time"></label><label>To<input type="time" name="to_time"></label></div>
+    <label>Location / client<input name="location" maxlength="200" required></label>
+    <label>Purpose<textarea name="purpose" rows="2" maxlength="500"></textarea></label>
+    <button class="btn primary">Send to HR</button>
+  </form>
+</section>
+<section class="card">
+  <h3>My OD requests</h3>
+  {% if not rows %}<p class="muted">No OD requests yet.</p>{% endif %}
+  <ul class="rows tall">
+  {% for r in rows %}
+    <li><span><b>{{ r['od_date']|dmy }}</b> · {{ r['location'] }}<br><span class="muted small">{{ r['from_time'] or '' }}{% if r['to_time'] %}–{{ r['to_time'] }}{% endif %} {{ r['purpose'] or '' }}{% if r['hr_remarks'] %} · HR: {{ r['hr_remarks'] }}{% endif %}</span></span>
+      <span class="r">{{ badge(r['status']) }}
+      {% if r['status']=='Pending' %}<form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="cancel"><input type="hidden" name="id" value="{{ r['id'] }}"><button class="link danger">Cancel</button></form>{% endif %}</span></li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

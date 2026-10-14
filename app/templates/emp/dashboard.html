@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip with context %}
+{% block title %}Home · Sri Balaji Gears{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="clock" id="clock">--:--</div>
+    <div class="date">{{ today.strftime('%A, %d %B %Y') }}</div>
+    <div class="muted small">{{ shift['name'] }} · {{ shift['start_time'] }}–{{ shift['end_time'] }}</div>
+  </div>
+  <div class="today-state">
+    {% if rec and rec['check_out'] %}
+      <div class="state done">Day complete</div>
+      <div class="muted">{{ rec['check_in']|hm }} → {{ rec['check_out']|hm }} · {{ rec['work_hours']|hrs }}</div>
+      <div>{{ chip(rec['status']) }} {{ STATUS_LABELS.get(rec['status'],'') }}{% if rec['late'] %} · <span class="late">Late</span>{% endif %}</div>
+    {% elif rec %}
+      <div class="state working">Checked in {{ rec['check_in']|hm }}</div>
+      <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check out</a>
+    {% else %}
+      <div class="state">Not checked in</div>
+      <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check in</a>
+      {% if od_today %}<div class="small okc">On-duty approved today ({{ od_today['location'] }}) — field check-in allowed</div>{% endif %}
+    {% endif %}
+  </div>
+</section>
+
+<section class="card">
+  <h3>{{ month_name }}</h3>
+  <div class="stats">
+    <div><b>{{ summary['P'] + summary['OT'] }}</b><span>Present</span></div>
+    <div><b>{{ summary['HD'] }}</b><span>Half day</span></div>
+    <div><b>{{ summary['A'] }}</b><span>Absent</span></div>
+    <div><b>{{ summary['OT'] }}</b><span>OT days</span></div>
+    <div><b>{{ summary['L'] }}</b><span>Leave</span></div>
+    <div><b>{{ summary['late'] }}</b><span>Late</span></div>
+  </div>
+  <p class="muted small">Worked {{ summary['hours'] }} h this month · OT {{ summary['ot_hours'] }} h{% if pend %} · <a href="{{ url_for('emp.leave') }}">{{ pend }} request(s) pending</a>{% endif %}</p>
+</section>
+
+<section class="card">
+  <h3>Last 7 days</h3>
+  <ul class="rows">
+    {% for d, code, r in recent %}
+    <li>
+      <span class="d">{{ d.strftime('%a %d %b') }}</span>
+      <span>{{ chip(code) }}</span>
+      <span class="muted">{% if r and r['check_in'] %}{{ r['check_in']|hm }} – {{ r['check_out']|hm }}{% else %}{{ STATUS_LABELS.get(code,'') }}{% endif %}</span>
+      <span class="r">{% if r and r['work_hours'] %}{{ r['work_hours']|hrs }}{% endif %}{% if r and r['late'] %} <span class="late">late</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% if holiday %}<p class="muted small center">Next holiday: {{ holiday['name'] }} · {{ holiday['date']|dmy }}</p>{% endif %}
+{% endblock %}
+{% block scripts %}<script>startClock(document.getElementById('clock'));</script>{% endblock %}

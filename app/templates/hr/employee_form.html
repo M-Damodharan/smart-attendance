@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if emp else 'New' }} Employee · Sri Balaji Gears{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>{{ 'Edit ' ~ emp['emp_code'] if emp else 'New employee' }}</h2>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="two"><label>Employee code<input name="emp_code" required value="{{ emp['emp_code'] if emp }}"></label>
+      <label>Full name<input name="name" required value="{{ emp['name'] if emp }}"></label></div>
+    <div class="two"><label>Email<input type="email" name="email" value="{{ emp['email'] or '' if emp }}"></label>
+      <label>Phone<input name="phone" value="{{ emp['phone'] or '' if emp }}"></label></div>
+    <div class="two"><label>Department<input name="department" value="{{ emp['department'] or '' if emp }}"></label>
+      <label>Designation<input name="designation" value="{{ emp['designation'] or '' if emp }}"></label></div>
+    <div class="two">
+      <label>Shift<select name="shift_id">{% for s in shifts %}<option value="{{ s['id'] }}" {{ 'selected' if emp and emp['shift_id']==s['id'] }}>{{ s['name'] }} ({{ s['start_time'] }}–{{ s['end_time'] }})</option>{% endfor %}</select></label>
+      <label>Office (geofence)<select name="office_id">{% for o in offices %}<option value="{{ o['id'] }}" {{ 'selected' if emp and emp['office_id']==o['id'] }}>{{ o['name'] }}</option>{% endfor %}</select></label></div>
+    <div class="two">
+      <label>Role<select name="role"><option value="employee" {{ 'selected' if emp and emp['role']=='employee' }}>Employee</option><option value="hr" {{ 'selected' if emp and emp['role']=='hr' }}>HR</option></select></label>
+      <label>Joining date<input type="date" name="joined_on" value="{{ emp['joined_on'] if emp else today }}"></label></div>
+    {% if not emp %}<label>Temporary password<input name="password" placeholder="Welcome@123 (default)"></label>{% endif %}
+    <label class="check"><input type="checkbox" name="active" {{ 'checked' if (not emp) or emp['active'] }}> Active</label>
+    <div class="actions"><button class="btn primary">Save</button><a class="btn" href="{{ url_for('hr.employees') }}">Cancel</a></div>
+  </form>
+  {% if emp %}
+  <form method="post" action="{{ url_for('hr.reset_password', eid=emp['id']) }}" class="mt" onsubmit="return confirm('Reset password to Welcome@123?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger">Reset password</button>
+  </form>{% endif %}
+</section>
+{% endblock %}

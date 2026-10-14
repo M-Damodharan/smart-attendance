@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip with context %}
+{% block title %}Daily Attendance · Sri Balaji Gears{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="ph">
+  <h2>Daily register</h2>
+  <div class="monthnav"><a class="btn sm" href="?date={{ prev }}">‹</a>
+    <form method="get" class="inline"><input type="date" name="date" value="{{ d }}" onchange="this.form.submit()"></form>
+    <a class="btn sm" href="?date={{ nxt }}">›</a></div>
+</div>
+{% for g_ in groups %}
+<section class="card tablewrap">
+  <h3>{{ g_['shift']['name'] }} <span class="muted small">{{ g_['shift']['start_time'] }}–{{ g_['shift']['end_time'] }}</span>
+    <span class="pill ok">{{ g_['present'] }} present</span> <span class="pill bad">{{ g_['absent'] }} absent</span></h3>
+  <table>
+    <thead><tr><th>Employee</th><th>Status</th><th>In</th><th>Out</th><th>Hours</th><th>Distance</th><th>Selfies</th></tr></thead>
+    <tbody>
+    {% for r in g_['rows'] %}{% set rec = r['rec'] %}
+    <tr>
+      <td>{{ r['emp']['name'] }} <span class="muted small">{{ r['emp']['emp_code'] }}</span></td>
+      <td>{{ chip(r['code']) }} {{ STATUS_LABELS.get(r['code'],'') }}{% if rec and rec['late'] %} <span class="late">late</span>{% endif %}{% if rec and rec['source']=='correction' %} <span class="tag">corrected</span>{% endif %}</td>
+      <td>{{ rec['check_in']|hm if rec else '—' }}</td><td>{{ rec['check_out']|hm if rec else '—' }}</td>
+      <td>{{ rec['work_hours']|hrs if rec else '—' }}</td>
+      <td class="small">{% if rec and rec['in_dist'] is not none %}{{ rec['in_dist']|int }} m{% if not rec['in_geo_ok'] %} <span class="late">outside</span>{% endif %}{% endif %}</td>
+      <td>{% if rec and rec['in_selfie'] %}<a href="{{ url_for('api.selfie', name=rec['in_selfie']) }}" target="_blank">In</a>{% endif %}
+          {% if rec and rec['out_selfie'] %} · <a href="{{ url_for('api.selfie', name=rec['out_selfie']) }}" target="_blank">Out</a>{% endif %}
+          {% if rec and rec['in_lat'] %} · <a href="https://maps.google.com/?q={{ rec['in_lat'] }},{{ rec['in_lng'] }}" target="_blank" rel="noopener">Map</a>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="muted">No employees on this shift.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+{% endblock %}

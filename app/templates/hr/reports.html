@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip with context %}
+{% block title %}Monthly Reports · Sri Balaji Gears{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="ph"><h2>Monthly report</h2>
+  <div class="monthnav"><a class="btn sm" href="?month={{ prev }}&shift={{ shift_id or '' }}&dept={{ dept or '' }}">‹</a><strong>{{ start.strftime('%B %Y') }}</strong><a class="btn sm" href="?month={{ nxt }}&shift={{ shift_id or '' }}&dept={{ dept or '' }}">›</a></div>
+</div>
+<form method="get" class="filters">
+  <input type="hidden" name="month" value="{{ start.strftime('%Y-%m') }}">
+  <select name="shift" onchange="this.form.submit()"><option value="">All shifts</option>{% for s in shifts %}<option value="{{ s['id'] }}" {{ 'selected' if shift_id==s['id'] }}>{{ s['name'] }}</option>{% endfor %}</select>
+  <select name="dept" onchange="this.form.submit()"><option value="">All departments</option>{% for d in depts %}<option {{ 'selected' if dept==d }}>{{ d }}</option>{% endfor %}</select>
+  <a class="btn primary" href="{{ url_for('hr.export', month=start.strftime('%Y-%m'), shift=shift_id or '', dept=dept or '') }}">⬇ Export Excel</a>
+</form>
+
+<section class="card tablewrap">
+<h3>Summary</h3>
+<table>
+  <thead><tr><th>Employee</th><th>P</th><th>OT</th><th>HD</th><th>A</th><th>L</th><th>OD</th><th>H</th><th>WO</th><th>MP</th><th>Late</th><th>Hours</th><th>OT hrs</th><th>Payable</th></tr></thead>
+  <tbody>
+  {% for e in emps %}{% set s = reg[e['id']]['summary'] %}
+  <tr><td>{{ e['name'] }} <span class="muted small">{{ e['emp_code'] }}</span></td><td>{{ s['P'] }}</td><td>{{ s['OT'] }}</td><td>{{ s['HD'] }}</td><td>{{ s['A'] }}</td><td>{{ s['L'] + 0.5*s['HL'] }}</td><td>{{ s['OD'] }}</td><td>{{ s['H'] }}</td><td>{{ s['WO'] }}</td><td>{{ s['MP'] }}</td><td>{{ s['late'] }}</td><td>{{ s['hours'] }}</td><td>{{ s['ot_hours'] }}</td><td><b>{{ s['payable'] }}</b></td></tr>
+  {% else %}<tr><td colspan="14" class="muted">No employees match.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</section>
+
+<section class="card tablewrap">
+<h3>Day-wise grid</h3>
+<table class="grid">
+  <thead><tr><th class="sticky">Employee</th>{% for d in days %}<th class="{{ 'wo' if d.weekday()==6 }}">{{ d.day }}<br><small>{{ d.strftime('%a')[0] }}</small></th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for e in emps %}<tr><td class="sticky">{{ e['emp_code'] }} {{ e['name'] }}</td>{% for d in days %}<td>{{ chip(reg[e['id']]['days'][d]) }}</td>{% endfor %}</tr>{% endfor %}
+  </tbody>
+</table>
+<p class="legend small muted">P present · HD half day · A absent · OT overtime · L leave · HL half leave · OD on duty · H holiday · WO weekly off · MP missed punch (no check-out) · IN working now</p>
+</section>
+{% endblock %}

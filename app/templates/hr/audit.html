@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Audit Trail · Sri Balaji Gears{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="ph"><h2>Audit log</h2>
+  <form method="get" class="filters"><input name="q" value="{{ q }}" placeholder="Search name / details"><select name="action"><option value="">All actions</option>{% for a in actions %}<option {{ 'selected' if a==action }}>{{ a }}</option>{% endfor %}</select><button class="btn sm">Filter</button></form></div>
+<section class="card tablewrap">
+<table><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Details</th><th>IP</th></tr></thead><tbody>
+{% for r in rows %}<tr><td class="nowrap">{{ r['ts'] }}</td><td>{{ r['actor_name'] }}</td><td><span class="tag">{{ r['action'] }}</span></td><td>{{ r['entity'] }} {{ r['entity_id'] or '' }}</td><td class="small">{{ r['details'] or '' }}</td><td class="small muted">{{ r['ip'] or '' }}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">No entries.</td></tr>{% endfor %}
+</tbody></table></section>
+<p class="muted small">Showing the latest 300 entries. The audit log is append-only from the app.</p>
+{% endblock %}

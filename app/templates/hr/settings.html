@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Settings · Sri Balaji Gears{% endblock %}
+{% block content %}
+<section class="card">
+  <h3>Offices &amp; geofence</h3>
+  <p class="muted small">Set the latitude/longitude of the office (right-click a spot in Google Maps → copy coordinates) and the allowed radius in metres.</p>
+  <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office_link">
+    <input name="link" placeholder="Paste Google Maps link or 'lat,lng'" required style="flex:3 1 260px">
+    <select name="id" title="Apply to"><option value="">Add as new office</option>{% for o in offices %}<option value="{{ o['id'] }}" {{ 'selected' if loop.first }}>Update: {{ o['name'] }}</option>{% endfor %}</select>
+    <button class="btn sm primary">Set from link</button>
+    <button type="button" class="btn sm" onclick="useMyLocation()">Use my current location</button></form>
+  {% for o in offices %}
+  <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office"><input type="hidden" name="id" value="{{ o['id'] }}">
+    <input name="name" value="{{ o['name'] }}" required><input name="lat" value="{{ o['lat'] }}" required inputmode="decimal" placeholder="Latitude"><input name="lng" value="{{ o['lng'] }}" required inputmode="decimal" placeholder="Longitude"><input name="radius_m" type="number" min="20" value="{{ o['radius_m'] }}" required title="Radius (m)">
+    <label class="check"><input type="checkbox" name="active" {{ 'checked' if o['active'] }}> Active</label><button class="btn sm">Save</button></form>
+  {% endfor %}
+  <form method="post" class="row-form add"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office">
+    <input name="name" placeholder="New office name" required><input name="lat" placeholder="Latitude" required inputmode="decimal"><input name="lng" placeholder="Longitude" required inputmode="decimal"><input name="radius_m" type="number" value="150" required>
+    <label class="check"><input type="checkbox" name="active" checked> Active</label><button class="btn sm primary">Add</button></form>
+</section>
+
+<section class="card">
+  <h3>GPS Accuracy &amp; Geofence Policy</h3>
+  <p class="muted small">Configure location accuracy sensitivity. Mobile phones and Wi-Fi networks indoors typically report accuracy between &plusmn;100 m and &plusmn;250 m. If employees see <i>"GPS accuracy too low"</i>, adjust the maximum allowed inaccuracy threshold below.</p>
+  <form method="post" class="row-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="system_settings">
+    <div style="flex:1 1 220px">
+      <label>Max GPS Inaccuracy Allowed (m)
+        <input type="number" name="max_gps_accuracy_m" min="50" max="2000" step="10" value="{{ sys_settings.get('max_gps_accuracy_m', '350') }}" required>
+      </label>
+    </div>
+    <div style="flex:1 1 220px">
+      <label>Geofence Buffer Tolerance (m)
+        <input type="number" name="geofence_tolerance_m" min="0" max="500" step="5" value="{{ sys_settings.get('geofence_tolerance_m', '50') }}" required>
+      </label>
+    </div>
+    <div style="align-self:flex-end;margin-bottom:2px">
+      <button class="btn sm primary">Save Policy</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Shifts &amp; status rules</h3>
+  <p class="muted small">Status at check-out: hours &lt; <b>Half</b> → A · ≥ Half → HD · ≥ <b>Full</b> → P · ≥ Full + <b>OT min</b> → OT. Late = check-in after start + grace.</p>
+  {% macro shiftform(s) %}
+  <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="shift">{% if s %}<input type="hidden" name="id" value="{{ s['id'] }}">{% endif %}
+    <input name="name" value="{{ s['name'] if s }}" placeholder="Shift name" required>
+    <input type="time" name="start_time" value="{{ s['start_time'] if s else '09:00' }}" required><input type="time" name="end_time" value="{{ s['end_time'] if s else '18:00' }}" required>
+    <input name="grace_min" type="number" min="0" value="{{ s['grace_min'] if s else 10 }}" title="Grace (min)">
+    <input name="full_hours" type="number" step="0.25" value="{{ s['full_hours'] if s else 8 }}" title="Full-day hours">
+    <input name="half_hours" type="number" step="0.25" value="{{ s['half_hours'] if s else 4 }}" title="Half-day hours">
+    <input name="ot_min_hours" type="number" step="0.25" value="{{ s['ot_min_hours'] if s else 1 }}" title="OT after full + this">
+    <label class="check"><input type="checkbox" name="active" {{ 'checked' if (not s) or s['active'] }}> Active</label><button class="btn sm {{ '' if s else 'primary' }}">{{ 'Save' if s else 'Add' }}</button></form>
+  {% endmacro %}
+  <div class="small muted shifthead">name · start · end · grace · full h · half h · OT min h</div>
+  {% for s in shifts %}{{ shiftform(s) }}{% endfor %}
+  {{ shiftform(none) }}
+</section>
+
+<section class="card">
+  <h3>Holidays</h3>
+  <ul class="rows">{% for h in holidays %}<li><span>{{ h['date']|dmy }}</span><span>{{ h['name'] }}</span>
+    <span class="r"><form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="holiday_delete"><input type="hidden" name="date" value="{{ h['date'] }}"><button class="link danger">Remove</button></form></span></li>{% endfor %}</ul>
+  <form method="post" class="row-form add"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="holiday"><input type="date" name="date" required><input name="name" placeholder="Holiday name" required><button class="btn sm primary">Add</button></form>
+</section>
+
+<section class="card">
+  <h3>Leave types</h3>
+  {% for t in ltypes %}
+  <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="leave_type"><input type="hidden" name="id" value="{{ t['id'] }}">
+    <input value="{{ t['code'] }}" disabled size="4"><input name="name" value="{{ t['name'] }}" required><input name="quota" type="number" step="0.5" value="{{ t['annual_quota'] }}" title="Annual quota"><button class="btn sm">Save</button></form>
+  {% endfor %}
+  <form method="post" class="row-form add"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="leave_type"><input name="code" placeholder="Code" size="4" required><input name="name" placeholder="Name" required><input name="quota" type="number" step="0.5" value="10"><button class="btn sm primary">Add</button></form>
+</section>
+{% endblock %}
+{% block scripts %}<script>
+function useMyLocation(){
+  if(!navigator.geolocation){alert('GPS not available');return;}
+  navigator.geolocation.getCurrentPosition(p=>{
+    const f=document.querySelector('input[name=lat]'), g=document.querySelector('input[name=lng]');
+    f.value=p.coords.latitude.toFixed(6); g.value=p.coords.longitude.toFixed(6);
+    alert('Filled the first office with your current position (±'+Math.round(p.coords.accuracy)+' m). Press Save on that row.');
+  },()=>alert('Location permission denied'),{enableHighAccuracy:true,timeout:20000});
+}
+</script>{% endblock %}

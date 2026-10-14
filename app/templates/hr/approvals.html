@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Approvals · Sri Balaji Gears{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="ph"><h2>Approvals</h2>
+  <div class="tabs"><a class="{{ 'on' if tab=='pending' }}" href="?tab=pending">Pending</a><a class="{{ 'on' if tab=='history' }}" href="?tab=history">History</a></div></div>
+
+{% macro actions(kind, id) %}
+  <form method="post" action="{{ url_for('hr.decide', kind=kind, rid=id, tab=tab) }}" class="decide">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="remarks" placeholder="Remarks (optional)" maxlength="300">
+    <button name="decision" value="Approved" class="btn sm ok">Approve</button>
+    <button name="decision" value="Rejected" class="btn sm danger">Reject</button>
+  </form>
+{% endmacro %}
+
+<section class="card">
+  <h3>Leave requests</h3>
+  {% for r in leaves %}
+  <div class="req">
+    <div><b>{{ r['name'] }}</b> <span class="muted small">{{ r['emp_code'] }}</span> · <b>{{ r['code'] }}</b> · {{ r['from_date']|dmy }}{% if r['to_date']!=r['from_date'] %} → {{ r['to_date']|dmy }}{% endif %} · {{ '%g'|format(r['days']) }} day(s)<br><span class="muted small">{{ r['reason'] }}{% if r['hr_remarks'] %} · HR: {{ r['hr_remarks'] }}{% endif %}</span></div>
+    {% if r['status']=='Pending' %}{{ actions('leave', r['id']) }}{% else %}{{ badge(r['status']) }}{% endif %}
+  </div>
+  {% else %}<p class="muted">Nothing here.</p>{% endfor %}
+</section>
+<section class="card">
+  <h3>On-duty (OD) requests</h3>
+  {% for r in ods %}
+  <div class="req">
+    <div><b>{{ r['name'] }}</b> <span class="muted small">{{ r['emp_code'] }}</span> · {{ r['od_date']|dmy }} · {{ r['location'] }}<br><span class="muted small">{{ r['from_time'] or '' }}{% if r['to_time'] %}–{{ r['to_time'] }}{% endif %} {{ r['purpose'] or '' }}{% if r['hr_remarks'] %} · HR: {{ r['hr_remarks'] }}{% endif %}</span></div>
+    {% if r['status']=='Pending' %}{{ actions('od', r['id']) }}{% else %}{{ badge(r['status']) }}{% endif %}
+  </div>
+  {% else %}<p class="muted">Nothing here.</p>{% endfor %}
+</section>
+{% endblock %}

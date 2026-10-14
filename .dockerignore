@@ -1,0 +1,6 @@
+.env
+instance/
+backups/
+__pycache__/
+venv/
+.git

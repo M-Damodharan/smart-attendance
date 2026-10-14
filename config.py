@@ -1,0 +1,41 @@
+import os
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+
+ENV = os.environ.get("APP_ENV", "development")
+PRODUCTION = ENV == "production"
+
+
+class Config:
+    ENV_NAME = ENV
+    PRODUCTION = PRODUCTION
+    DEMO_DATA = os.environ.get("DEMO_DATA", "0" if PRODUCTION else "1") == "1"
+    PERMANENT_SESSION_LIFETIME = 12 * 3600          # auto logout after 12 h
+    BEHIND_PROXY = os.environ.get("BEHIND_PROXY", "1" if PRODUCTION else "0") == "1"
+    LOG_FILE = os.environ.get("LOG_FILE", os.path.join(BASE_DIR, "instance", "app.log"))
+
+    # ---- Security -------------------------------------------------------
+    SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-secret-in-production")
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    # Set SESSION_COOKIE_SECURE=1 when served over HTTPS
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "1" if PRODUCTION else "0") == "1"
+    MAX_CONTENT_LENGTH = 8 * 1024 * 1024  # 8 MB per request
+
+    # ---- Storage --------------------------------------------------------
+    DATABASE = os.environ.get("DATABASE", os.path.join(BASE_DIR, "instance", "attendance.db"))
+    SELFIE_DIR = os.environ.get("SELFIE_DIR", os.path.join(BASE_DIR, "instance", "selfies"))
+
+    # ---- Attendance rules -----------------------------------------------
+    WEEKLY_OFF = (6,)            # Monday=0 ... Sunday=6
+    MAX_GPS_ACCURACY_M = int(os.environ.get("MAX_GPS_ACCURACY_M", 350))     # reject fixes less accurate than this
+    GEOFENCE_TOLERANCE_M = int(os.environ.get("GEOFENCE_TOLERANCE_M", 50))     # extra metres allowed on top of office radius
+    CHALLENGE_TTL_S = 180        # liveness challenge validity
+    MIN_PUNCH_GAP_MIN = 1        # minimum minutes between check-in and check-out
+    MIN_MOTION_SCORE = 1.2       # server-side liveness: min avg frame difference (0-255)
+    REQUIRE_LIVENESS_MOTION = True
+
+    # ---- Login throttling -----------------------------------------------
+    MAX_LOGIN_ATTEMPTS = 5
+    LOGIN_LOCK_SECONDS = 600

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip with context %}
+{% block title %}History · Sri Balaji Gears{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="monthnav"><a class="btn sm" href="?month={{ prev }}">‹</a><h3>{{ start.strftime('%B %Y') }}</h3><a class="btn sm" href="?month={{ nxt }}">›</a></div>
+  {% set s = reg['summary'] %}
+  <div class="stats">
+    <div><b>{{ s['P'] + s['OT'] }}</b><span>Present</span></div><div><b>{{ s['HD'] }}</b><span>Half</span></div>
+    <div><b>{{ s['A'] }}</b><span>Absent</span></div><div><b>{{ s['L'] + s['HL'] }}</b><span>Leave</span></div>
+    <div><b>{{ s['OD'] }}</b><span>OD</span></div><div><b>{{ s['payable'] }}</b><span>Payable</span></div>
+  </div>
+  <ul class="rows">
+    {% for d, code in reg['days'].items() %}{% set r = reg['recs'].get(d) %}
+    <li class="{{ 'off' if code in ('WO','H') }}">
+      <span class="d">{{ d.strftime('%a %d') }}</span><span>{{ chip(code) }}</span>
+      <span class="muted">{% if r and r['check_in'] %}{{ r['check_in']|hm }} – {{ r['check_out']|hm }}{% else %}{{ STATUS_LABELS.get(code,'') }}{% endif %}</span>
+      <span class="r">{% if r and r['work_hours'] %}{{ r['work_hours']|hrs }}{% endif %}{% if r and r['late'] %} <span class="late">late</span>{% endif %}{% if r and r['source']=='correction' %} <span class="tag">HR</span>{% endif %}</span>
+    </li>{% endfor %}
+  </ul>
+  <p class="legend small muted">P present · HD half day · A absent · OT overtime · L leave · OD on duty · H holiday · WO weekly off · MP missed punch</p>
+</section>
+{% endblock %}

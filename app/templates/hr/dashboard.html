@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}HR Dashboard · Sri Balaji Gears{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+{% if office_unset %}<div class="flash warn">Office location is not set yet — nobody can check in. <a href="{{ url_for('hr.settings') }}">Set it in Settings</a>.</div>{% endif %}
+<h2 class="ph">Today · {{ today.strftime('%A, %d %B %Y') }}</h2>
+<section class="kpis">
+  <div class="kpi ok"><b>{{ stats['present'] }}</b><span>Present</span></div>
+  <div class="kpi bad"><b>{{ stats['absent'] }}</b><span>Absent / not in</span></div>
+  <div class="kpi warn"><b>{{ stats['late'] }}</b><span>Late</span></div>
+  <div class="kpi"><b>{{ stats['leave'] }}</b><span>On leave</span></div>
+  <div class="kpi"><b>{{ stats['od'] }}</b><span>On duty</span></div>
+  <div class="kpi"><b>{{ stats['working'] }}</b><span>Working now</span></div>
+</section>
+<div class="grid2">
+  <section class="card">
+    <h3>By shift</h3>
+    {% for b in by_shift %}
+    <div class="shiftrow">
+      <div><b>{{ b['shift']['name'] }}</b> <span class="muted small">{{ b['shift']['start_time'] }}–{{ b['shift']['end_time'] }}</span></div>
+      <div class="bar"><i style="width: {{ (100 * b['present'] / b['total']) if b['total'] else 0 }}%"></i></div>
+      <div class="small muted">{{ b['present'] }} present · {{ b['absent'] }} not in yet · {{ b['total'] }} total</div>
+    </div>
+    {% endfor %}
+    <a class="btn sm" href="{{ url_for('hr.attendance') }}">Open daily register</a>
+  </section>
+  <section class="card">
+    <h3>Pending approvals</h3>
+    <p><a href="{{ url_for('hr.approvals') }}"><b>{{ pending_leave }}</b> leave</a> · <a href="{{ url_for('hr.approvals') }}"><b>{{ pending_od }}</b> OD</a> requests waiting</p>
+    <h3>Latest punches</h3>
+    <ul class="rows">
+      {% for r in recent %}<li><span>{{ r['name'] }} <span class="muted small">{{ r['emp_code'] }}</span></span><span class="muted">in {{ r['check_in']|hm }}{% if r['check_out'] %} · out {{ r['check_out']|hm }}{% endif %}</span><span class="r">{% if r['late'] %}<span class="late">late</span>{% endif %}</span></li>
+      {% else %}<li class="muted">No punches yet today.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

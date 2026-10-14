@@ -1,0 +1,7 @@
+{% macro chip(code) %}<span class="chip s-{{ code|lower if code != '-' else 'none' }}" title="{{ STATUS_LABELS.get(code, '') }}">{{ '·' if code == '-' else code }}</span>{% endmacro %}
+{% macro flash_msgs() %}
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}
+  {% endwith %}
+{% endmacro %}
+{% macro badge(status) %}<span class="badge b-{{ status|lower }}">{{ status }}</span>{% endmacro %}

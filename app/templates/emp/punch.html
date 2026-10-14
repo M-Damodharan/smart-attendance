@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Check out' if mode=='out' else 'Check in' }} · Sri Balaji Gears{% endblock %}
+{% block content %}
+{% if mode == 'done' %}
+<section class="card center">
+  <h2>You're done for today</h2>
+  <p class="muted">{{ rec['check_in']|hm }} → {{ rec['check_out']|hm }} · {{ rec['work_hours']|hrs }} · Status {{ rec['status'] }}</p>
+  <a class="btn" href="{{ url_for('emp.dashboard') }}">Back home</a>
+</section>
+{% else %}
+<section class="card punch" id="punch" data-mode="{{ mode }}">
+  <h2>{{ 'Check out' if mode=='out' else 'Check in' }}</h2>
+
+  <div class="steps">
+    <div class="step" id="st-gps">
+      <i></i>
+      <div style="flex:1"><b>Location</b><span id="gps-text">Acquiring GPS location…</span></div>
+      <button type="button" id="gps-retry-btn" class="btn sm" style="display:none;margin-left:auto" onclick="window.retryGPS && window.retryGPS()">Retry GPS</button>
+    </div>
+    <div class="step" id="st-cam"><i></i><div><b>Camera</b><span id="cam-text">Waiting…</span></div></div>
+  </div>
+
+  <div class="camera">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="oval"></div>
+    <div class="prompt" id="prompt"></div>
+    <div class="count" id="count"></div>
+  </div>
+
+  <button class="btn primary big block" id="go" disabled>Verify &amp; {{ 'check out' if mode=='out' else 'check in' }}</button>
+  <p class="muted small center" id="hint">Allow camera and location access. Keep your face inside the oval and follow the two on-screen prompts.</p>
+  <div id="result" class="result" hidden></div>
+
+  <details class="small muted"><summary>{{ office['name'] if office else 'No office' }} · radius {{ office['radius_m'] if office else '–' }} m</summary>
+    <p>Check-in is only accepted inside the office geofence, unless HR has approved an On-Duty (OD) request for today.</p></details>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if mode != 'done' %}<script src="{{ url_for('static', filename='js/punch.js') }}"></script>{% endif %}{% endblock %}
