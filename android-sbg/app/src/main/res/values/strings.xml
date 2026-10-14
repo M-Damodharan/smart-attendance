@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">SBG</string>
+    <string name="server_url_prompt">Enter SBG Attendance Server Address</string>
+</resources>

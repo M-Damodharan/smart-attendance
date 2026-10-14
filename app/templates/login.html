@@ -51,6 +51,14 @@
         <span>Sign in to Dashboard</span>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
+
+      <div style="text-align:center;margin-top:0.75rem">
+        <a href="{{ url_for('download_apk') }}" class="btn sm" style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--bg-surface);border:1px solid var(--border-default);padding:0.6rem;font-weight:600;border-radius:10px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          <span>Download SBG Android App (.APK)</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+      </div>
     </form>
 
     <div class="login-footer-credits">

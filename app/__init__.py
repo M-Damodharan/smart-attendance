@@ -54,6 +54,13 @@ def create_app():
         from flask import send_from_directory
         return send_from_directory(app.static_folder + "/js", "sw.js", mimetype="application/javascript")
 
+    @app.route("/download/apk")
+    def download_apk():
+        import os
+        from flask import send_from_directory
+        dl_dir = os.path.join(app.static_folder, "downloads")
+        return send_from_directory(dl_dir, "SBG.apk", as_attachment=True, download_name="SBG.apk", mimetype="application/vnd.android.package-archive")
+
     @app.after_request
     def headers(resp):
         resp.headers["X-Content-Type-Options"] = "nosniff"

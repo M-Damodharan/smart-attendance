@@ -5,3 +5,9 @@ __pycache__/
 venv/
 .pytest_cache/
 *.zip
+*.apk
+android-sbg/.gradle/
+android-sbg/build/
+android-sbg/app/build/
+android-sbg/local.properties
+app/static/downloads/SBG.apk
