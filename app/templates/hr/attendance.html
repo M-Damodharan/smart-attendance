@@ -4,32 +4,167 @@
 {% block wrapclass %}wide{% endblock %}
 {% block content %}
 <div class="ph">
-  <h2>Daily register</h2>
-  <div class="monthnav"><a class="btn sm" href="?date={{ prev }}">‹</a>
-    <form method="get" class="inline"><input type="date" name="date" value="{{ d }}" onchange="this.form.submit()"></form>
-    <a class="btn sm" href="?date={{ nxt }}">›</a></div>
+  <div>
+    <h2>Daily Attendance Register</h2>
+    <p class="muted small" style="margin:2px 0 0">Live check-in status, working hours, selfies, and GPS verification</p>
+  </div>
+  <div class="monthnav">
+    <a class="btn sm" href="?date={{ prev }}" title="Previous day">‹</a>
+    <form method="get" class="inline">
+      <input type="date" name="date" value="{{ d }}" onchange="this.form.submit()">
+    </form>
+    <a class="btn sm" href="?date={{ nxt }}" title="Next day">›</a>
+    <a class="btn sm primary" href="{{ url_for('hr.corrections') }}" style="margin-left:0.5rem">+ Add / Correct Punch</a>
+  </div>
 </div>
+
+<section class="kpis" style="margin-bottom:1rem">
+  <div class="kpi ok" style="cursor:pointer" onclick="filterAttendance('present')">
+    <b>{{ total_present }}</b>
+    <span>Present / Checked In</span>
+  </div>
+  <div class="kpi warn" style="cursor:pointer" onclick="filterAttendance('notin')">
+    <b>{{ total_not_in }}</b>
+    <span>Not Checked In Yet</span>
+  </div>
+  <div class="kpi" style="cursor:pointer" onclick="filterAttendance('all')">
+    <b>{{ total_present + total_not_in + total_leave }}</b>
+    <span>Total Employees</span>
+  </div>
+</section>
+
+<div class="filters" style="margin-bottom:1.25rem">
+  <span class="muted small" style="font-weight:600">Filter View:</span>
+  <div class="tabs">
+    <a href="javascript:void(0)" class="tab-btn on" data-filter="all" onclick="filterAttendance('all')">All Staff</a>
+    <a href="javascript:void(0)" class="tab-btn" data-filter="present" onclick="filterAttendance('present')">Present Only ({{ total_present }})</a>
+    <a href="javascript:void(0)" class="tab-btn" data-filter="notin" onclick="filterAttendance('notin')">Not Checked In ({{ total_not_in }})</a>
+  </div>
+</div>
+
+{% if total_present == 0 %}
+<div class="card" id="empty-present-banner" style="background:var(--bg-surface);border:1px dashed var(--border-default);text-align:center;padding:1.5rem;margin-bottom:1.25rem;display:none">
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--text-muted);margin-bottom:0.5rem"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+  <h4 style="margin:0 0 0.35rem">No Employees Checked In Yet for {{ d.strftime('%d %b %Y') }}</h4>
+  <p class="muted small" style="max-width:520px;margin:0 auto 1rem">
+    When staff members log in and punch in using their phone camera and GPS, they will automatically be displayed as <b>Present / Working</b> with their check-in timestamp, GPS distance, and verified selfie.
+  </p>
+  <div style="display:flex;gap:0.75rem;justify-content:center">
+    <a href="{{ url_for('hr.corrections') }}" class="btn sm primary">+ Record Manual Punch</a>
+    <a href="javascript:void(0)" class="btn sm" onclick="filterAttendance('all')">View All Staff</a>
+  </div>
+</div>
+{% endif %}
+
 {% for g_ in groups %}
-<section class="card tablewrap">
-  <h3>{{ g_['shift']['name'] }} <span class="muted small">{{ g_['shift']['start_time'] }}–{{ g_['shift']['end_time'] }}</span>
-    <span class="pill ok">{{ g_['present'] }} present</span> <span class="pill bad">{{ g_['absent'] }} absent</span></h3>
+<section class="card tablewrap shift-section" id="shift-sec-{{ loop.index }}">
+  <h3>
+    {{ g_['shift']['name'] }}
+    <span class="muted small">{{ g_['shift']['start_time'] }}–{{ g_['shift']['end_time'] }}</span>
+    <span class="pill ok">{{ g_['present'] }} Present</span>
+    <span class="pill" style="background:var(--bg-surface);border:1px solid var(--border-default);color:var(--text-muted)">{{ g_['not_in'] }} Not In</span>
+    {% if g_['absent'] %}<span class="pill bad">{{ g_['absent'] }} Absent</span>{% endif %}
+  </h3>
   <table>
-    <thead><tr><th>Employee</th><th>Status</th><th>In</th><th>Out</th><th>Hours</th><th>Distance</th><th>Selfies</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th>Status</th>
+        <th>In</th>
+        <th>Out</th>
+        <th>Work Hours</th>
+        <th>GPS Distance</th>
+        <th>Biometric Selfies</th>
+      </tr>
+    </thead>
     <tbody>
-    {% for r in g_['rows'] %}{% set rec = r['rec'] %}
-    <tr>
-      <td>{{ r['emp']['name'] }} <span class="muted small">{{ r['emp']['emp_code'] }}</span></td>
-      <td>{{ chip(r['code']) }} {{ STATUS_LABELS.get(r['code'],'') }}{% if rec and rec['late'] %} <span class="late">late</span>{% endif %}{% if rec and rec['source']=='correction' %} <span class="tag">corrected</span>{% endif %}</td>
-      <td>{{ rec['check_in']|hm if rec else '—' }}</td><td>{{ rec['check_out']|hm if rec else '—' }}</td>
-      <td>{{ rec['work_hours']|hrs if rec else '—' }}</td>
-      <td class="small">{% if rec and rec['in_dist'] is not none %}{{ rec['in_dist']|int }} m{% if not rec['in_geo_ok'] %} <span class="late">outside</span>{% endif %}{% endif %}</td>
-      <td>{% if rec and rec['in_selfie'] %}<a href="{{ url_for('api.selfie', name=rec['in_selfie']) }}" target="_blank">In</a>{% endif %}
-          {% if rec and rec['out_selfie'] %} · <a href="{{ url_for('api.selfie', name=rec['out_selfie']) }}" target="_blank">Out</a>{% endif %}
-          {% if rec and rec['in_lat'] %} · <a href="https://maps.google.com/?q={{ rec['in_lat'] }},{{ rec['in_lng'] }}" target="_blank" rel="noopener">Map</a>{% endif %}</td>
-    </tr>
-    {% else %}<tr><td colspan="7" class="muted">No employees on this shift.</td></tr>{% endfor %}
+    {% for r in g_['rows'] %}
+      {% set rec = r['rec'] %}
+      <tr class="att-row" data-status="{{ 'present' if r['is_present'] else ('notin' if r['is_not_in'] else 'other') }}">
+        <td>
+          <b>{{ r['emp']['name'] }}</b>
+          <span class="muted small" style="display:block">{{ r['emp']['emp_code'] }}{% if r['emp']['department'] %} · {{ r['emp']['department'] }}{% endif %}</span>
+        </td>
+        <td>
+          {% if r['code'] == 'IN' %}
+            <span class="badge b-approved">Working Now</span>
+          {% elif r['code'] == 'P' %}
+            <span class="badge b-approved">Present</span>
+          {% elif r['code'] == 'OT' %}
+            <span class="badge" style="background:var(--status-ot-bg);color:var(--status-ot);border:1px solid var(--status-ot-border)">Overtime</span>
+          {% elif r['code'] == 'HD' %}
+            <span class="badge b-pending">Half Day</span>
+          {% elif r['code'] == 'A' %}
+            <span class="badge b-rejected">Absent</span>
+          {% elif r['code'] in ('L', 'HL') %}
+            <span class="badge" style="background:var(--status-l-bg);color:var(--status-l);border:1px solid var(--status-l-border)">Leave</span>
+          {% elif r['code'] == 'OD' %}
+            <span class="badge" style="background:var(--status-od-bg);color:var(--status-od);border:1px solid var(--status-od-border)">On Duty</span>
+          {% elif r['code'] == 'WO' %}
+            <span class="badge" style="background:var(--status-wo-bg);color:var(--status-wo)">Weekly Off</span>
+          {% elif r['code'] == 'H' %}
+            <span class="badge" style="background:var(--status-wo-bg);color:var(--status-wo)">Holiday</span>
+          {% elif r['code'] == '-' %}
+            <span class="badge" style="background:var(--bg-surface);color:var(--text-muted);border:1px solid var(--border-default)">Not checked in</span>
+          {% else %}
+            {{ chip(r['code']) }}
+          {% endif %}
+          {% if rec and rec['late'] %}<span class="late">Late</span>{% endif %}
+          {% if rec and rec['source'] == 'correction' %}<span class="tag">Corrected</span>{% endif %}
+        </td>
+        <td><b>{{ rec['check_in']|hm if rec else '—' }}</b></td>
+        <td><b>{{ rec['check_out']|hm if rec else '—' }}</b></td>
+        <td>{{ rec['work_hours']|hrs if rec else '—' }}</td>
+        <td class="small">
+          {% if rec and rec['in_dist'] is not none %}
+            <b>{{ rec['in_dist']|int }} m</b>
+            {% if not rec['in_geo_ok'] %}<span class="late" style="display:block">Outside geofence</span>{% endif %}
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if rec and rec['in_selfie'] %}
+            <a href="{{ url_for('api.selfie', name=rec['in_selfie']) }}" target="_blank" class="btn sm" style="padding:2px 8px;font-size:0.75rem">In Photo</a>
+          {% endif %}
+          {% if rec and rec['out_selfie'] %}
+            <a href="{{ url_for('api.selfie', name=rec['out_selfie']) }}" target="_blank" class="btn sm" style="padding:2px 8px;font-size:0.75rem">Out Photo</a>
+          {% endif %}
+          {% if rec and rec['in_lat'] %}
+            <a href="https://maps.google.com/?q={{ rec['in_lat'] }},{{ rec['in_lng'] }}" target="_blank" rel="noopener" class="link" style="margin-left:4px;font-size:0.8rem">Map</a>
+          {% endif %}
+          {% if not rec %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted center" style="padding:1.5rem">No employees assigned to this shift.</td></tr>
+    {% endfor %}
     </tbody>
   </table>
 </section>
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterAttendance(type) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('on', btn.dataset.filter === type);
+  });
+  const rows = document.querySelectorAll('.att-row');
+  let visibleCount = 0;
+  rows.forEach(row => {
+    const st = row.dataset.status;
+    let show = (type === 'all') || (type === 'present' && st === 'present') || (type === 'notin' && st === 'notin');
+    row.style.display = show ? '' : 'none';
+    if (show) visibleCount++;
+  });
+  const banner = document.getElementById('empty-present-banner');
+  if (banner) {
+    banner.style.display = (type === 'present' && visibleCount === 0) ? 'block' : 'none';
+  }
+}
+</script>
 {% endblock %}

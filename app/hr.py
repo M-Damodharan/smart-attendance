@@ -150,14 +150,42 @@ def attendance():
     reg = build_register(emps, d, d)
     shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
     groups = []
+    total_present = 0
+    total_not_in = 0
+    total_leave = 0
     for s in shifts:
         rows = []
         for e in [x for x in emps if x["shift_id"] == s["id"]]:
             r = reg[e["id"]]
-            rows.append({"emp": e, "code": r["days"][d], "rec": r["recs"].get(d)})
-        present = sum(1 for r in rows if r["code"] in ("P", "OT", "HD", "IN", "MP"))
-        groups.append({"shift": s, "rows": rows, "present": present, "absent": sum(1 for r in rows if r["code"] == "A")})
+            code = r["days"][d]
+            is_present = code in ("P", "OT", "HD", "IN", "MP")
+            is_not_in = code == "-"
+            is_leave = code in ("L", "HL", "OD")
+            rows.append({
+                "emp": e,
+                "code": code,
+                "rec": r["recs"].get(d),
+                "is_present": is_present,
+                "is_not_in": is_not_in,
+                "is_leave": is_leave,
+            })
+        present = sum(1 for r in rows if r["is_present"])
+        not_in = sum(1 for r in rows if r["is_not_in"])
+        leave = sum(1 for r in rows if r["is_leave"])
+        absent = sum(1 for r in rows if r["code"] == "A")
+        total_present += present
+        total_not_in += not_in
+        total_leave += leave
+        groups.append({
+            "shift": s,
+            "rows": rows,
+            "present": present,
+            "not_in": not_in,
+            "leave": leave,
+            "absent": absent,
+        })
     return render_template("hr/attendance.html", groups=groups, d=d,
+                           total_present=total_present, total_not_in=total_not_in, total_leave=total_leave,
                            prev=d2s(d - timedelta(days=1)), nxt=d2s(d + timedelta(days=1)))
 
 
