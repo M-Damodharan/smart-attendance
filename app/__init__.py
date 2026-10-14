@@ -10,9 +10,20 @@ def create_app():
     app.config.from_object(Config)
     if app.config["PRODUCTION"] and app.config["SECRET_KEY"] in ("", "change-this-secret-in-production"):
         raise RuntimeError("Set a strong SECRET_KEY environment variable in production.")
-    if app.config["BEHIND_PROXY"]:
-        from werkzeug.middleware.proxy_fix import ProxyFix
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    # Always apply ProxyFix to accurately handle reverse proxy / tunnel headers
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
+
+    # Dynamic session interface: automatically applies Secure flag on HTTPS (Cloudflare tunnel / mobile)
+    from flask.sessions import SecureCookieSessionInterface
+    class DynamicSessionInterface(SecureCookieSessionInterface):
+        def get_cookie_secure(self, app):
+            from flask import request
+            try:
+                return request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"
+            except Exception:
+                return False
+    app.session_interface = DynamicSessionInterface()
     _setup_logging(app)
 
     from . import api, auth, db, employee, hr

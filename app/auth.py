@@ -66,7 +66,8 @@ def load_user():
 def check_csrf():
     if request.method in ("POST", "PUT", "DELETE"):
         tok = request.headers.get("X-CSRFToken") or request.form.get("csrf_token")
-        if not tok or not secrets.compare_digest(tok, session.get("csrf", "")):
+        sess_tok = session.get("csrf", "")
+        if not tok or not sess_tok or not secrets.compare_digest(tok, sess_tok):
             abort(400, "Invalid or missing CSRF token. Refresh the page and try again.")
 
 
