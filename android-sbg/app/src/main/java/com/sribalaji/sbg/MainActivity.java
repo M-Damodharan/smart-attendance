@@ -35,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS_NAME = "sbg_prefs";
     private static final String KEY_SERVER_URL = "server_url";
-    private static final String DEFAULT_SERVER_URL = "http://192.168.0.179:5000";
+    private static final String DEFAULT_SERVER_URL = "https://dimensions-eye-kerry-purchase.trycloudflare.com";
     private static final int PERMISSION_REQUEST_CODE = 1001;
 
     private WebView webView;
