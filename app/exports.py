@@ -31,7 +31,7 @@ def build_workbook(start, end, emps, reg, db):
     # ---------------- Summary
     ws = wb.active
     ws.title = "Summary"
-    ws["A1"] = f"Sri Balaji Gears — Monthly Attendance Summary ({title})"
+    ws["A1"] = f"SBG (Sri Balaji Gears) — Monthly Attendance Summary ({title})"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = ("Payable days = P + OT + OD + Leave + Holiday + Weekly Off + 0.5×HD + 0.5×Half-day Leave. "
                 "Missed punches (MP) count as 0 until HR corrects them.")
@@ -57,7 +57,7 @@ def build_workbook(start, end, emps, reg, db):
     # ---------------- Day-wise grid
     wg = wb.create_sheet("Day-wise")
     days = list(daterange(start, end))
-    wg["A1"] = f"Sri Balaji Gears — Day-wise Register ({title})"
+    wg["A1"] = f"SBG (Sri Balaji Gears) — Day-wise Register ({title})"
     wg["A1"].font = Font(bold=True, size=14)
     _header(wg, 3, ["Emp Code", "Name"] + [d.day for d in days])
     _header(wg, 4, ["", ""] + [d.strftime("%a") for d in days])
