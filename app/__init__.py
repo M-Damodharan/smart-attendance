@@ -136,17 +136,18 @@ def _start_keep_alive(app):
     target = f"{ext_url.rstrip('/')}/healthz"
 
     def _loop():
-        time.sleep(30)
+        time.sleep(15)
         while True:
             try:
                 req = urllib.request.Request(target, headers={"User-Agent": "SBG-Warmup/1.0"})
                 with urllib.request.urlopen(req, timeout=15) as r:
                     if r.getcode() == 200:
                         app.logger.info("Render keepalive ping successful: 200 OK")
+                # Ping every 4 minutes (240s) so Render 15-minute inactivity timer never triggers
+                time.sleep(240)
             except Exception as e:
                 app.logger.debug("Render keepalive ping notice: %s", e)
-            # Sleep 8 minutes (Render free tier spins down after 15 minutes of inactivity)
-            time.sleep(480)
+                time.sleep(30)
 
     t = threading.Thread(target=_loop, daemon=True, name="sbg-render-warmup")
     t.start()
