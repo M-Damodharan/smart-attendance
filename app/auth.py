@@ -71,6 +71,20 @@ def check_csrf():
             abort(400, "Invalid or missing CSRF token. Refresh the page and try again.")
 
 
+def validate_strong_password(pw: str) -> str | None:
+    """Enforce production security rules for passwords."""
+    if len(pw) < 8:
+        return "Password must be at least 8 characters long."
+    if not any(c.isalpha() for c in pw):
+        return "Password must contain at least one letter."
+    if not any(c.isdigit() for c in pw):
+        return "Password must contain at least one number."
+    weak_common = {"12345678", "123456789", "admin123", "password", "welcome123", "1234567890", "sbg12345"}
+    if pw.lower() in weak_common:
+        return "This password is too common and vulnerable. Please choose a unique, secure password."
+    return None
+
+
 @bp.route("/", methods=["GET"])
 def index():
     if g.user:
@@ -87,30 +101,11 @@ def login():
         ip = request.remote_addr
         db = get_db()
 
-        # Try direct match by emp_code, name, or email
+        # Strict match by employee code or registered email
         u = db.execute(
-            "SELECT * FROM employees WHERE (UPPER(emp_code)=? OR UPPER(name)=? OR UPPER(email)=?) AND active=1",
-            (code, code, code)
+            "SELECT * FROM employees WHERE (UPPER(emp_code)=? OR UPPER(email)=?) AND active=1",
+            (code, code)
         ).fetchone()
-
-        if not u:
-            alias_map = {
-                "ADMIN": "HR001",
-                "HRADMIN": "HR001",
-                "HR ADMIN": "HR001",
-                "HR": "HR001",
-                "ADMINISTRATOR": "HR001",
-                "E001": "EMP001",
-                "EMP001": "E001",
-                "EMP": "EMP001",
-                "STAFF": "EMP001",
-                "EMPLOYEE": "EMP001"
-            }
-            mapped = alias_map.get(code)
-            if mapped:
-                u = db.execute("SELECT * FROM employees WHERE emp_code=? AND active=1", (mapped,)).fetchone()
-                if u:
-                    code = mapped
 
         key = f"{code}|{ip}"
         row = db.execute("SELECT count, first_ts FROM login_attempts WHERE key=?", (key,)).fetchone()
@@ -121,16 +116,11 @@ def login():
             flash("Too many failed attempts. Try again in a few minutes.", "err")
             return render_template("login.html"), 429
 
-        # Check password flexibly (exact, stripped, or recognized master passwords)
-        pw_clean = pw.strip()
+        # Production-grade password verification: strict salted hash verification
         is_pw_valid = False
         if u and pw:
-            if check_password_hash(u["password_hash"], pw) or check_password_hash(u["password_hash"], pw_clean):
+            if check_password_hash(u["password_hash"], pw) or check_password_hash(u["password_hash"], pw.strip()):
                 is_pw_valid = True
-            else:
-                accepted_pw = ["123456789", "admin123", "admin", "123456", "Welcome@123"] if u["role"] == "hr" else ["123456789", "emp123", "employee", "123456", "Welcome@123"]
-                if pw_clean in accepted_pw:
-                    is_pw_valid = True
 
         if u and is_pw_valid:
             db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
@@ -167,10 +157,11 @@ def change_password():
         return redirect(url_for("auth.login"))
     if request.method == "POST":
         cur, new, new2 = (request.form.get(k, "") for k in ("current", "new", "confirm"))
+        err = validate_strong_password(new)
         if not check_password_hash(g.user["password_hash"], cur):
             flash("Current password is incorrect.", "err")
-        elif len(new) < 8:
-            flash("New password must be at least 8 characters.", "err")
+        elif err:
+            flash(err, "err")
         elif new != new2:
             flash("New passwords do not match.", "err")
         elif new == cur:

@@ -20,6 +20,13 @@ def dashboard():
     db, u = get_db(), g.user
     t = today()
     rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(t))).fetchone()
+    if not rec:
+        yesterday_rec = db.execute(
+            "SELECT * FROM attendance WHERE emp_id=? AND date=? AND check_in IS NOT NULL AND check_out IS NULL",
+            (u["id"], d2s(t - timedelta(days=1)))
+        ).fetchone()
+        if yesterday_rec:
+            rec = yesterday_rec
     start, end = month_range(t.year, t.month)
     reg = build_register([u], start, end)[u["id"]]
     recent = []
@@ -43,13 +50,25 @@ def dashboard():
 @employee_required
 def punch():
     db, u = get_db(), g.user
-    rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(today()))).fetchone()
+    t = today()
+    today_rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(t))).fetchone()
+    yesterday_rec = db.execute(
+        "SELECT * FROM attendance WHERE emp_id=? AND date=? AND check_in IS NOT NULL AND check_out IS NULL",
+        (u["id"], d2s(t - timedelta(days=1)))
+    ).fetchone()
+
     office = db.execute("SELECT * FROM offices WHERE id=?", (u["office_id"],)).fetchone()
-    if rec and rec["check_out"]:
+    if yesterday_rec:
+        rec = yesterday_rec
+        mode = "out"
+    elif today_rec and today_rec["check_out"]:
+        rec = today_rec
         mode = "done"
-    elif rec:
+    elif today_rec:
+        rec = today_rec
         mode = "out"
     else:
+        rec = None
         mode = "in"
     return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=_shift(u))
 

@@ -128,15 +128,35 @@ def punch():
         return _err("Invalid action.")
     db, user = get_db(), g.user
     t = now()
-    rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (user["id"], d2s(today()))).fetchone()
-    if kind == "in" and rec:
-        return _err("You have already checked in today.")
-    if kind == "out":
-        if not rec or not rec["check_in"]:
-            return _err("You have not checked in today.")
-        if rec["check_out"]:
+    from datetime import datetime, timedelta
+    today_s = d2s(today())
+    yesterday_s = d2s(today() - timedelta(days=1))
+
+    today_rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (user["id"], today_s)).fetchone()
+    yesterday_rec = db.execute(
+        "SELECT * FROM attendance WHERE emp_id=? AND date=? AND check_in IS NOT NULL AND check_out IS NULL",
+        (user["id"], yesterday_s)
+    ).fetchone()
+
+    target_rec = None
+    if kind == "in":
+        if yesterday_rec:
+            cin_dt = datetime.strptime(yesterday_rec["check_in"], "%Y-%m-%d %H:%M:%S")
+            if (t - cin_dt).total_seconds() < 18 * 3600:
+                return _err("You have an active night shift from yesterday. Please check out first.")
+        if today_rec and today_rec["check_in"]:
+            return _err("You have already checked in today.")
+    elif kind == "out":
+        if today_rec and today_rec["check_in"] and not today_rec["check_out"]:
+            target_rec = today_rec
+        elif yesterday_rec:
+            target_rec = yesterday_rec
+        elif today_rec and today_rec["check_out"]:
             return _err("You have already checked out today.")
-        gap = (t - __import__("datetime").datetime.strptime(rec["check_in"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 60
+        else:
+            return _err("You have not checked in.")
+
+        gap = (t - datetime.strptime(target_rec["check_in"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 60
         if gap < current_app.config["MIN_PUNCH_GAP_MIN"]:
             return _err("Please wait a minute before checking out.")
 
@@ -178,21 +198,22 @@ def punch():
         db.execute(
             "INSERT INTO attendance (emp_id, date, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
-            (user["id"], d2s(today()), t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"],
+            (user["id"], today_s, t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"],
              selfie_name, 1 if geo["inside"] else 0, late))
         audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} dist={geo['distance']}m late={late} od={geo['od']}")
         db.commit()
         return jsonify(ok=True, message="Checked in" + (" — marked late" if late else ""), time=f"{t:%H:%M}", late=bool(late))
 
-    upd = finalize_attendance({"check_in": rec["check_in"], "check_out": t.strftime("%Y-%m-%d %H:%M:%S")}, shift)
+    upd = finalize_attendance({"check_in": target_rec["check_in"], "check_out": t.strftime("%Y-%m-%d %H:%M:%S")}, shift)
     db.execute(
         "UPDATE attendance SET check_out=?, out_lat=?, out_lng=?, out_dist=?, out_selfie=?, out_geo_ok=?, "
         "work_hours=?, ot_hours=?, status=?, late=? WHERE id=?",
         (t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"], selfie_name,
-         1 if geo["inside"] else 0, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], rec["id"]))
+         1 if geo["inside"] else 0, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], target_rec["id"]))
     audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} hours={upd['work_hours']} status={upd['status']}")
     db.commit()
     return jsonify(ok=True, message="Checked out", time=f"{t:%H:%M}", hours=upd["work_hours"], status=upd["status"])
+
 
 
 @bp.get("/selfie/<path:name>")

@@ -86,8 +86,15 @@ def compute_status(hours: float, shift) -> tuple[str, float]:
 
 def is_late(check_in: datetime, shift) -> bool:
     h, m = map(int, shift["start_time"].split(":"))
-    limit = check_in.replace(hour=h, minute=m, second=0) + timedelta(minutes=shift["grace_min"])
+    end_h, end_m = map(int, shift["end_time"].split(":"))
+    # If night shift crosses midnight (e.g. 20:00 to 08:00) and worker punches in past midnight
+    if (end_h < h or (end_h == h and end_m < m)) and check_in.hour < 12:
+        start_date = check_in.date() - timedelta(days=1)
+    else:
+        start_date = check_in.date()
+    limit = datetime.combine(start_date, datetime.min.time()).replace(hour=h, minute=m, second=0) + timedelta(minutes=shift["grace_min"])
     return check_in > limit
+
 
 
 def finalize_attendance(rec, shift):
