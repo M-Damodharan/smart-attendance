@@ -35,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS_NAME = "sbg_prefs";
     private static final String KEY_SERVER_URL = "server_url";
-    private static final String DEFAULT_SERVER_URL = "https://mighty-recovered-defined-steel.trycloudflare.com";
+    private static final String DEFAULT_SERVER_URL = "https://smart-attendance-u7e6.onrender.com";
     private static final int PERMISSION_REQUEST_CODE = 1001;
 
     private WebView webView;
@@ -207,8 +207,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadServerUrl() {
         String serverUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
-        // Automatically overwrite stale or expired trycloudflare URLs from previous app versions
-        if (serverUrl.contains("trycloudflare.com") && !serverUrl.equals(DEFAULT_SERVER_URL)) {
+        // Automatically overwrite stale or temporary trycloudflare URLs from previous app versions
+        if (serverUrl.contains("trycloudflare.com")) {
             serverUrl = DEFAULT_SERVER_URL;
             prefs.edit().putString(KEY_SERVER_URL, DEFAULT_SERVER_URL).apply();
         }
