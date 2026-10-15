@@ -85,7 +85,7 @@ def check_csrf():
             abort(400, "Invalid or missing CSRF token. Refresh the page and try again.")
 
 
-def validate_strong_password(pw: str) -> str | None:
+def validate_strong_password(pw: str):
     """Enforce production security rules for passwords."""
     if len(pw) < 8:
         return "Password must be at least 8 characters long."

@@ -104,7 +104,7 @@ def audit(action, entity=None, entity_id=None, details=None, actor=None):
 
 
 # ------------------------------------------------------------------ employee categories & shift schedules
-def get_employee_shift_for_date(emp_id: int, d: date | str, fallback_shift_id: int = None):
+def get_employee_shift_for_date(emp_id: int, d, fallback_shift_id: int = None):
     """Retrieve the effective shift for an employee on a given date, supporting weekly schedules."""
     db = get_db()
     d_str = d2s(d) if isinstance(d, date) else str(d)[:10]
@@ -148,7 +148,7 @@ def get_employee_category(emp_id: int):
 
 
 # ------------------------------------------------------------------ status rules
-def compute_attendance_status(cin: datetime, cout: datetime, shift, category=None) -> tuple[str, float]:
+def compute_attendance_status(cin: datetime, cout: datetime, shift, category=None):
     """Calculate attendance status and overtime hours based on configured attendance policy,
     employee category working hours, and shift rules.
     Rules:
@@ -209,7 +209,7 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
             return "A", 0.0
 
 
-def compute_status(hours: float, shift) -> tuple[str, float]:
+def compute_status(hours: float, shift):
     """Legacy helper for backwards compatibility."""
     full = shift["full_hours"] if shift else 8.0
     half = shift["half_hours"] if shift else 4.0
