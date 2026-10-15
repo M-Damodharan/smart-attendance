@@ -4,14 +4,16 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 
 from .auth import employee_required
 from .db import get_db
-from .services import (audit, build_register, d2s, daterange, leave_balance, month_range, now, s2d, today,
+from .services import (audit, build_register, d2s, daterange, get_employee_category,
+                       get_employee_shift_for_date, leave_balance, month_range, now, s2d, today,
                        working_days)
 
 bp = Blueprint("emp", __name__)
 
 
-def _shift(user):
-    return get_db().execute("SELECT * FROM shifts WHERE id=?", (user["shift_id"],)).fetchone()
+def _shift(user, target_date=None):
+    d = target_date or today()
+    return get_employee_shift_for_date(user["id"], d, user["shift_id"])
 
 
 @bp.route("/dashboard")
@@ -42,7 +44,8 @@ def dashboard():
     holiday = db.execute("SELECT * FROM holidays WHERE date>=? ORDER BY date LIMIT 1", (d2s(t),)).fetchone()
     od_today = db.execute("SELECT * FROM od_requests WHERE emp_id=? AND od_date=? AND status='Approved'",
                           (u["id"], d2s(t))).fetchone()
-    return render_template("emp/dashboard.html", rec=rec, shift=_shift(u), summary=reg["summary"], recent=recent,
+    category = get_employee_category(u["id"])
+    return render_template("emp/dashboard.html", rec=rec, shift=_shift(u), category=category, summary=reg["summary"], recent=recent,
                            pend=pend_l + pend_o, holiday=holiday, od_today=od_today, today=t, month_name=t.strftime("%B %Y"))
 
 
@@ -70,7 +73,8 @@ def punch():
     else:
         rec = None
         mode = "in"
-    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=_shift(u))
+    category = get_employee_category(u["id"])
+    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=_shift(u), category=category)
 
 
 @bp.route("/history")

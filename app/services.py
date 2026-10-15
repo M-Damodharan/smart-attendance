@@ -1,7 +1,7 @@
 """Business rules: geofence, status calculation, register building, audit log."""
 import calendar
 import math
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from flask import current_app, request, session
 
@@ -9,6 +9,9 @@ from .db import get_db
 
 DATE_FMT = "%Y-%m-%d"
 DT_FMT = "%Y-%m-%d %H:%M:%S"
+
+# Indian Standard Time (UTC+5:30) for Sri Balaji Gears
+IST = timezone(timedelta(hours=5, minutes=30))
 
 STATUS_LABELS = {
     "P": "Present", "HD": "Half Day", "A": "Absent", "OT": "Overtime",
@@ -19,11 +22,13 @@ STATUS_LABELS = {
 
 # ------------------------------------------------------------------ helpers
 def today() -> date:
-    return date.today()
+    """Current local company date in IST."""
+    return datetime.now(IST).date()
 
 
 def now() -> datetime:
-    return datetime.now().replace(microsecond=0)
+    """Current local company time in IST (naive datetime for clean DB storage)."""
+    return datetime.now(IST).replace(microsecond=0, tzinfo=None)
 
 
 def d2s(d: date) -> str:
@@ -35,7 +40,34 @@ def s2d(s: str) -> date:
 
 
 def parse_dt(s):
-    return datetime.strptime(s, DT_FMT) if s else None
+    if not s:
+        return None
+    if isinstance(s, datetime):
+        return s
+    s = str(s).strip()
+    for fmt in (DT_FMT, "%Y-%m-%d %H:%M", "%H:%M:%S", "%H:%M"):
+        try:
+            val = datetime.strptime(s, fmt)
+            if fmt in ("%H:%M:%S", "%H:%M"):
+                t = today()
+                return val.replace(year=t.year, month=t.month, day=t.day)
+            return val
+        except ValueError:
+            pass
+    return None
+
+
+def format_duration(hours: float) -> str:
+    """Format decimal hours into human-readable duration: e.g. '1m', '45m', '8h 15m'."""
+    if hours is None or hours <= 0:
+        return "0m"
+    total_minutes = int(round(hours * 60))
+    if total_minutes < 1:
+        return "1m" if hours > 0 else "0m"
+    if total_minutes < 60:
+        return f"{total_minutes}m"
+    h, m = divmod(total_minutes, 60)
+    return f"{h}h {m:02d}m" if m > 0 else f"{h}h"
 
 
 def month_range(year: int, month: int):
@@ -71,10 +103,117 @@ def audit(action, entity=None, entity_id=None, details=None, actor=None):
     )
 
 
+# ------------------------------------------------------------------ employee categories & shift schedules
+def get_employee_shift_for_date(emp_id: int, d: date | str, fallback_shift_id: int = None):
+    """Retrieve the effective shift for an employee on a given date, supporting weekly schedules."""
+    db = get_db()
+    d_str = d2s(d) if isinstance(d, date) else str(d)[:10]
+    row = db.execute(
+        "SELECT s.* FROM weekly_shift_schedules w JOIN shifts s ON s.id = w.shift_id "
+        "WHERE w.emp_id = ? AND w.start_date <= ? AND w.end_date >= ? "
+        "ORDER BY w.id DESC LIMIT 1",
+        (emp_id, d_str, d_str),
+    ).fetchone()
+    if row:
+        return row
+    if fallback_shift_id:
+        s = db.execute("SELECT * FROM shifts WHERE id=?", (fallback_shift_id,)).fetchone()
+        if s:
+            return s
+    emp = db.execute("SELECT shift_id FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if emp and emp["shift_id"]:
+        s = db.execute("SELECT * FROM shifts WHERE id=?", (emp["shift_id"],)).fetchone()
+        if s:
+            return s
+    return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id LIMIT 1").fetchone()
+
+
+def get_employee_category(emp_id: int):
+    """Retrieve employee category details (work hours, overtime, half-day/full-day cutoffs)."""
+    db = get_db()
+    cat = db.execute(
+        "SELECT c.* FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?",
+        (emp_id,),
+    ).fetchone()
+    if cat:
+        return cat
+    # Fallback to Employees category
+    row = db.execute("SELECT * FROM employee_categories WHERE code='EMPLOYEES'").fetchone()
+    if row:
+        return row
+    return {
+        "name": "Employees", "code": "EMPLOYEES", "work_hours": 12.0, "overtime_hours": 0.0,
+        "half_day_min_hours": 4.0, "half_day_time": "14:00", "early_full_day_cutoff": "16:00", "full_day_time": "20:00"
+    }
+
+
 # ------------------------------------------------------------------ status rules
+def compute_attendance_status(cin: datetime, cout: datetime, shift, category=None) -> tuple[str, float]:
+    """Calculate attendance status and overtime hours based on configured attendance policy,
+    employee category working hours, and shift rules.
+    Rules:
+    - Half Day: 8:00 AM to 2:00 PM (14:00).
+    - Full Day: 8:00 AM to 8:00 PM (20:00).
+    - If employee clocks out after 4:00 PM (16:00), count day as Full Day Present ('P').
+    - Overtime: calculated for hours worked beyond regular category working hours.
+    - Category hours: Staff 10h, Employees 12h, Contract Employees 10h regular + 2h OT.
+    """
+    if not cin or not cout:
+        return "A", 0.0
+
+    seconds = max((cout - cin).total_seconds(), 0)
+    hours = seconds / 3600.0
+
+    min_half_hours = float(category["half_day_min_hours"] if category and "half_day_min_hours" in category.keys() else (shift["half_hours"] if shift else 4.0))
+    cat_work_hours = float(category["work_hours"] if category and "work_hours" in category.keys() else (shift["full_hours"] if shift else 8.0))
+    cutoff_full_str = category["early_full_day_cutoff"] if category and "early_full_day_cutoff" in category.keys() else "16:00"
+    half_time_str = category["half_day_time"] if category and "half_day_time" in category.keys() else "14:00"
+
+    cutoff_h, cutoff_m = map(int, cutoff_full_str.split(":"))
+    half_h, half_m = map(int, half_time_str.split(":"))
+
+    out_time = cout.time()
+    cutoff_full_time = datetime.min.time().replace(hour=cutoff_h, minute=cutoff_m)
+    half_day_time = datetime.min.time().replace(hour=half_h, minute=half_m)
+
+    # Overtime hours: any time worked beyond required regular category work hours
+    ot_hours = round(max(hours - cat_work_hours, 0.0), 2)
+
+    is_after_4pm = out_time >= cutoff_full_time
+    is_after_2pm = out_time >= half_day_time
+
+    shift_start_h = int(shift["start_time"].split(":")[0]) if shift else 8
+    is_day_shift = shift_start_h < 14
+
+    if is_day_shift:
+        # Rule: Clock out after 4:00 PM counts as Full Day Present (requiring at least reasonable work period, e.g. >= min_half_hours)
+        if (is_after_4pm and hours >= min_half_hours) or hours >= cat_work_hours:
+            if ot_hours >= 1.0:
+                return "OT", ot_hours
+            return "P", ot_hours
+        elif is_after_2pm and hours >= (min_half_hours * 0.75):
+            return "HD", 0.0
+        elif hours >= min_half_hours:
+            return "HD", 0.0
+        else:
+            return "A", 0.0
+    else:
+        # Night shifts or non-daytime shifts
+        if hours >= cat_work_hours:
+            if ot_hours >= 1.0:
+                return "OT", ot_hours
+            return "P", ot_hours
+        elif hours >= min_half_hours:
+            return "HD", 0.0
+        else:
+            return "A", 0.0
+
+
 def compute_status(hours: float, shift) -> tuple[str, float]:
-    """Auto status from worked hours:  A < half  <= HD < full  <= P < full+ot_min <= OT"""
-    full, half, ot_min = shift["full_hours"], shift["half_hours"], shift["ot_min_hours"]
+    """Legacy helper for backwards compatibility."""
+    full = shift["full_hours"] if shift else 8.0
+    half = shift["half_hours"] if shift else 4.0
+    ot_min = shift["ot_min_hours"] if shift else 1.0
     if hours >= full + ot_min:
         return "OT", round(hours - full, 2)
     if hours >= full:
@@ -96,8 +235,7 @@ def is_late(check_in: datetime, shift) -> bool:
     return check_in > limit
 
 
-
-def finalize_attendance(rec, shift):
+def finalize_attendance(rec, shift, category=None):
     """Recalculate hours/status/late for an attendance row dict-like. Returns update dict."""
     cin, cout = parse_dt(rec["check_in"]), parse_dt(rec["check_out"])
     upd = {"late": 0, "work_hours": 0.0, "ot_hours": 0.0, "status": None}
@@ -106,7 +244,7 @@ def finalize_attendance(rec, shift):
     if cin and cout:
         hours = max((cout - cin).total_seconds() / 3600.0, 0)
         upd["work_hours"] = round(hours, 2)
-        upd["status"], upd["ot_hours"] = compute_status(hours, shift)
+        upd["status"], upd["ot_hours"] = compute_attendance_status(cin, cout, shift, category)
     return upd
 
 
@@ -142,7 +280,7 @@ def approved_od_for(emp_id: int, d: date):
 
 
 # ------------------------------------------------------------------ register / reports
-def day_code(d, rec, leave, od, holiday, today_, joined):
+def day_code(d, rec, leave, od, holiday, today_, joined, shift=None):
     if rec and rec["check_in"]:
         if rec["check_out"]:
             return rec["status"] or "A"
@@ -157,9 +295,15 @@ def day_code(d, rec, leave, od, holiday, today_, joined):
         return "H"
     if d.weekday() in current_app.config["WEEKLY_OFF"]:
         return "WO"
-    if d >= today_:
-        return "-"
-    return "A"
+    if d < today_:
+        return "A"
+    if d == today_ and shift:
+        cur_time = now().strftime("%H:%M")
+        start_t = shift["start_time"]
+        end_t = shift["end_time"]
+        if end_t > start_t and cur_time > end_t:
+            return "A"
+    return "-"
 
 
 def build_register(emp_rows, start: date, end: date):
@@ -189,11 +333,13 @@ def build_register(emp_rows, start: date, end: date):
     for emp in emp_rows:
         days, recs = {}, {}
         summ = dict.fromkeys(["P", "OT", "HD", "A", "L", "HL", "OD", "H", "WO", "MP", "IN", "late", "hours", "ot_hours"], 0)
-        joined = s2d(emp["joined_on"]) if emp["joined_on"] else date(2000, 1, 1)
+        emp_dict = dict(emp) if emp else {}
+        joined = s2d(emp_dict["joined_on"]) if emp_dict.get("joined_on") else date(2000, 1, 1)
         for d in daterange(start, end):
             k = (emp["id"], d2s(d))
             rec = att.get(k)
-            code = day_code(d, rec, leave_map.get(k), ods.get(k), hols.get(d2s(d)), t, joined)
+            shift = get_employee_shift_for_date(emp["id"], d, emp["shift_id"])
+            code = day_code(d, rec, leave_map.get(k), ods.get(k), hols.get(d2s(d)), t, joined, shift)
             days[d] = code
             if rec:
                 recs[d] = rec

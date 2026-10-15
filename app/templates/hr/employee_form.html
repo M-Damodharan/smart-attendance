@@ -12,12 +12,25 @@
     <div class="two"><label>Department<input name="department" value="{{ emp['department'] or '' if emp }}"></label>
       <label>Designation<input name="designation" value="{{ emp['designation'] or '' if emp }}"></label></div>
     <div class="two">
-      <label>Shift<select name="shift_id">{% for s in shifts %}<option value="{{ s['id'] }}" {{ 'selected' if emp and emp['shift_id']==s['id'] }}>{{ s['name'] }} ({{ s['start_time'] }}–{{ s['end_time'] }})</option>{% endfor %}</select></label>
-      <label>Office (geofence)<select name="office_id">{% for o in offices %}<option value="{{ o['id'] }}" {{ 'selected' if emp and emp['office_id']==o['id'] }}>{{ o['name'] }}</option>{% endfor %}</select></label></div>
+      <label>Employee Category (Working Hours &amp; OT)
+        <select name="category_id">
+          {% for c in categories %}
+          <option value="{{ c['id'] }}" {{ 'selected' if emp and emp['category_id']==c['id'] }}>
+            {{ c['name'] }} ({{ c['work_hours']|int }}h/day{% if c['overtime_hours'] %} + {{ c['overtime_hours']|int }}h OT{% endif %})
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Office (geofence)<select name="office_id">{% for o in offices %}<option value="{{ o['id'] }}" {{ 'selected' if emp and emp['office_id']==o['id'] }}>{{ o['name'] }}</option>{% endfor %}</select></label>
+    </div>
     <div class="two">
+      <label>Default Shift<select name="shift_id">{% for s in shifts %}<option value="{{ s['id'] }}" {{ 'selected' if emp and emp['shift_id']==s['id'] }}>{{ s['name'] }} ({{ s['start_time'] }}–{{ s['end_time'] }})</option>{% endfor %}</select></label>
       <label>Role<select name="role"><option value="employee" {{ 'selected' if emp and emp['role']=='employee' }}>Employee</option><option value="hr" {{ 'selected' if emp and emp['role']=='hr' }}>HR</option></select></label>
-      <label>Joining date<input type="date" name="joined_on" value="{{ emp['joined_on'] if emp else today }}"></label></div>
-    {% if not emp %}<label>Temporary password<input name="password" placeholder="Welcome@123 (default)"></label>{% endif %}
+    </div>
+    <div class="two">
+      <label>Joining date<input type="date" name="joined_on" value="{{ emp['joined_on'] if emp else today }}"></label>
+      {% if not emp %}<label>Temporary password<input name="password" placeholder="Welcome@123 (default)"></label>{% else %}<div></div>{% endif %}
+    </div>
     <label class="check"><input type="checkbox" name="active" {{ 'checked' if (not emp) or emp['active'] }}> Active</label>
     <div class="actions"><button class="btn primary">Save</button><a class="btn" href="{{ url_for('hr.employees') }}">Cancel</a></div>
   </form>

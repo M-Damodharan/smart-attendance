@@ -7,14 +7,18 @@ from werkzeug.security import generate_password_hash
 
 from .auth import hr_required
 from .db import get_db
-from .services import (coords_from_maps_link, audit, build_register, d2s, daterange, finalize_attendance, month_range, now, s2d, today,
+from .services import (coords_from_maps_link, audit, build_register, d2s, daterange,
+                       finalize_attendance, format_duration, get_employee_category,
+                       get_employee_shift_for_date, month_range, now, s2d, today,
                        DT_FMT, STATUS_LABELS)
 
 bp = Blueprint("hr", __name__, url_prefix="/hr")
 
 
 def _employees(only_active=True, shift_id=None, dept=None):
-    q = ("SELECT e.*, s.name shift_name FROM employees e LEFT JOIN shifts s ON s.id=e.shift_id "
+    q = ("SELECT e.*, s.name shift_name, c.name category_name FROM employees e "
+         "LEFT JOIN shifts s ON s.id=e.shift_id "
+         "LEFT JOIN employee_categories c ON c.id=e.category_id "
          "WHERE e.role='employee'")
     args = []
     if only_active:
@@ -76,8 +80,9 @@ def dashboard():
 @hr_required
 def employees():
     rows = get_db().execute(
-        "SELECT e.*, s.name shift_name, o.name office_name FROM employees e "
-        "LEFT JOIN shifts s ON s.id=e.shift_id LEFT JOIN offices o ON o.id=e.office_id ORDER BY e.role DESC, e.emp_code"
+        "SELECT e.*, s.name shift_name, o.name office_name, c.name category_name FROM employees e "
+        "LEFT JOIN shifts s ON s.id=e.shift_id LEFT JOIN offices o ON o.id=e.office_id "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id ORDER BY e.role DESC, e.emp_code"
     ).fetchall()
     return render_template("hr/employees.html", rows=rows)
 
@@ -95,25 +100,32 @@ def employee_form(eid=None):
         code = f.get("emp_code", "").strip().upper()
         name = f.get("name", "").strip()
         role = f.get("role", "employee")
+        category_id = f.get("category_id", type=int)
+        if not category_id:
+            # Fallback based on role
+            cat_code = "STAFF" if role == "hr" else "EMPLOYEES"
+            crow = db.execute("SELECT id FROM employee_categories WHERE code=?", (cat_code,)).fetchone()
+            category_id = crow[0] if crow else None
+
         if not code or not name or role not in ("employee", "hr"):
             flash("Employee code and name are required.", "err")
         else:
             vals = (code, name, f.get("email", "").strip(), f.get("phone", "").strip(), f.get("department", "").strip(),
                     f.get("designation", "").strip(), role, f.get("shift_id", type=int), f.get("office_id", type=int),
-                    f.get("joined_on") or d2s(today()), 1 if f.get("active") else 0)
+                    category_id, f.get("joined_on") or d2s(today()), 1 if f.get("active") else 0)
             try:
                 if emp:
                     db.execute("UPDATE employees SET emp_code=?, name=?, email=?, phone=?, department=?, designation=?, "
-                               "role=?, shift_id=?, office_id=?, joined_on=?, active=? WHERE id=?", (*vals, emp["id"]))
-                    audit("EMPLOYEE_UPDATE", "employee", emp["id"], f"{code} {name}")
-                    flash("Employee updated.", "ok")
+                               "role=?, shift_id=?, office_id=?, category_id=?, joined_on=?, active=? WHERE id=?", (*vals, emp["id"]))
+                    audit("EMPLOYEE_UPDATE", "employee", emp["id"], f"{code} {name} (cat={category_id})")
+                    flash("Employee updated successfully.", "ok")
                 else:
                     pw = f.get("password") or "Welcome@123"
                     cur = db.execute(
                         "INSERT INTO employees (emp_code, name, email, phone, department, designation, role, shift_id, "
-                        "office_id, joined_on, active, password_hash, must_change_pw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                        "office_id, category_id, joined_on, active, password_hash, must_change_pw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
                         (*vals, generate_password_hash(pw)))
-                    audit("EMPLOYEE_CREATE", "employee", cur.lastrowid, f"{code} {name}")
+                    audit("EMPLOYEE_CREATE", "employee", cur.lastrowid, f"{code} {name} (cat={category_id})")
                     flash(f"Employee created. Temporary password: {pw}", "ok")
                 db.commit()
                 return redirect(url_for("hr.employees"))
@@ -121,7 +133,14 @@ def employee_form(eid=None):
                 flash("That employee code already exists.", "err")
     shifts = db.execute("SELECT * FROM shifts WHERE active=1").fetchall()
     offices = db.execute("SELECT * FROM offices WHERE active=1").fetchall()
-    return render_template("hr/employee_form.html", emp=emp, shifts=shifts, offices=offices)
+    categories = db.execute("SELECT * FROM employee_categories WHERE active=1 ORDER BY id").fetchall()
+    schedules = []
+    if emp:
+        schedules = db.execute(
+            "SELECT w.*, s.name shift_name FROM weekly_shift_schedules w JOIN shifts s ON s.id=w.shift_id "
+            "WHERE w.emp_id=? ORDER BY w.start_date DESC LIMIT 10", (emp["id"],)
+        ).fetchall()
+    return render_template("hr/employee_form.html", emp=emp, shifts=shifts, offices=offices, categories=categories, schedules=schedules)
 
 
 @bp.post("/employees/<int:eid>/reset-password")
@@ -264,8 +283,9 @@ def corrections():
             if cout and cout <= cin:
                 flash("Check-out must be after check-in.", "err")
                 return redirect(url_for("hr.corrections"))
-            shift = db.execute("SELECT * FROM shifts WHERE id=?", (emp["shift_id"],)).fetchone()
-            upd = finalize_attendance({"check_in": cin, "check_out": cout}, shift)
+            shift = get_employee_shift_for_date(emp["id"], d, emp["shift_id"])
+            cat = get_employee_category(emp["id"])
+            upd = finalize_attendance({"check_in": cin, "check_out": cout}, shift, cat)
             if old:
                 db.execute("UPDATE attendance SET check_in=?, check_out=?, work_hours=?, ot_hours=?, status=?, late=?, "
                            "source='correction', remarks=? WHERE id=?",
@@ -384,6 +404,53 @@ def settings():
                     sid = db.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, "
                                      "ot_min_hours, active) VALUES (?,?,?,?,?,?,?,?)", vals).lastrowid
                 audit("SHIFT_SAVE", "shift", sid, " | ".join(map(str, vals)))
+            elif act == "category":
+                cid = f.get("id", type=int)
+                name = f["name"].strip()
+                code = f["code"].strip().upper()
+                work_h = float(f["work_hours"])
+                ot_h = float(f.get("overtime_hours", 0.0) or 0.0)
+                half_h = float(f.get("half_day_min_hours", 4.0) or 4.0)
+                half_t = f.get("half_day_time", "14:00").strip()
+                cutoff_full = f.get("early_full_day_cutoff", "16:00").strip()
+                full_t = f.get("full_day_time", "20:00").strip()
+                active = 1 if f.get("active") else 0
+                vals = (name, code, work_h, ot_h, half_h, half_t, cutoff_full, full_t, active)
+                if cid:
+                    db.execute(
+                        "UPDATE employee_categories SET name=?, code=?, work_hours=?, overtime_hours=?, half_day_min_hours=?, "
+                        "half_day_time=?, early_full_day_cutoff=?, full_day_time=?, active=? WHERE id=?",
+                        (*vals, cid)
+                    )
+                    audit("CATEGORY_SAVE", "category", cid, f"{name} {code} {work_h}h OT={ot_h}h")
+                else:
+                    cid = db.execute(
+                        "INSERT INTO employee_categories (name, code, work_hours, overtime_hours, half_day_min_hours, half_day_time, early_full_day_cutoff, full_day_time, active) "
+                        "VALUES (?,?,?,?,?,?,?,?,?)",
+                        vals
+                    ).lastrowid
+                    audit("CATEGORY_SAVE", "category", cid, f"{name} {code} {work_h}h OT={ot_h}h")
+            elif act == "weekly_schedule":
+                target_emp_id = f.get("emp_id", type=int)
+                target_shift_id = f.get("shift_id", type=int)
+                start_d = f["start_date"].strip()
+                end_d = f["end_date"].strip()
+                notes = f.get("notes", "").strip()
+                if not (target_emp_id and target_shift_id and start_d and end_d):
+                    flash("Please select employee, shift, start date, and end date.", "err")
+                    return redirect(url_for("hr.settings"))
+                if end_d < start_d:
+                    flash("End date cannot be earlier than start date.", "err")
+                    return redirect(url_for("hr.settings"))
+                sc_id = db.execute(
+                    "INSERT INTO weekly_shift_schedules (emp_id, shift_id, start_date, end_date, notes) VALUES (?,?,?,?,?)",
+                    (target_emp_id, target_shift_id, start_d, end_d, notes)
+                ).lastrowid
+                audit("WEEKLY_SCHEDULE_ASSIGN", "weekly_shift_schedules", sc_id, f"emp={target_emp_id} shift={target_shift_id} {start_d}..{end_d}")
+            elif act == "delete_schedule":
+                sc_id = f.get("id", type=int)
+                db.execute("DELETE FROM weekly_shift_schedules WHERE id=?", (sc_id,))
+                audit("WEEKLY_SCHEDULE_DELETE", "weekly_shift_schedules", sc_id)
             elif act == "holiday":
                 s2d(f["date"])
                 db.execute("INSERT OR REPLACE INTO holidays (date, name) VALUES (?,?)", (f["date"], f["name"].strip()))
@@ -406,14 +473,24 @@ def settings():
                 db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', ?)", (str(tol),))
                 audit("SETTINGS_SAVE", "system_settings", 1, f"max_gps_accuracy_m={max_acc}, geofence_tolerance_m={tol}")
             db.commit()
-            flash("Saved.", "ok")
+            flash("Saved successfully.", "ok")
         except (KeyError, ValueError, sqlite3.IntegrityError):
             flash("Please check the values you entered.", "err")
         return redirect(url_for("hr.settings"))
     sys_settings = {r["key"]: r["value"] for r in db.execute("SELECT key, value FROM system_settings").fetchall()}
+    categories = db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()
+    weekly_schedules = db.execute(
+        "SELECT w.*, e.name emp_name, e.emp_code, s.name shift_name FROM weekly_shift_schedules w "
+        "JOIN employees e ON e.id=w.emp_id JOIN shifts s ON s.id=w.shift_id "
+        "ORDER BY w.start_date DESC LIMIT 50"
+    ).fetchall()
+    all_employees = db.execute("SELECT id, emp_code, name FROM employees WHERE active=1 ORDER BY emp_code").fetchall()
     return render_template("hr/settings.html",
                            offices=db.execute("SELECT * FROM offices").fetchall(),
                            shifts=db.execute("SELECT * FROM shifts").fetchall(),
+                           categories=categories,
+                           weekly_schedules=weekly_schedules,
+                           all_employees=all_employees,
                            holidays=db.execute("SELECT * FROM holidays ORDER BY date").fetchall(),
                            ltypes=db.execute("SELECT * FROM leave_types").fetchall(),
                            sys_settings=sys_settings)

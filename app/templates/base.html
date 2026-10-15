@@ -138,6 +138,92 @@
 </main>
 
 {% if g.user %}
+<!-- AI Attendance Assistant FAB & Modal -->
+<button type="button" id="ai-assistant-toggle" class="ai-fab-btn" onclick="toggleAIChat(true)" aria-label="Open AI Attendance Assistant" title="Ask AI Attendance Assistant">
+  <span class="ai-fab-icon">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
+      <rect x="4" y="8" width="16" height="12" rx="4"/>
+      <circle cx="9" cy="14" r="1.5" fill="currentColor"/>
+      <circle cx="15" cy="14" r="1.5" fill="currentColor"/>
+      <path d="M9 18h6"/>
+    </svg>
+  </span>
+  <span class="ai-fab-label">AI Assistant</span>
+  <span class="ai-fab-pulse"></span>
+</button>
+
+<div id="ai-assistant-modal" class="ai-modal-wrap" aria-hidden="true" style="display:none">
+  <div class="ai-modal-backdrop" onclick="toggleAIChat(false)"></div>
+  <div class="ai-chat-window">
+    <div class="ai-chat-header">
+      <div class="ai-chat-title">
+        <div class="ai-avatar-badge">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="8" width="16" height="12" rx="4"/>
+            <circle cx="9" cy="14" r="1.5" fill="currentColor"/>
+            <circle cx="15" cy="14" r="1.5" fill="currentColor"/>
+            <path d="M9 18h6"/>
+            <path d="M12 2v6"/>
+          </svg>
+        </div>
+        <div>
+          <h4>SBG AI Assistant</h4>
+          <span class="ai-status-indicator">Online &bull; Live Attendance Intelligence</span>
+        </div>
+      </div>
+      <div class="ai-chat-controls">
+        <button type="button" class="ai-ctrl-btn" onclick="clearAIChat()" title="Clear conversation">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+        <button type="button" class="ai-ctrl-btn" onclick="toggleAIChat(false)" title="Close chat">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Suggested Quick Prompts -->
+    <div class="ai-quick-prompts">
+      <span class="quick-title">Quick Questions:</span>
+      <div class="quick-chips-scroll">
+        {% if g.user['role'] == 'hr' %}
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('How many employees are present today?')">👥 Present today?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Show today\'s absent employees.')">📋 Absent employees?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Who is working right now?')">⏱️ Working right now?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Who arrived late today?')">⚠️ Late arrivals?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('How many hours have I worked today?')">⏳ My hours today?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('What are the company attendance rules?')">📌 Attendance rules</button>
+        {% else %}
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('How many hours have I worked today?')">⏱️ Hours worked today?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('What time did I punch in and punch out?')">🕒 My punch times?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Am I marked Present, Half Day or Absent today?')">📋 Today\'s status?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('How much overtime did I work today?')">⭐ Overtime worked?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Show my attendance history for this month.')">📅 Monthly history</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('What is my assigned shift?')">🕒 My shift timings</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('What are my leave balances?')">🏖️ Leave balances</button>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Message History Stream -->
+    <div class="ai-chat-messages" id="ai-chat-messages">
+      <div class="ai-msg ai-bot">
+        <div class="ai-bubble">
+          Hello <strong>{{ g.user['name'] }}</strong>! 👋 I'm your SBG AI Attendance Assistant. Ask me anything about your punches, work hours, overtime, assigned shift, leaves, or company rules!
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Box -->
+    <form class="ai-chat-input-bar" id="ai-chat-form" onsubmit="handleAIChatSubmit(event)">
+      <input type="text" id="ai-user-input" placeholder="Type a question about attendance..." autocomplete="off" required>
+      <button type="submit" class="ai-send-btn" id="ai-send-btn" title="Send question">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </form>
+  </div>
+</div>
+
 <footer class="app-footer">
   <div class="footer-wrap">
     <p class="copyright-line">&copy; 2026 <strong>SBG (Sri Balaji Gears)</strong>. All rights reserved.</p>

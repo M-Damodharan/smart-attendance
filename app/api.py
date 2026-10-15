@@ -12,7 +12,8 @@ from PIL import Image, ImageChops, ImageStat
 
 from .auth import employee_required, login_required
 from .db import get_db
-from .services import (approved_od_for, audit, finalize_attendance, haversine, now, today, d2s)
+from .services import (approved_od_for, audit, finalize_attendance, format_duration,
+                       get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s)
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -191,10 +192,11 @@ def punch():
         return _err(f"You are {geo['distance']} m from {geo['office']} (allowed {geo['radius']} m).")
 
     selfie_name = _save_selfie(selfie, user, kind)
-    shift = db.execute("SELECT * FROM shifts WHERE id=?", (user["shift_id"],)).fetchone()
+    shift = get_employee_shift_for_date(user["id"], today_s, user["shift_id"])
+    cat = get_employee_category(user["id"])
 
     if kind == "in":
-        late = 1 if finalize_attendance({"check_in": t.strftime("%Y-%m-%d %H:%M:%S"), "check_out": None}, shift)["late"] else 0
+        late = 1 if finalize_attendance({"check_in": t.strftime("%Y-%m-%d %H:%M:%S"), "check_out": None}, shift, cat)["late"] else 0
         db.execute(
             "INSERT INTO attendance (emp_id, date, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
@@ -202,9 +204,11 @@ def punch():
              selfie_name, 1 if geo["inside"] else 0, late))
         audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} dist={geo['distance']}m late={late} od={geo['od']}")
         db.commit()
-        return jsonify(ok=True, message="Checked in" + (" — marked late" if late else ""), time=f"{t:%H:%M}", late=bool(late))
+        return jsonify(ok=True, message="Checked in" + (" — marked late" if late else ""), time=f"{t:%I:%M %p}", late=bool(late))
 
-    upd = finalize_attendance({"check_in": target_rec["check_in"], "check_out": t.strftime("%Y-%m-%d %H:%M:%S")}, shift)
+    shift_target = get_employee_shift_for_date(user["id"], target_rec["date"], user["shift_id"])
+    upd = finalize_attendance({"check_in": target_rec["check_in"], "check_out": t.strftime("%Y-%m-%d %H:%M:%S")}, shift_target, cat)
+    dur_str = format_duration(upd["work_hours"])
     db.execute(
         "UPDATE attendance SET check_out=?, out_lat=?, out_lng=?, out_dist=?, out_selfie=?, out_geo_ok=?, "
         "work_hours=?, ot_hours=?, status=?, late=? WHERE id=?",
@@ -212,7 +216,15 @@ def punch():
          1 if geo["inside"] else 0, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], target_rec["id"]))
     audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} hours={upd['work_hours']} status={upd['status']}")
     db.commit()
-    return jsonify(ok=True, message="Checked out", time=f"{t:%H:%M}", hours=upd["work_hours"], status=upd["status"])
+    return jsonify(
+        ok=True,
+        message="Checked out",
+        time=f"{t:%I:%M %p}",
+        hours=upd["work_hours"],
+        duration=dur_str,
+        status=upd["status"],
+        ot_hours=upd["ot_hours"],
+    )
 
 
 

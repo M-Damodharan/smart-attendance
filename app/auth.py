@@ -54,11 +54,25 @@ def load_user():
     uid = session.get("uid")
     if uid:
         u = get_db().execute(
-            "SELECT e.*, s.name shift_name, s.start_time, s.end_time FROM employees e "
-            "LEFT JOIN shifts s ON s.id=e.shift_id WHERE e.id=? AND e.active=1", (uid,)
+            "SELECT e.*, s.name shift_name, s.start_time, s.end_time, "
+            "c.name category_name, c.work_hours category_work_hours, c.overtime_hours category_ot_hours "
+            "FROM employees e "
+            "LEFT JOIN shifts s ON s.id=e.shift_id "
+            "LEFT JOIN employee_categories c ON c.id=e.category_id "
+            "WHERE e.id=? AND e.active=1", (uid,)
         ).fetchone()
         if u:
-            g.user = u
+            from .services import get_employee_shift_for_date, today
+            cur_shift = get_employee_shift_for_date(u["id"], today(), u["shift_id"])
+            u_dict = dict(u)
+            if cur_shift:
+                u_dict["shift_name"] = cur_shift["name"]
+                u_dict["start_time"] = cur_shift["start_time"]
+                u_dict["end_time"] = cur_shift["end_time"]
+                u_dict["shift_id"] = cur_shift["id"]
+            if not u_dict.get("category_name"):
+                u_dict["category_name"] = "Staff" if u_dict.get("role") == "hr" else "Employees"
+            g.user = u_dict
         else:
             session.clear()
 
@@ -113,6 +127,8 @@ def login():
         if time.time() - first > current_app.config["LOGIN_LOCK_SECONDS"]:
             cnt, first = 0, time.time()
         if cnt >= current_app.config["MAX_LOGIN_ATTEMPTS"]:
+            audit("LOGIN_LOCKED", "employee", u["id"] if u else None, f"Lockout active: {code} from IP {ip}")
+            db.commit()
             flash("Too many failed attempts. Try again in a few minutes.", "err")
             return render_template("login.html"), 429
 
@@ -137,6 +153,7 @@ def login():
 
         db.execute("INSERT INTO login_attempts (key, count, first_ts) VALUES (?,?,?) "
                    "ON CONFLICT(key) DO UPDATE SET count=?, first_ts=?", (key, cnt + 1, first, cnt + 1, first))
+        audit("LOGIN_FAILED", "employee", u["id"] if u else None, f"Failed login for {code} from IP {ip}")
         db.commit()
         flash("Invalid employee code or password.", "err")
     return render_template("login.html")
@@ -170,7 +187,7 @@ def change_password():
             db = get_db()
             db.execute("UPDATE employees SET password_hash=?, must_change_pw=0 WHERE id=?",
                        (generate_password_hash(new), g.user["id"]))
-            audit("PASSWORD_CHANGE", "employee", g.user["id"])
+            audit("PASSWORD_CHANGE", "employee", g.user["id"], f"{g.user['emp_code']} ({g.user['role']})")
             db.commit()
             flash("Password updated.", "ok")
             return redirect(url_for("auth.index"))

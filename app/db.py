@@ -27,6 +27,30 @@ CREATE TABLE IF NOT EXISTS shifts (
     active INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS employee_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    code TEXT NOT NULL UNIQUE,
+    work_hours REAL NOT NULL DEFAULT 10.0,
+    overtime_hours REAL NOT NULL DEFAULT 0.0,
+    half_day_min_hours REAL NOT NULL DEFAULT 4.0,
+    half_day_time TEXT NOT NULL DEFAULT '14:00',
+    early_full_day_cutoff TEXT NOT NULL DEFAULT '16:00',
+    full_day_time TEXT NOT NULL DEFAULT '20:00',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS weekly_shift_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    shift_id INTEGER NOT NULL REFERENCES shifts(id),
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS employees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     emp_code TEXT NOT NULL UNIQUE,
@@ -38,6 +62,7 @@ CREATE TABLE IF NOT EXISTS employees (
     role TEXT NOT NULL DEFAULT 'employee' CHECK (role IN ('employee','hr')),
     shift_id INTEGER REFERENCES shifts(id),
     office_id INTEGER REFERENCES offices(id),
+    category_id INTEGER REFERENCES employee_categories(id),
     password_hash TEXT NOT NULL,
     must_change_pw INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
@@ -158,12 +183,44 @@ def close_db(_exc=None):
         db.close()
 
 
+def _seed_categories(con):
+    """Seed standard employee categories if not present."""
+    default_cats = [
+        ("Staff", "STAFF", 10.0, 0.0, 4.0, "14:00", "16:00", "20:00"),
+        ("Employees", "EMPLOYEES", 12.0, 0.0, 4.0, "14:00", "16:00", "20:00"),
+        ("Contract Employees", "CONTRACT", 10.0, 2.0, 4.0, "14:00", "16:00", "20:00"),
+    ]
+    for name, code, work_h, ot_h, half_h, half_t, cutoff_full, full_t in default_cats:
+        con.execute(
+            "INSERT OR IGNORE INTO employee_categories (name, code, work_hours, overtime_hours, half_day_min_hours, half_day_time, early_full_day_cutoff, full_day_time) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (name, code, work_h, ot_h, half_h, half_t, cutoff_full, full_t),
+        )
+
+
 def init_db(app):
     os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
     os.makedirs(app.config["SELFIE_DIR"], exist_ok=True)
     con = sqlite3.connect(app.config["DATABASE"])
     con.execute("PRAGMA journal_mode = WAL")          # concurrent readers while writing
     con.executescript(SCHEMA)
+
+    # Migrations for existing DB instances
+    emp_cols = [c[1] for c in con.execute("PRAGMA table_info(employees)").fetchall()]
+    if "category_id" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN category_id INTEGER REFERENCES employee_categories(id)")
+
+    _seed_categories(con)
+
+    # Assign default category_id for legacy employee records
+    staff_id = con.execute("SELECT id FROM employee_categories WHERE code='STAFF'").fetchone()[0]
+    emp_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='EMPLOYEES'").fetchone()[0]
+    con.execute("UPDATE employees SET category_id=? WHERE role='hr' AND (category_id IS NULL OR category_id=0)", (staff_id,))
+    con.execute("UPDATE employees SET category_id=? WHERE (category_id IS NULL OR category_id=0)", (emp_cat_id,))
+
+    # Update Shift 1 to 08:00 to 20:00 if it was still legacy 09:00
+    con.execute("UPDATE shifts SET start_time='08:00', end_time='20:00' WHERE name='Shift 1' AND start_time='09:00'")
+
     if con.execute("SELECT COUNT(*) FROM shifts").fetchone()[0] == 0:
         _seed_base(con)
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
@@ -178,27 +235,29 @@ def init_db(app):
         if con.execute("SELECT COUNT(*) FROM employees WHERE role='employee'").fetchone()[0] == 0:
             emp_pw = generate_password_hash("123456789")
             con.execute(
-                "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, password_hash, must_change_pw, joined_on) "
+                "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
                 "VALUES ('EMP001', 'Employee Staff', 'staff@sribalajigears.com', 'Production', 'Operator', 'employee', "
-                "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, 0, date('now'))",
-                (emp_pw,))
+                "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+                (emp_cat_id, emp_pw))
             print("[setup] Baseline employee EMP001 created with active login.")
     con.commit()
     con.close()
 
 
 def create_admin(con, code, name, password):
+    staff_id = con.execute("SELECT id FROM employee_categories WHERE code='STAFF'").fetchone()
+    cat_id = staff_id[0] if staff_id else None
     con.execute(
-        "INSERT INTO employees (emp_code, name, department, designation, role, shift_id, office_id, password_hash, must_change_pw) "
-        "VALUES (?,?,?,?, 'hr', (SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, 1)",
-        (code.strip().upper(), name, "Human Resources", "HR", generate_password_hash(password)))
+        "INSERT INTO employees (emp_code, name, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw) "
+        "VALUES (?,?,?,?, 'hr', (SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 1)",
+        (code.strip().upper(), name, "Human Resources", "HR", cat_id, generate_password_hash(password)))
 
 
 def _seed_base(con):
     """Minimum config every install needs. HR edits these in Settings."""
     con.execute("INSERT INTO offices (name, lat, lng, radius_m) VALUES ('Main Office', 0, 0, 150)")  # 0,0 = NOT SET YET
-    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min) VALUES ('Shift 1', '09:00', '18:00', 10)")
-    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min) VALUES ('Shift 2', '13:00', '22:00', 10)")
+    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 1', '08:00', '20:00', 10, 8.0, 4.0, 1.0)")
+    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 2', '20:00', '08:00', 10, 8.0, 4.0, 1.0)")
     for code, name, q in (("CL", "Casual Leave", 12), ("SL", "Sick Leave", 12), ("PL", "Privilege Leave", 15)):
         con.execute("INSERT INTO leave_types (code, name, annual_quota) VALUES (?,?,?)", (code, name, q))
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '350')")
@@ -213,11 +272,16 @@ def _seed_demo(con):
     create_admin(con, "HR001", "HR Admin", "admin123")
     con.execute("UPDATE employees SET joined_on='2024-01-01' WHERE emp_code='HR001'")
     emp_pw = generate_password_hash("emp123")
-    for code, name, dept, desig, shift in (("E001", "Aarav Sharma", "Engineering", "Developer", 1),
-                                           ("E002", "Meera Iyer", "Engineering", "QA Engineer", 1),
-                                           ("E003", "Rohan Das", "Support", "Support Executive", 2),
-                                           ("E004", "Sana Khan", "Support", "Team Lead", 2)):
+    emp_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='EMPLOYEES'").fetchone()[0]
+    contract_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='CONTRACT'").fetchone()[0]
+    staff_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='STAFF'").fetchone()[0]
+    for code, name, dept, desig, shift, cat in (
+        ("E001", "Aarav Sharma", "Engineering", "Developer", 1, staff_cat_id),
+        ("E002", "Meera Iyer", "Engineering", "QA Engineer", 1, emp_cat_id),
+        ("E003", "Rohan Das", "Support", "Support Executive", 2, emp_cat_id),
+        ("E004", "Sana Khan", "Support", "Team Lead", 2, contract_cat_id),
+    ):
         con.execute(
-            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, password_hash, must_change_pw, joined_on) "
-            "VALUES (?,?,?,?,?, 'employee', ?, 1, ?, 0, '2024-01-01')",
-            (code, name, f"{code.lower()}@example.com", dept, desig, shift, emp_pw))
+            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+            "VALUES (?,?,?,?,?, 'employee', ?, 1, ?, ?, 0, '2024-01-01')",
+            (code, name, f"{code.lower()}@example.com", dept, desig, shift, cat, emp_pw))

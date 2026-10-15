@@ -42,12 +42,121 @@
 </section>
 
 <section class="card">
+  <h3>Employee Categories &amp; Working Hours</h3>
+  <p class="muted small">Configure daily working hours, overtime rules, half-day cutoffs, and early full-day attendance rules per employee category.</p>
+  <div class="small muted" style="margin-bottom:6px">Name · Code · Work Hours/Day · OT Hours · Half-day (14:00) · Early Full-Day Cutoff (16:00) · Full Day (20:00)</div>
+  {% for c in categories %}
+  <form method="post" class="row-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="category">
+    <input type="hidden" name="id" value="{{ c['id'] }}">
+    <input name="name" value="{{ c['name'] }}" required title="Category Name">
+    <input name="code" value="{{ c['code'] }}" required size="6" title="Code">
+    <input name="work_hours" type="number" step="0.5" value="{{ c['work_hours'] }}" required title="Regular Working Hours/Day">
+    <input name="overtime_hours" type="number" step="0.5" value="{{ c['overtime_hours'] }}" title="Standard OT Hours">
+    <input type="time" name="half_day_time" value="{{ c['half_day_time'] }}" required title="Half-Day Cutoff (Default 14:00 / 2:00 PM)">
+    <input type="time" name="early_full_day_cutoff" value="{{ c['early_full_day_cutoff'] }}" required title="Clockout After This Counts as Full Day Present (Default 16:00 / 4:00 PM)">
+    <input type="time" name="full_day_time" value="{{ c['full_day_time'] }}" required title="Full-Day End Time (Default 20:00 / 8:00 PM)">
+    <label class="check"><input type="checkbox" name="active" {{ 'checked' if c['active'] }}> Active</label>
+    <button class="btn sm">Save</button>
+  </form>
+  {% endfor %}
+  <form method="post" class="row-form add">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="category">
+    <input name="name" placeholder="New Category (e.g. Trainees)" required>
+    <input name="code" placeholder="CODE" required size="6">
+    <input name="work_hours" type="number" step="0.5" value="10" placeholder="Work Hours" required>
+    <input name="overtime_hours" type="number" step="0.5" value="0" placeholder="OT Hours">
+    <input type="time" name="half_day_time" value="14:00" required>
+    <input type="time" name="early_full_day_cutoff" value="16:00" required>
+    <input type="time" name="full_day_time" value="20:00" required>
+    <label class="check"><input type="checkbox" name="active" checked> Active</label>
+    <button class="btn sm primary">Add Category</button>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Weekly Shift Scheduling</h3>
+  <p class="muted small">Support weekly shift changes and employee work schedules. Assign an employee to a specific shift for a week or date range.</p>
+  <form method="post" class="row-form add" style="align-items:flex-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="weekly_schedule">
+    <div style="flex:2 1 200px">
+      <label class="small muted">Employee
+        <select name="emp_id" required>
+          <option value="">Choose Employee...</option>
+          {% for e in all_employees %}
+          <option value="{{ e['id'] }}">{{ e['emp_code'] }} - {{ e['name'] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div style="flex:1.5 1 160px">
+      <label class="small muted">Assigned Shift
+        <select name="shift_id" required>
+          {% for s in shifts %}
+          <option value="{{ s['id'] }}">{{ s['name'] }} ({{ s['start_time'] }}–{{ s['end_time'] }})</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div style="flex:1 1 130px">
+      <label class="small muted">From Date
+        <input type="date" name="start_date" required value="{{ today }}">
+      </label>
+    </div>
+    <div style="flex:1 1 130px">
+      <label class="small muted">To Date
+        <input type="date" name="end_date" required value="{{ today }}">
+      </label>
+    </div>
+    <div style="flex:1.5 1 150px">
+      <label class="small muted">Schedule Notes
+        <input name="notes" placeholder="e.g. Week 42 Night Shift">
+      </label>
+    </div>
+    <div>
+      <button class="btn sm primary">Assign Weekly Shift</button>
+    </div>
+  </form>
+
+  {% if weekly_schedules %}
+  <div class="tablewrap" style="margin-top:1rem">
+    <table>
+      <thead><tr><th>Employee</th><th>Assigned Shift</th><th>Effective Dates</th><th>Notes</th><th></th></tr></thead>
+      <tbody>
+        {% for w in weekly_schedules %}
+        <tr>
+          <td><b>{{ w['emp_code'] }}</b> · {{ w['emp_name'] }}</td>
+          <td>{{ w['shift_name'] }}</td>
+          <td>{{ w['start_date']|dmy }} &rarr; {{ w['end_date']|dmy }}</td>
+          <td class="muted">{{ w['notes'] or '—' }}</td>
+          <td class="nowrap">
+            <form method="post" class="inline" onsubmit="return confirm('Remove this weekly shift schedule?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="delete_schedule">
+              <input type="hidden" name="id" value="{{ w['id'] }}">
+              <button class="link danger">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted small" style="margin-top:0.75rem">No special weekly shift schedules assigned. Employees will follow their default shift.</p>
+  {% endif %}
+</section>
+
+<section class="card">
   <h3>Shifts &amp; status rules</h3>
-  <p class="muted small">Status at check-out: hours &lt; <b>Half</b> → A · ≥ Half → HD · ≥ <b>Full</b> → P · ≥ Full + <b>OT min</b> → OT. Late = check-in after start + grace.</p>
+  <p class="muted small">Configured shift timings: Shift 1 (8:00 AM to 8:00 PM), Shift 2 (8:00 PM to 8:00 AM). Status at check-out: hours &lt; <b>Half</b> → A · ≥ Half → HD · ≥ <b>Full</b> → P · ≥ Full + <b>OT min</b> → OT. Late = check-in after start + grace.</p>
   {% macro shiftform(s) %}
   <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="shift">{% if s %}<input type="hidden" name="id" value="{{ s['id'] }}">{% endif %}
     <input name="name" value="{{ s['name'] if s }}" placeholder="Shift name" required>
-    <input type="time" name="start_time" value="{{ s['start_time'] if s else '09:00' }}" required><input type="time" name="end_time" value="{{ s['end_time'] if s else '18:00' }}" required>
+    <input type="time" name="start_time" value="{{ s['start_time'] if s else '08:00' }}" required><input type="time" name="end_time" value="{{ s['end_time'] if s else '20:00' }}" required>
     <input name="grace_min" type="number" min="0" value="{{ s['grace_min'] if s else 10 }}" title="Grace (min)">
     <input name="full_hours" type="number" step="0.25" value="{{ s['full_hours'] if s else 8 }}" title="Full-day hours">
     <input name="half_hours" type="number" step="0.25" value="{{ s['half_hours'] if s else 4 }}" title="Half-day hours">

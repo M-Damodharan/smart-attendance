@@ -27,7 +27,7 @@ def create_app():
     app.session_interface = DynamicSessionInterface()
     _setup_logging(app)
 
-    from . import api, auth, db, employee, hr
+    from . import ai_assistant, api, auth, db, employee, hr
     from .services import STATUS_LABELS, today
 
     db.init_db(app)
@@ -35,7 +35,7 @@ def create_app():
     app.before_request(auth.load_user)
     app.before_request(auth.check_csrf)
 
-    for m in (auth, employee, hr, api):
+    for m in (auth, employee, hr, api, ai_assistant):
         app.register_blueprint(m.bp)
 
     @app.context_processor
@@ -43,8 +43,26 @@ def create_app():
         return {"csrf_token": auth.csrf_token, "STATUS_LABELS": STATUS_LABELS, "today": today()}
 
     @app.template_filter("hm")
-    def hm(v):  # "2026-10-14 09:03:11" -> "09:03"
-        return v[11:16] if v else "—"
+    def hm(v):  # "2026-10-14 14:21:00" -> "02:21 PM"
+        if not v:
+            return "—"
+        try:
+            if isinstance(v, str) and len(v) >= 16:
+                dt = datetime.strptime(v[:19], "%Y-%m-%d %H:%M:%S") if len(v) >= 19 else datetime.strptime(v[:16], "%Y-%m-%d %H:%M")
+                return dt.strftime("%I:%M %p")
+            if isinstance(v, str) and ":" in v:
+                parts = v.strip().split(":")
+                h, m = int(parts[0]), int(parts[1])
+                sfx = "PM" if h >= 12 else "AM"
+                h12 = h % 12 or 12
+                return f"{h12:02d}:{m:02d} {sfx}"
+            return v
+        except Exception:
+            return v[11:16] if len(v) >= 16 else v
+
+    @app.template_filter("hm24")
+    def hm24(v):  # "2026-10-14 14:21:00" -> "14:21"
+        return v[11:16] if (v and len(v) >= 16) else (v or "—")
 
     @app.template_filter("dmy")
     def dmy(v):
@@ -56,10 +74,13 @@ def create_app():
 
     @app.template_filter("hrs")
     def hrs(v):
-        if not v:
+        if v is None or v == "":
             return "—"
-        h, m = divmod(int(round(v * 60)), 60)
-        return f"{h}h {m:02d}m"
+        try:
+            from .services import format_duration
+            return format_duration(float(v))
+        except Exception:
+            return "—"
 
     @app.route("/sw.js")
     def service_worker():

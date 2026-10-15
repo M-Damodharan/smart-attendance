@@ -101,7 +101,13 @@
       const res = await postJSON('/api/punch', { kind, token: ch.token, frames, selfie, ...loc });
       if (!res.ok) throw new Error(res.error || 'Something went wrong.');
       result.className = 'result ok'; result.hidden = false;
-      result.innerHTML = `<b>${res.message}</b> at ${res.time}` + (res.hours !== undefined ? `<br>Worked ${res.hours} h · Status <b>${res.status}</b>` : '');
+      const durStr = res.duration || res.duration_text || (res.hours !== undefined ? res.hours + ' h' : '');
+      const otStr = res.overtime_text || (res.ot_hours ? res.ot_hours + ' h' : '');
+      let details = '';
+      if (durStr) details += `<br>Worked: <strong>${durStr}</strong>`;
+      if (otStr && otStr !== '0m' && otStr !== '0 h') details += ` · Overtime: <strong>${otStr}</strong>`;
+      if (res.status) details += ` · Status: <strong>${res.status}</strong>`;
+      result.innerHTML = `<b>${res.message}</b>` + details;
       go.textContent = 'Done'; 
       setTimeout(() => location.href = '/dashboard', 2200);
       return;

@@ -5,12 +5,13 @@
 <div class="ph"><h2>Employee master</h2><a class="btn primary" href="{{ url_for('hr.employee_form') }}">+ Add employee</a></div>
 <section class="card tablewrap">
 <table>
-  <thead><tr><th>Code</th><th>Name</th><th>Department</th><th>Shift</th><th>Office</th><th>Role</th><th>Access</th><th></th></tr></thead>
+  <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Department</th><th>Shift</th><th>Office</th><th>Role</th><th>Access</th><th></th></tr></thead>
   <tbody>
   {% for r in rows %}
   <tr class="{{ '' if r['active'] else 'inactive' }}">
-    <td>{{ r['emp_code'] }}</td><td>{{ r['name'] }}<br><span class="muted small">{{ r['designation'] }}</span></td>
-    <td>{{ r['department'] }}</td><td>{{ r['shift_name'] or '—' }}</td><td>{{ r['office_name'] or '—' }}</td>
+    <td><b>{{ r['emp_code'] }}</b></td><td>{{ r['name'] }}<br><span class="muted small">{{ r['designation'] or '' }}</span></td>
+    <td><span class="chip" style="font-size:0.75rem">{{ r['category_name'] or 'Employees' }}</span></td>
+    <td>{{ r['department'] or '—' }}</td><td>{{ r['shift_name'] or '—' }}</td><td>{{ r['office_name'] or '—' }}</td>
     <td>{{ r['role']|upper }}</td><td>{{ 'Allowed' if r['active'] else 'Blocked' }}</td>
     <td class="nowrap"><a class="btn sm" href="{{ url_for('hr.employee_form', eid=r['id']) }}">Edit</a>
       {% if r['id'] != g.user['id'] %}<form method="post" action="{{ url_for('hr.toggle_access', eid=r['id']) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
