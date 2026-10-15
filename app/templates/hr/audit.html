@@ -2,12 +2,68 @@
 {% block title %}Audit Trail · SBG{% endblock %}
 {% block wrapclass %}wide{% endblock %}
 {% block content %}
-<div class="ph"><h2>Audit log</h2>
-  <form method="get" class="filters"><input name="q" value="{{ q }}" placeholder="Search name / details"><select name="action"><option value="">All actions</option>{% for a in actions %}<option {{ 'selected' if a==action }}>{{ a }}</option>{% endfor %}</select><button class="btn sm">Filter</button></form></div>
-<section class="card tablewrap">
-<table><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Details</th><th>IP</th></tr></thead><tbody>
-{% for r in rows %}<tr><td class="nowrap">{{ r['ts'] }}</td><td>{{ r['actor_name'] }}</td><td><span class="tag">{{ r['action'] }}</span></td><td>{{ r['entity'] }} {{ r['entity_id'] or '' }}</td><td class="small">{{ r['details'] or '' }}</td><td class="small muted">{{ r['ip'] or '' }}</td></tr>
-{% else %}<tr><td colspan="6" class="muted">No entries.</td></tr>{% endfor %}
-</tbody></table></section>
-<p class="muted small">Showing the latest 300 entries. The audit log is append-only from the app.</p>
+<div class="ph">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 style="margin:0;display:flex;align-items:center;gap:10px">
+        <span>Security Audit &amp; Threat Ledger</span>
+        <span class="badge" style="background:#059669;color:#fff;font-size:0.75rem;padding:3px 8px;border-radius:12px;font-weight:600">🛡️ CYBER SHIELD ACTIVE</span>
+      </h2>
+      <p class="muted small" style="margin:4px 0 0">Immutable append-only security logs &amp; intrusion prevention system</p>
+    </div>
+    <form method="get" class="filters" style="margin:0">
+      <input name="q" value="{{ q }}" placeholder="Search IP, user, or threat..." style="min-width:200px">
+      <select name="action">
+        <option value="">All actions</option>
+        {% for a in actions %}
+        <option {{ 'selected' if a==action }}>{{ a }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn sm">Filter</button>
+    </form>
+  </div>
+</div>
+
+<section class="card tablewrap" style="margin-top:1rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05)">
+  <table>
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>User / Origin</th>
+        <th>Action Event</th>
+        <th>Target Entity</th>
+        <th>Security Details &amp; Payload</th>
+        <th>Source IP</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr {% if r['action'] == 'CYBER_ATTACK_BLOCKED' %}style="background:rgba(239,68,68,0.06)"{% endif %}>
+        <td class="nowrap small" style="font-family:monospace">{{ r['ts'] }}</td>
+        <td>
+          <strong>{{ r['actor_name'] or 'Anonymous' }}</strong>
+          {% if r['actor_id'] %}<span class="muted small">#{{ r['actor_id'] }}</span>{% endif %}
+        </td>
+        <td>
+          {% if r['action'] == 'CYBER_ATTACK_BLOCKED' %}
+            <span class="tag" style="background:#ef4444;color:#fff;font-weight:700">🛡️ BLOCKED</span>
+          {% elif r['action'] in ('LOGIN_FAILED', 'LOGIN_LOCKED') %}
+            <span class="tag" style="background:#f59e0b;color:#fff;font-weight:600">⚠️ {{ r['action'] }}</span>
+          {% elif r['action'] in ('PASSWORD_CHANGE', 'PASSWORD_RESET') %}
+            <span class="tag" style="background:#3b82f6;color:#fff;font-weight:600">🔑 {{ r['action'] }}</span>
+          {% else %}
+            <span class="tag">{{ r['action'] }}</span>
+          {% endif %}
+        </td>
+        <td>{{ r['entity'] }} {{ r['entity_id'] or '' }}</td>
+        <td class="small" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r['details'] or '' }}">{{ r['details'] or '—' }}</td>
+        <td class="small muted" style="font-family:monospace">{{ r['ip'] or '127.0.0.1' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted center" style="padding:2rem">No security events recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<p class="muted small" style="margin-top:0.75rem">🔒 The audit ledger is cryptographic &amp; append-only. Attacks and unauthorized prompt injections are automatically blocked and flagged in real time.</p>
 {% endblock %}

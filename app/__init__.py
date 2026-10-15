@@ -28,13 +28,14 @@ def create_app():
     app.session_interface = DynamicSessionInterface()
     _setup_logging(app)
 
-    from . import ai_assistant, api, auth, db, employee, hr
+    from . import ai_assistant, api, auth, db, employee, hr, security_shield
     from .services import STATUS_LABELS, today
 
     db.init_db(app)
     app.teardown_appcontext(db.close_db)
     app.before_request(auth.load_user)
     app.before_request(auth.check_csrf)
+    app.before_request(security_shield.waf_request_interceptor)
 
     for m in (auth, employee, hr, api, ai_assistant):
         app.register_blueprint(m.bp)

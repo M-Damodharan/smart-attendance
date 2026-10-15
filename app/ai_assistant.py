@@ -62,8 +62,24 @@ def _get_company_today_stats():
     }
 
 
-def process_ai_query(user, query: str) -> dict:
+def process_ai_query(user, query: str):
     """Processes natural language query from user and returns a markdown response."""
+    from .security_shield import scan_threats, log_security_event
+
+    # -------------------------------------------------------------------------
+    # Cyber Security Threat & Prompt Injection Shield
+    # -------------------------------------------------------------------------
+    is_threat, threat_type, matched = scan_threats(query)
+    if is_threat:
+        log_security_event(threat_type, f"AI Query: {query[:120]} (matched: {matched})", source="AI_SHIELD", actor_id=user["id"], actor_name=user["name"])
+        return {
+            "reply": f"🛡️ **Cyber Defense Shield Triggered:** Security violation detected (`{threat_type}`).\n\n"
+                     "Unauthorized prompt injection, data exfiltration, or tampering attempts are strictly blocked.\n"
+                     "This incident has been permanently logged in the security audit ledger and reported to HR Administration.",
+            "type": "security_block",
+            "threat_type": threat_type
+        }
+
     q = (query or "").strip().lower()
     role = user["role"]
     uid = user["id"]
@@ -358,5 +374,7 @@ def chat():
     message = data.get("message", "").strip()
     if not message:
         return jsonify(ok=False, error="Please type a message."), 400
+    from .security_shield import redact_sensitive_data
     res = process_ai_query(g.user, message)
-    return jsonify(ok=True, **res)
+    sanitized = redact_sensitive_data(res)
+    return jsonify(ok=True, **sanitized)
