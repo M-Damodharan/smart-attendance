@@ -105,8 +105,12 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
+            private int retryCount = 0;
+            private static final int MAX_AUTO_RETRIES = 3;
+
             @Override
             public void onPageFinished(WebView view, String url) {
+                retryCount = 0;
                 swipeRefresh.setRefreshing(false);
                 progressBar.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
@@ -116,7 +120,13 @@ public class MainActivity extends AppCompatActivity {
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
                     swipeRefresh.setRefreshing(false);
-                    showConnectionErrorDialog();
+                    if (retryCount < MAX_AUTO_RETRIES) {
+                        retryCount++;
+                        Toast.makeText(MainActivity.this, "Connecting to SBG Cloud (waking up server, attempt " + retryCount + " of " + MAX_AUTO_RETRIES + ")...", Toast.LENGTH_SHORT).show();
+                        webView.postDelayed(() -> webView.reload(), 3500);
+                    } else {
+                        showConnectionErrorDialog();
+                    }
                 }
             }
         });

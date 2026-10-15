@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from flask import Flask, g, render_template, session
@@ -118,7 +119,37 @@ def create_app():
     def err(e):
         return render_template("error.html", e=e), e.code
 
+    if not app.config.get("TESTING") and (os.environ.get("APP_ENV") == "production" or os.environ.get("RENDER")):
+        _start_keep_alive(app)
+
     return app
+
+
+def _start_keep_alive(app):
+    """Periodically pings cloud health endpoint to prevent Render free-tier idle spin-down."""
+    import os
+    import threading
+    import time
+    import urllib.request
+
+    ext_url = os.environ.get("RENDER_EXTERNAL_URL") or "https://smart-attendance-u7e6.onrender.com"
+    target = f"{ext_url.rstrip('/')}/healthz"
+
+    def _loop():
+        time.sleep(30)
+        while True:
+            try:
+                req = urllib.request.Request(target, headers={"User-Agent": "SBG-Warmup/1.0"})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    if r.getcode() == 200:
+                        app.logger.info("Render keepalive ping successful: 200 OK")
+            except Exception as e:
+                app.logger.debug("Render keepalive ping notice: %s", e)
+            # Sleep 8 minutes (Render free tier spins down after 15 minutes of inactivity)
+            time.sleep(480)
+
+    t = threading.Thread(target=_loop, daemon=True, name="sbg-render-warmup")
+    t.start()
 
 
 def _setup_logging(app):

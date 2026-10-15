@@ -3,7 +3,7 @@ services:
     name: sbg-attendance
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --no-cache-dir -r requirements.txt
     startCommand: gunicorn -c gunicorn.conf.py wsgi:app
     envVars:
       - key: APP_ENV
@@ -14,3 +14,5 @@ services:
         value: HR001
       - key: ADMIN_PASSWORD
         value: "123456789"
+      - key: WEB_CONCURRENCY
+        value: "2"
