@@ -35,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS_NAME = "sbg_prefs";
     private static final String KEY_SERVER_URL = "server_url";
-    private static final String DEFAULT_SERVER_URL = "https://dimensions-eye-kerry-purchase.trycloudflare.com";
+    private static final String DEFAULT_SERVER_URL = "https://mighty-recovered-defined-steel.trycloudflare.com";
     private static final int PERMISSION_REQUEST_CODE = 1001;
 
     private WebView webView;
@@ -207,13 +207,18 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadServerUrl() {
         String serverUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
+        // Automatically overwrite stale or expired trycloudflare URLs from previous app versions
+        if (serverUrl.contains("trycloudflare.com") && !serverUrl.equals(DEFAULT_SERVER_URL)) {
+            serverUrl = DEFAULT_SERVER_URL;
+            prefs.edit().putString(KEY_SERVER_URL, DEFAULT_SERVER_URL).apply();
+        }
         webView.loadUrl(serverUrl);
     }
 
     private void showServerConfigDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("SBG Server Settings");
-        builder.setMessage("Configure the Smart Attendance server address (e.g. http://192.168.0.179:5000):");
+        builder.setMessage("Configure the Smart Attendance server address (Cloudflare tunnel or Wi-Fi IP):");
 
         final EditText input = new EditText(this);
         input.setText(prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL));
@@ -223,12 +228,18 @@ public class MainActivity extends AppCompatActivity {
             String newUrl = input.getText().toString().trim();
             if (!newUrl.isEmpty()) {
                 if (!newUrl.startsWith("http://") && !newUrl.startsWith("https://")) {
-                    newUrl = "http://" + newUrl;
+                    newUrl = "https://" + newUrl;
                 }
                 prefs.edit().putString(KEY_SERVER_URL, newUrl).apply();
                 webView.loadUrl(newUrl);
                 Toast.makeText(MainActivity.this, "Connecting to " + newUrl, Toast.LENGTH_SHORT).show();
             }
+        });
+
+        builder.setNeutralButton("Reset Default", (dialog, which) -> {
+            prefs.edit().putString(KEY_SERVER_URL, DEFAULT_SERVER_URL).apply();
+            webView.loadUrl(DEFAULT_SERVER_URL);
+            Toast.makeText(MainActivity.this, "Reset to " + DEFAULT_SERVER_URL, Toast.LENGTH_SHORT).show();
         });
 
         builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
@@ -239,9 +250,13 @@ public class MainActivity extends AppCompatActivity {
         String currentUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
         new AlertDialog.Builder(this)
                 .setTitle("Unable to Connect")
-                .setMessage("Could not connect to SBG server at:\n" + currentUrl + "\n\nPlease ensure your device is connected to the same Wi-Fi network and the server is running.")
+                .setMessage("Could not connect to SBG server at:\n" + currentUrl + "\n\nPlease ensure your device is connected to the internet (Mobile Data or Wi-Fi) and the SBG server is active.")
                 .setPositiveButton("Retry", (dialog, which) -> webView.reload())
-                .setNeutralButton("Change Server IP", (dialog, which) -> showServerConfigDialog())
+                .setNeutralButton("Change Server URL", (dialog, which) -> showServerConfigDialog())
+                .setNegativeButton("Reset Default", (dialog, which) -> {
+                    prefs.edit().putString(KEY_SERVER_URL, DEFAULT_SERVER_URL).apply();
+                    webView.loadUrl(DEFAULT_SERVER_URL);
+                })
                 .setCancelable(true)
                 .show();
     }
