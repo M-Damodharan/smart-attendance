@@ -135,8 +135,11 @@ def login():
         # Production-grade password verification: strict salted hash verification
         is_pw_valid = False
         if u and pw:
-            if check_password_hash(u["password_hash"], pw) or check_password_hash(u["password_hash"], pw.strip()):
-                is_pw_valid = True
+            try:
+                if check_password_hash(u["password_hash"], pw) or check_password_hash(u["password_hash"], pw.strip()):
+                    is_pw_valid = True
+            except Exception:
+                is_pw_valid = False
 
         if u and is_pw_valid:
             db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
