@@ -59,8 +59,25 @@ def main():
         if os.path.isdir(Config.SELFIE_DIR):
             shutil.copytree(Config.SELFIE_DIR, os.path.join(dest, "selfies"))
         print("Backup written to", dest)
+    elif cmd == "restore" and len(sys.argv) > 2:
+        src_dir = sys.argv[2]
+        db_src = os.path.join(src_dir, "attendance.db")
+        if not os.path.exists(db_src):
+            sys.exit(f"Backup database not found: {db_src}")
+        os.makedirs(os.path.dirname(Config.DATABASE), exist_ok=True)
+        src = sqlite3.connect(db_src)
+        dst = sqlite3.connect(Config.DATABASE)
+        src.backup(dst)
+        dst.close(); src.close()
+        selfies_src = os.path.join(src_dir, "selfies")
+        if os.path.isdir(selfies_src):
+            os.makedirs(Config.SELFIE_DIR, exist_ok=True)
+            for f in os.listdir(selfies_src):
+                shutil.copy2(os.path.join(selfies_src, f), os.path.join(Config.SELFIE_DIR, f))
+        print("Restored database and selfies successfully from", src_dir)
     else:
         print(__doc__)
+
 
 
 if __name__ == "__main__":
