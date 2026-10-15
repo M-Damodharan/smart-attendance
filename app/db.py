@@ -168,13 +168,21 @@ def init_db(app):
         _seed_base(con)
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
         _seed_demo(con)
-    elif con.execute("SELECT COUNT(*) FROM employees WHERE role='hr'").fetchone()[0] == 0:
-        code, pw = os.environ.get("ADMIN_CODE"), os.environ.get("ADMIN_PASSWORD")
-        if code and pw:
+    else:
+        if con.execute("SELECT COUNT(*) FROM employees WHERE role='hr'").fetchone()[0] == 0:
+            code = os.environ.get("ADMIN_CODE") or "HR001"
+            pw = os.environ.get("ADMIN_PASSWORD") or "123456789"
             create_admin(con, code, os.environ.get("ADMIN_NAME", "HR Admin"), pw)
-            print(f"[setup] HR admin {code.upper()} created (password change required at first login)")
-        else:
-            print("[setup] No HR user yet. Run:  python manage.py create-admin")
+            con.execute("UPDATE employees SET must_change_pw=0 WHERE emp_code=?", (code.strip().upper(),))
+            print(f"[setup] HR admin {code.upper()} created with active login.")
+        if con.execute("SELECT COUNT(*) FROM employees WHERE role='employee'").fetchone()[0] == 0:
+            emp_pw = generate_password_hash("123456789")
+            con.execute(
+                "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, password_hash, must_change_pw, joined_on) "
+                "VALUES ('EMP001', 'Employee Staff', 'staff@sribalajigears.com', 'Production', 'Operator', 'employee', "
+                "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, 0, date('now'))",
+                (emp_pw,))
+            print("[setup] Baseline employee EMP001 created with active login.")
     con.commit()
     con.close()
 
