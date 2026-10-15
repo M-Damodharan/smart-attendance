@@ -128,6 +128,31 @@ def get_employee_shift_for_date(emp_id: int, d, fallback_shift_id: int = None):
     return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id LIMIT 1").fetchone()
 
 
+def determine_shift_from_punch(cin, db=None):
+    """Determines whether a punch belongs to Shift 1 (08:00-20:00) or Shift 2 (20:00-08:00).
+    - Shift 1 (Day Shift): Punch in between 06:00 and 18:00 (e.g. 8:00 AM to 7:30 PM)
+    - Shift 2 (Night Shift): Punch in between 18:00 and 06:00 (e.g. 8:00 PM to 8:00 AM)
+    """
+    db = db or get_db()
+    if isinstance(cin, str):
+        cin = parse_dt(cin)
+
+    h = cin.hour if cin else 8
+
+    if 6 <= h < 18:
+        shift = db.execute(
+            "SELECT * FROM shifts WHERE (name LIKE '%Shift 1%' OR start_time LIKE '08:%') AND active=1 ORDER BY id LIMIT 1"
+        ).fetchone()
+    else:
+        shift = db.execute(
+            "SELECT * FROM shifts WHERE (name LIKE '%Shift 2%' OR start_time LIKE '20:%') AND active=1 ORDER BY id LIMIT 1"
+        ).fetchone()
+
+    if not shift:
+        shift = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id LIMIT 1").fetchone()
+    return shift
+
+
 def get_employee_category(emp_id: int):
     """Retrieve employee category details (work hours, overtime, half-day/full-day cutoffs)."""
     db = get_db()
@@ -338,7 +363,11 @@ def build_register(emp_rows, start: date, end: date):
         for d in daterange(start, end):
             k = (emp["id"], d2s(d))
             rec = att.get(k)
-            shift = get_employee_shift_for_date(emp["id"], d, emp["shift_id"])
+            rec_dict = dict(rec) if rec else {}
+            if rec_dict.get("check_in"):
+                shift = determine_shift_from_punch(rec_dict["check_in"], db)
+            else:
+                shift = get_employee_shift_for_date(emp["id"], d, emp["shift_id"])
             code = day_code(d, rec, leave_map.get(k), ods.get(k), hols.get(d2s(d)), t, joined, shift)
             days[d] = code
             if rec:

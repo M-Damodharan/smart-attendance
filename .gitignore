@@ -12,3 +12,4 @@ android-sbg/app/build/
 android-sbg/local.properties
 app/static/downloads/SBG.apk
 cloudflared.exe
+scratch/

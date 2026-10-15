@@ -46,7 +46,17 @@ def dashboard():
         code = reg[e["id"]]["days"][t]
         rec = reg[e["id"]]["recs"].get(t)
         present = code in ("P", "OT", "HD", "IN", "MP")
-        bs = by_shift.get(e["shift_id"])
+        from .services import determine_shift_from_punch
+        rec_d = dict(rec) if rec else {}
+        if rec_d.get("check_in"):
+            eff_shift = determine_shift_from_punch(rec_d["check_in"], db)
+            eff_shift_id = eff_shift["id"]
+        elif rec_d.get("shift_id"):
+            eff_shift_id = rec_d["shift_id"]
+        else:
+            eff_shift_id = e["shift_id"]
+
+        bs = by_shift.get(eff_shift_id)
         if bs:
             bs["total"] += 1
         if present:
@@ -172,10 +182,25 @@ def attendance():
     total_present = 0
     total_not_in = 0
     total_leave = 0
+    from .services import determine_shift_from_punch
     for s in shifts:
         rows = []
-        for e in [x for x in emps if x["shift_id"] == s["id"]]:
+        for e in emps:
             r = reg[e["id"]]
+            rec = r["recs"].get(d)
+            rec_d = dict(rec) if rec else {}
+            if rec_d.get("check_in"):
+                eff_shift = determine_shift_from_punch(rec_d["check_in"], db)
+                eff_shift_id = eff_shift["id"]
+            elif rec_d.get("shift_id"):
+                eff_shift_id = rec_d["shift_id"]
+            else:
+                eff_shift = get_employee_shift_for_date(e["id"], d, e["shift_id"])
+                eff_shift_id = eff_shift["id"]
+
+            if eff_shift_id != s["id"]:
+                continue
+
             code = r["days"][d]
             is_present = code in ("P", "OT", "HD", "IN", "MP")
             is_not_in = code == "-"
@@ -183,7 +208,7 @@ def attendance():
             rows.append({
                 "emp": e,
                 "code": code,
-                "rec": r["recs"].get(d),
+                "rec": rec,
                 "is_present": is_present,
                 "is_not_in": is_not_in,
                 "is_leave": is_leave,

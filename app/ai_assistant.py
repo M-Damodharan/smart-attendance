@@ -32,12 +32,34 @@ def _get_company_today_stats():
     late = []
     on_leave = []
     on_od = []
+    shift1_present = []
+    shift2_present = []
+
+    from .services import determine_shift_from_punch
 
     for e in emps:
         code = reg[e["id"]]["days"][today()]
         rec = reg[e["id"]]["recs"].get(today())
+        rec_d = dict(rec) if rec else {}
+        eff_shift = None
+        if rec_d.get("check_in"):
+            eff_shift = determine_shift_from_punch(rec_d["check_in"], db)
+        elif rec_d.get("shift_id"):
+            eff_shift = db.execute("SELECT * FROM shifts WHERE id=?", (rec_d["shift_id"],)).fetchone()
+
         if code in ("P", "OT", "HD", "IN", "MP"):
-            present.append((e, rec, code))
+            present.append((e, rec, code, eff_shift))
+            is_s2 = False
+            if eff_shift:
+                s_name = (eff_shift["name"] or "").lower()
+                s_start = eff_shift["start_time"] or ""
+                if "shift 2" in s_name or s_start.startswith("20:"):
+                    is_s2 = True
+            if is_s2:
+                shift2_present.append((e, rec, code, eff_shift))
+            else:
+                shift1_present.append((e, rec, code, eff_shift))
+
             if code == "IN":
                 working.append((e, rec))
         elif code in ("L", "HL"):
@@ -53,6 +75,8 @@ def _get_company_today_stats():
     return {
         "total": len(emps),
         "present": present,
+        "shift1_present": shift1_present,
+        "shift2_present": shift2_present,
         "working": working,
         "absent": absent,
         "late": late,
@@ -92,10 +116,38 @@ def process_ai_query(user, query: str):
     # -------------------------------------------------------------------------
     # 1. Company-wide / HR restricted queries
     # -------------------------------------------------------------------------
-    is_asking_present_count = any(k in q_clean for k in ["how many employees are present", "how many are present", "employees present today", "present count", "total present today"])
+    is_asking_present_count = any(k in q_clean for k in ["how many employees are present", "how many are present", "employees present today", "present count", "total present today", "who is present", "present employees", "present list"])
+    is_asking_shift1 = any(k in q_clean for k in ["shift 1 present", "shift 1 list", "who is in shift 1", "shift 1 employees", "shift 1"])
+    is_asking_shift2 = any(k in q_clean for k in ["shift 2 present", "shift 2 list", "who is in shift 2", "shift 2 employees", "night shift present", "shift 2"])
     is_asking_absent_list = any(k in q_clean for k in ["show todays absent employees", "show absent employees", "who is absent today", "absent employees today", "absent list", "todays absent"])
     is_asking_working_now = any(k in q_clean for k in ["who is working", "currently working", "who punched in", "active employees now"])
     is_asking_late_list = any(k in q_clean for k in ["who is late", "who was late", "late arrivals", "late today"])
+
+    if is_asking_shift1:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Shift breakdown reports are restricted to HR administrators.", "type": "restricted"}
+        stats = _get_company_today_stats()
+        s1_emps = stats["shift1_present"]
+        if not s1_emps:
+            return {"reply": f"☀️ **Shift 1 (08:00 AM – 08:00 PM):** No employees have punched in under Shift 1 today ({t.strftime('%d %b %Y')}).", "type": "hr_shift"}
+        lines = [f"{i+1}. **{e['name']}** (`{e['emp_code']}`) — In at **{rec['check_in'][11:16]}** ({rec['status'] or 'Working'})" for i, (e, rec, code, eff_s) in enumerate(s1_emps)]
+        return {
+            "reply": f"☀️ **Shift 1 (08:00 AM – 08:00 PM) Present List — {len(s1_emps)} Total:**\n\n" + "\n".join(lines),
+            "type": "hr_shift"
+        }
+
+    if is_asking_shift2:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Shift breakdown reports are restricted to HR administrators.", "type": "restricted"}
+        stats = _get_company_today_stats()
+        s2_emps = stats["shift2_present"]
+        if not s2_emps:
+            return {"reply": f"🌙 **Shift 2 (08:00 PM – 08:00 AM):** No employees have punched in under Shift 2 today ({t.strftime('%d %b %Y')}).", "type": "hr_shift"}
+        lines = [f"{i+1}. **{e['name']}** (`{e['emp_code']}`) — In at **{rec['check_in'][11:16]}** ({rec['status'] or 'Working'})" for i, (e, rec, code, eff_s) in enumerate(s2_emps)]
+        return {
+            "reply": f"🌙 **Shift 2 (08:00 PM – 08:00 AM) Present List — {len(s2_emps)} Total:**\n\n" + "\n".join(lines),
+            "type": "hr_shift"
+        }
 
     if is_asking_present_count:
         if role != "hr":
@@ -106,12 +158,16 @@ def process_ai_query(user, query: str):
         stats = _get_company_today_stats()
         tot = stats["total"]
         pres_cnt = len(stats["present"])
+        s1_cnt = len(stats["shift1_present"])
+        s2_cnt = len(stats["shift2_present"])
         work_cnt = len(stats["working"])
         abs_cnt = len(stats["absent"])
         pct = round((pres_cnt / tot * 100), 1) if tot > 0 else 0
         return {
             "reply": f"📊 **Today's Attendance Overview ({t.strftime('%A, %d %b %Y')}):**\n\n"
-                     f"• **Present:** **{pres_cnt}** of **{tot}** employees ({pct}% attendance)\n"
+                     f"• **Total Present:** **{pres_cnt}** of **{tot}** employees ({pct}% attendance)\n"
+                     f"  - ☀️ **Shift 1 (08:00 AM – 08:00 PM):** **{s1_cnt}** Present\n"
+                     f"  - 🌙 **Shift 2 (08:00 PM – 08:00 AM):** **{s2_cnt}** Present\n"
                      f"• **Currently Working:** **{work_cnt}** employees punched in\n"
                      f"• **Absent / Not Checked In:** **{abs_cnt}** employees\n"
                      f"• **On Approved Leave:** **{len(stats['on_leave'])}** employees\n"
@@ -307,7 +363,7 @@ def process_ai_query(user, query: str):
         }
 
     # 2F. Shift & Schedule queries
-    if any(k in q_clean for k in ["what is my shift", "my shift timings", "my schedule", "shift schedule", "shift change", "working schedule"]):
+    if any(k in q_clean for k in ["what is my shift", "my shift timings", "my schedule", "shift schedule", "shift change", "working schedule", "which shift", "my shift"]):
         # Check weekly schedule
         sched = db.execute(
             "SELECT w.*, s.name shift_name, s.start_time, s.end_time FROM weekly_shift_schedules w "
@@ -315,13 +371,20 @@ def process_ai_query(user, query: str):
             (uid, d2s(t), d2s(t))
         ).fetchone()
         schedule_note = f" (Special weekly schedule from {sched['start_date']} to {sched['end_date']})" if sched else ""
+        
+        punch_note = ""
+        if rec and rec.get("check_in"):
+            from .services import determine_shift_from_punch
+            actual_shift = determine_shift_from_punch(rec["check_in"], db)
+            punch_note = f"\n\n🎯 **Today's Punch Shift:** Based on your check-in at **{parse_dt(rec['check_in']).strftime('%I:%M %p')}**, you are recorded under **{actual_shift['name']} ({actual_shift['start_time']}–{actual_shift['end_time']})**."
+
         return {
             "reply": f"🕒 **Your Shift & Category Details:**\n\n"
-                     f"• **Active Shift:** **{shift['name']}**{schedule_note}\n"
-                     f"• **Timings:** **{shift['start_time']} to {shift['end_time']}**\n"
+                     f"• **Assigned Shift:** **{shift['name']}** ({shift['start_time']} to {shift['end_time']}){schedule_note}\n"
                      f"• **Grace Period:** {shift['grace_min']} minutes\n"
                      f"• **Employee Category:** **{category['name']}**\n"
-                     f"• **Standard Working Hours:** {category['work_hours']:.0f} hours/day" + (f" + {category['overtime_hours']:.0f}h OT" if category.get('overtime_hours') else ""),
+                     f"• **Standard Working Hours:** {category['work_hours']:.0f} hours/day" + (f" + {category['overtime_hours']:.0f}h OT" if category.get('overtime_hours') else "")
+                     + punch_note,
             "type": "schedule"
         }
 

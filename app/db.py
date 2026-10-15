@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE TABLE IF NOT EXISTS attendance (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     emp_id INTEGER NOT NULL REFERENCES employees(id),
+    shift_id INTEGER REFERENCES shifts(id),
     date TEXT NOT NULL,
     check_in TEXT,
     check_out TEXT,
@@ -210,6 +211,10 @@ def init_db(app):
     if "category_id" not in emp_cols:
         con.execute("ALTER TABLE employees ADD COLUMN category_id INTEGER REFERENCES employee_categories(id)")
 
+    att_cols = [c[1] for c in con.execute("PRAGMA table_info(attendance)").fetchall()]
+    if "shift_id" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN shift_id INTEGER REFERENCES shifts(id)")
+
     _seed_categories(con)
 
     # Assign default category_id for legacy employee records
@@ -218,8 +223,9 @@ def init_db(app):
     con.execute("UPDATE employees SET category_id=? WHERE role='hr' AND (category_id IS NULL OR category_id=0)", (staff_id,))
     con.execute("UPDATE employees SET category_id=? WHERE (category_id IS NULL OR category_id=0)", (emp_cat_id,))
 
-    # Update Shift 1 to 08:00 to 20:00 if it was still legacy 09:00
-    con.execute("UPDATE shifts SET start_time='08:00', end_time='20:00' WHERE name='Shift 1' AND start_time='09:00'")
+    # Update Shift 1 to 08:00 to 20:00 and Shift 2 to 20:00 to 08:00
+    con.execute("UPDATE shifts SET start_time='08:00', end_time='20:00' WHERE (name LIKE '%Shift 1%' OR id=1) AND (start_time!='08:00' OR end_time!='20:00')")
+    con.execute("UPDATE shifts SET start_time='20:00', end_time='08:00' WHERE (name LIKE '%Shift 2%' OR id=2) AND (start_time!='20:00' OR end_time!='08:00')")
 
     if con.execute("SELECT COUNT(*) FROM shifts").fetchone()[0] == 0:
         _seed_base(con)

@@ -12,7 +12,7 @@ from PIL import Image, ImageChops, ImageStat
 
 from .auth import employee_required, login_required
 from .db import get_db
-from .services import (approved_od_for, audit, finalize_attendance, format_duration,
+from .services import (approved_od_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
                        get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s)
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -192,34 +192,35 @@ def punch():
         return _err(f"You are {geo['distance']} m from {geo['office']} (allowed {geo['radius']} m).")
 
     selfie_name = _save_selfie(selfie, user, kind)
-    shift = get_employee_shift_for_date(user["id"], today_s, user["shift_id"])
+    shift = determine_shift_from_punch(t, db)
     cat = get_employee_category(user["id"])
 
     if kind == "in":
         late = 1 if finalize_attendance({"check_in": t.strftime("%Y-%m-%d %H:%M:%S"), "check_out": None}, shift, cat)["late"] else 0
         db.execute(
-            "INSERT INTO attendance (emp_id, date, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (user["id"], today_s, t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"],
+            "INSERT INTO attendance (emp_id, date, shift_id, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (user["id"], today_s, shift["id"], t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"],
              selfie_name, 1 if geo["inside"] else 0, late))
-        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} dist={geo['distance']}m late={late} od={geo['od']}")
+        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late} od={geo['od']}")
         db.commit()
-        return jsonify(ok=True, message="Checked in" + (" — marked late" if late else ""), time=f"{t:%I:%M %p}", late=bool(late))
+        return jsonify(ok=True, message=f"Checked in for {shift['name']}" + (" — marked late" if late else ""), time=f"{t:%I:%M %p}", shift=shift["name"], late=bool(late))
 
-    shift_target = get_employee_shift_for_date(user["id"], target_rec["date"], user["shift_id"])
+    shift_target = determine_shift_from_punch(target_rec["check_in"], db)
     upd = finalize_attendance({"check_in": target_rec["check_in"], "check_out": t.strftime("%Y-%m-%d %H:%M:%S")}, shift_target, cat)
     dur_str = format_duration(upd["work_hours"])
     db.execute(
-        "UPDATE attendance SET check_out=?, out_lat=?, out_lng=?, out_dist=?, out_selfie=?, out_geo_ok=?, "
+        "UPDATE attendance SET shift_id=?, check_out=?, out_lat=?, out_lng=?, out_dist=?, out_selfie=?, out_geo_ok=?, "
         "work_hours=?, ot_hours=?, status=?, late=? WHERE id=?",
-        (t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"], selfie_name,
+        (shift_target["id"], t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"], selfie_name,
          1 if geo["inside"] else 0, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], target_rec["id"]))
-    audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} hours={upd['work_hours']} status={upd['status']}")
+    audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift_target['name']} hours={upd['work_hours']} status={upd['status']}")
     db.commit()
     return jsonify(
         ok=True,
-        message="Checked out",
+        message=f"Checked out from {shift_target['name']}",
         time=f"{t:%I:%M %p}",
+        shift=shift_target["name"],
         hours=upd["work_hours"],
         duration=dur_str,
         status=upd["status"],
