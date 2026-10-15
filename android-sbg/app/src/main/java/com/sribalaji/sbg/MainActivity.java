@@ -175,6 +175,39 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Enable native file downloads (e.g. attendance documents, reports)
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            try {
+                android.app.DownloadManager.Request request = new android.app.DownloadManager.Request(Uri.parse(url));
+                if (mimetype != null && !mimetype.isEmpty()) {
+                    request.setMimeType(mimetype);
+                }
+                String cookies = CookieManager.getInstance().getCookie(url);
+                if (cookies != null) {
+                    request.addRequestHeader("cookie", cookies);
+                }
+                request.addRequestHeader("User-Agent", userAgent);
+                request.setDescription("Downloading SBG Attendance Document...");
+                String filename = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype);
+                request.setTitle(filename);
+                request.allowScanningByMediaScanner();
+                request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, filename);
+                android.app.DownloadManager dm = (android.app.DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                if (dm != null) {
+                    dm.enqueue(request);
+                    Toast.makeText(MainActivity.this, "Downloading " + filename + " to Downloads folder...", Toast.LENGTH_LONG).show();
+                }
+            } catch (Exception e) {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
+                } catch (Exception ex) {
+                    Toast.makeText(MainActivity.this, "Download failed: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+
         // Long press header/screen area to open server settings if needed
         webView.setOnLongClickListener(v -> {
             showServerConfigDialog();

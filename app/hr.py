@@ -15,7 +15,7 @@ from .services import (coords_from_maps_link, audit, build_register, d2s, datera
 bp = Blueprint("hr", __name__, url_prefix="/hr")
 
 
-def _employees(only_active=True, shift_id=None, dept=None):
+def _employees(only_active=True, shift_id=None, dept=None, category_id=None):
     q = ("SELECT e.*, s.name shift_name, c.name category_name, c.work_hours category_work_hours, c.code category_code FROM employees e "
          "LEFT JOIN shifts s ON s.id=e.shift_id "
          "LEFT JOIN employee_categories c ON c.id=e.category_id "
@@ -29,6 +29,9 @@ def _employees(only_active=True, shift_id=None, dept=None):
     if dept:
         q += " AND e.department=?"
         args.append(dept)
+    if category_id:
+        q += " AND e.category_id=?"
+        args.append(category_id)
     return get_db().execute(q + " ORDER BY e.emp_code", args).fetchall()
 
 
@@ -356,19 +359,22 @@ def _report_ctx():
         start, end = month_range(t.year, t.month)
     shift_id = request.args.get("shift", type=int)
     dept = request.args.get("dept") or None
-    emps = _employees(shift_id=shift_id, dept=dept)
+    category_id = request.args.get("category", type=int)
+    emps = _employees(shift_id=shift_id, dept=dept, category_id=category_id)
     reg = build_register(emps, start, end)
-    return start, end, emps, reg, shift_id, dept
+    return start, end, emps, reg, shift_id, dept, category_id
 
 
 @bp.route("/reports")
 @hr_required
 def reports():
-    start, end, emps, reg, shift_id, dept = _report_ctx()
+    start, end, emps, reg, shift_id, dept, category_id = _report_ctx()
     db = get_db()
-    shifts = db.execute("SELECT * FROM shifts WHERE active=1").fetchall()
+    shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+    categories = db.execute("SELECT * FROM employee_categories WHERE active=1 ORDER BY id").fetchall()
     depts = [r[0] for r in db.execute("SELECT DISTINCT department FROM employees WHERE department<>'' ORDER BY 1")]
     return render_template("hr/reports.html", start=start, end=end, emps=emps, reg=reg, shifts=shifts, depts=depts,
+                           categories=categories, category_id=category_id,
                            shift_id=shift_id, dept=dept, days=list(daterange(start, end)),
                            prev=(start - timedelta(days=1)).strftime("%Y-%m"), nxt=(end + timedelta(days=1)).strftime("%Y-%m"))
 
@@ -377,11 +383,40 @@ def reports():
 @hr_required
 def export():
     from .exports import build_workbook
-    start, end, emps, reg, shift_id, dept = _report_ctx()
-    buf = build_workbook(start, end, emps, reg, get_db())
-    audit("REPORT_EXPORT", "report", start.strftime("%Y-%m"), f"shift={shift_id} dept={dept}")
-    get_db().commit()
-    return send_file(buf, as_attachment=True, download_name=f"attendance_{start:%Y_%m}.xlsx",
+    start, end, emps, reg, shift_id, dept, category_id = _report_ctx()
+    db = get_db()
+    cat_row = db.execute("SELECT * FROM employee_categories WHERE id=?", (category_id,)).fetchone() if category_id else None
+    cat_code = cat_row["code"] if cat_row else None
+    buf = build_workbook(start, end, emps, reg, db, category_info=cat_row)
+    audit("REPORT_EXPORT", "report", start.strftime("%Y-%m"), f"shift={shift_id} dept={dept} category={cat_code}")
+    db.commit()
+    dl_name = f"{cat_code}_attendance_{start:%Y_%m}.xlsx" if cat_code else f"attendance_{start:%Y_%m}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=dl_name,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@bp.route("/reports/employee/<int:eid>/export")
+@hr_required
+def export_employee(eid):
+    from .exports import build_employee_attendance_doc
+    db = get_db()
+    emp = db.execute(
+        "SELECT e.*, s.name shift_name, s.start_time shift_start, s.end_time shift_end, "
+        "c.name category_name, c.code category_code, c.work_hours category_work_hours "
+        "FROM employees e LEFT JOIN shifts s ON s.id=e.shift_id "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?", (eid,)
+    ).fetchone() or abort(404)
+    t = today()
+    try:
+        y, m = map(int, request.args.get("month", t.strftime("%Y-%m")).split("-"))
+        start, end = month_range(y, m)
+    except Exception:
+        start, end = month_range(t.year, t.month)
+    buf = build_employee_attendance_doc(emp, start, end, db)
+    audit("EMPLOYEE_DOC_EXPORT", "report", f"{emp['emp_code']}@{start:%Y-%m}", f"downloaded by HR {g.user['emp_code']}")
+    db.commit()
+    dl_name = f"{emp['emp_code']}_attendance_{start:%Y_%m}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=dl_name,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 

@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for, send_file
 
 from .auth import employee_required
 from .db import get_db
@@ -90,7 +90,34 @@ def history():
     reg = build_register([u], start, end)[u["id"]]
     prev = (start - timedelta(days=1)).strftime("%Y-%m")
     nxt = (end + timedelta(days=1)).strftime("%Y-%m")
-    return render_template("emp/history.html", reg=reg, start=start, prev=prev, nxt=nxt, today=t)
+    category = get_employee_category(u["id"])
+    return render_template("emp/history.html", reg=reg, start=start, prev=prev, nxt=nxt, today=t, category=category)
+
+
+@bp.route("/history/export")
+@employee_required
+def export_history():
+    from .exports import build_employee_attendance_doc
+    u, t = g.user, today()
+    try:
+        y, m = map(int, request.args.get("month", t.strftime("%Y-%m")).split("-"))
+        start, end = month_range(y, m)
+    except Exception:
+        y, m = t.year, t.month
+        start, end = month_range(y, m)
+    db = get_db()
+    emp = db.execute(
+        "SELECT e.*, s.name shift_name, s.start_time shift_start, s.end_time shift_end, "
+        "c.name category_name, c.code category_code, c.work_hours category_work_hours "
+        "FROM employees e LEFT JOIN shifts s ON s.id=e.shift_id "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?", (u["id"],)
+    ).fetchone() or u
+    buf = build_employee_attendance_doc(emp, start, end, db)
+    audit("EMPLOYEE_SELF_DOC_EXPORT", "report", f"{u['emp_code']}@{start:%Y-%m}", "via employee history")
+    db.commit()
+    dl_name = f"{u['emp_code']}_attendance_{start:%Y_%m}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=dl_name,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @bp.route("/leave", methods=["GET", "POST"])

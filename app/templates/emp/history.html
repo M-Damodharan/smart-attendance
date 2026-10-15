@@ -1,23 +1,87 @@
 {% extends "base.html" %}
 {% from "_macros.html" import chip with context %}
-{% block title %}History · SBG{% endblock %}
+{% block title %}Attendance History · SBG{% endblock %}
 {% block content %}
-<section class="card">
-  <div class="monthnav"><a class="btn sm" href="?month={{ prev }}">‹</a><h3>{{ start.strftime('%B %Y') }}</h3><a class="btn sm" href="?month={{ nxt }}">›</a></div>
-  {% set s = reg['summary'] %}
-  <div class="stats">
-    <div><b>{{ s['P'] + s['OT'] }}</b><span>Present</span></div><div><b>{{ s['HD'] }}</b><span>Half</span></div>
-    <div><b>{{ s['A'] }}</b><span>Absent</span></div><div><b>{{ s['L'] + s['HL'] }}</b><span>Leave</span></div>
-    <div><b>{{ s['OD'] }}</b><span>OD</span></div><div><b>{{ s['payable'] }}</b><span>Payable</span></div>
+<section class="card" style="margin-bottom:1.25rem">
+  <div class="monthnav" style="margin-bottom:1rem">
+    <a class="btn sm" href="?month={{ prev }}">‹</a>
+    <h3>{{ start.strftime('%B %Y') }}</h3>
+    <a class="btn sm" href="?month={{ nxt }}">›</a>
   </div>
+
+  <!-- Category & Download Action Bar -->
+  <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;padding:0.75rem 1rem;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div>
+      <span class="badge" style="background:var(--bg-card);border:1px solid var(--border-default);padding:4px 10px;font-size:0.8rem;font-weight:700;color:var(--brand-accent)">
+        🏷️ {{ category['name'] if category else 'Employee' }} ({{ category['work_hours']|int if category else 12 }}h/day)
+      </span>
+      {% if category and category.get('code') == 'CONTRACT' %}
+      <span class="muted small" style="margin-left:6px;display:inline-block">10 hrs regular + 2 hrs OT</span>
+      {% endif %}
+    </div>
+    <a class="btn primary sm" href="{{ url_for('emp.export_history', month=start.strftime('%Y-%m')) }}" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:6px 14px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Download Monthly Attendance Doc</span>
+    </a>
+  </div>
+
+  {% set s = reg['summary'] %}
+  {% set days_come = s['P'] + s['OT'] + s['HD'] + s['MP'] + s['IN'] %}
+  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(90px,1fr));margin-bottom:1.25rem">
+    <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:0.6rem 0.4rem;text-align:center">
+      <b style="font-size:1.3rem;color:var(--brand-accent)">{{ days_come }}</b>
+      <span style="font-size:0.75rem;display:block;color:var(--text-muted)">Days Come</span>
+    </div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:0.6rem 0.4rem;text-align:center">
+      <b style="font-size:1.3rem;color:#10b981">{{ s['P'] + s['OT'] }}</b>
+      <span style="font-size:0.75rem;display:block;color:var(--text-muted)">Full Days</span>
+    </div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:0.6rem 0.4rem;text-align:center">
+      <b style="font-size:1.3rem;color:#f59e0b">{{ s['HD'] }}</b>
+      <span style="font-size:0.75rem;display:block;color:var(--text-muted)">Half Days</span>
+    </div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:0.6rem 0.4rem;text-align:center">
+      <b style="font-size:1.3rem;color:#ef4444">{{ s['A'] }}</b>
+      <span style="font-size:0.75rem;display:block;color:var(--text-muted)">Absent</span>
+    </div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:0.6rem 0.4rem;text-align:center">
+      <b style="font-size:1.3rem;color:#6366f1">{{ s['ot_hours'] }}h</b>
+      <span style="font-size:0.75rem;display:block;color:var(--text-muted)">Total OT</span>
+    </div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:0.6rem 0.4rem;text-align:center">
+      <b style="font-size:1.3rem;color:var(--brand-accent)">{{ s['payable'] }}</b>
+      <span style="font-size:0.75rem;display:block;color:var(--text-muted)">Payable Days</span>
+    </div>
+  </div>
+
   <ul class="rows">
     {% for d, code in reg['days'].items() %}{% set r = reg['recs'].get(d) %}
     <li class="{{ 'off' if code in ('WO','H') }}">
-      <span class="d">{{ d.strftime('%a %d') }}</span><span>{{ chip(code) }}</span>
-      <span class="muted">{% if r and r['check_in'] %}{{ r['check_in']|hm }} – {{ r['check_out']|hm }}{% else %}{{ STATUS_LABELS.get(code,'') }}{% endif %}</span>
-      <span class="r">{% if r and r['work_hours'] %}{{ r['work_hours']|hrs }}{% endif %}{% if r and r['late'] %} <span class="late">late</span>{% endif %}{% if r and r['source']=='correction' %} <span class="tag">HR</span>{% endif %}</span>
-    </li>{% endfor %}
+      <span class="d">{{ d.strftime('%a %d') }}</span>
+      <span>{{ chip(code) }}</span>
+      <span class="muted">
+        {% if r and r['check_in'] %}
+          {{ r['check_in']|hm }} – {{ r['check_out']|hm if r['check_out'] else 'In Progress' }}
+        {% else %}
+          {{ STATUS_LABELS.get(code,'') }}
+        {% endif %}
+      </span>
+      <span class="r">
+        {% if r and r['work_hours'] %}
+          {% if r['ot_hours'] and r['ot_hours'] > 0 %}
+            <b>{{ (r['work_hours'] - r['ot_hours'])|round(1) }}h + {{ r['ot_hours'] }}h OT</b>
+          {% else %}
+            {{ r['work_hours']|hrs }}
+          {% endif %}
+        {% endif %}
+        {% if r and r['late'] %}<span class="late">late</span>{% endif %}
+        {% if r and r['source']=='correction' %}<span class="tag">HR</span>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
   </ul>
-  <p class="legend small muted">P present · HD half day · A absent · OT overtime · L leave · OD on duty · H holiday · WO weekly off · MP missed punch</p>
+  <p class="legend small muted" style="margin-top:1rem">
+    <b>P</b> present &bull; <b>HD</b> half day &bull; <b>A</b> absent &bull; <b>OT</b> overtime &bull; <b>L</b> leave &bull; <b>OD</b> on duty &bull; <b>H</b> holiday &bull; <b>WO</b> weekly off &bull; <b>MP</b> missed punch
+  </p>
 </section>
 {% endblock %}
