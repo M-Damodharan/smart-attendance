@@ -14,10 +14,6 @@ pip install -r requirements.txt
 python run.py                                         # http://localhost:5000
 ```
 
-| Role     | Code  | Password   |
-|----------|-------|------------|
-| HR       | HR001 | admin123 (forced change on first login) |
-| Employee | E001–E004 | emp123 |
 
 ### Test on a phone
 Browsers only allow camera + GPS on **HTTPS** (or localhost). On the same Wi-Fi run:
