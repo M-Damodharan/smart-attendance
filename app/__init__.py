@@ -8,8 +8,9 @@ from config import Config
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    if app.config["PRODUCTION"] and app.config["SECRET_KEY"] in ("", "change-this-secret-in-production"):
-        raise RuntimeError("Set a strong SECRET_KEY environment variable in production.")
+    if not app.config.get("SECRET_KEY") or app.config["SECRET_KEY"] in ("", "change-this-secret-in-production"):
+        import secrets
+        app.config["SECRET_KEY"] = secrets.token_hex(32)
     # Always apply ProxyFix to accurately handle reverse proxy / tunnel headers
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)

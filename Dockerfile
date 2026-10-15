@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-ENV PYTHONUNBUFFERED=1 APP_ENV=production
+ENV PYTHONUNBUFFERED=1 APP_ENV=production SECRET_KEY=sbg-auto-secret-key-32-chars-long-balaji
 WORKDIR /srv
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

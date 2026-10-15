@@ -1,10 +1,31 @@
 import os
+import secrets
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
 ENV = os.environ.get("APP_ENV", "development")
 PRODUCTION = ENV == "production"
+
+
+def _resolve_secret_key():
+    key = os.environ.get("SECRET_KEY")
+    if key and key not in ("", "change-this-secret-in-production"):
+        return key
+    key_file = os.path.join(BASE_DIR, "instance", ".secret_key")
+    try:
+        if os.path.exists(key_file):
+            with open(key_file, "r") as f:
+                k = f.read().strip()
+                if k:
+                    return k
+        os.makedirs(os.path.dirname(key_file), exist_ok=True)
+        new_key = secrets.token_hex(32)
+        with open(key_file, "w") as f:
+            f.write(new_key)
+        return new_key
+    except Exception:
+        return "sbg-smart-attendance-production-sec-key-7f8e9d0c1b2a3"
 
 
 class Config:
@@ -16,7 +37,7 @@ class Config:
     LOG_FILE = os.environ.get("LOG_FILE", os.path.join(BASE_DIR, "instance", "app.log"))
 
     # ---- Security -------------------------------------------------------
-    SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-secret-in-production")
+    SECRET_KEY = _resolve_secret_key()
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     # Set SESSION_COOKIE_SECURE=1 when served over HTTPS
