@@ -4,8 +4,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 con = sqlite3.connect("instance/attendance.db")
 con.row_factory = sqlite3.Row
 
-# 1. Update HR Admin with password 123456789
-hr_pw = generate_password_hash("123456789")
+# 1. Update HR Admin with password damo12345
+hr_pw = generate_password_hash("damo12345")
 con.execute("UPDATE employees SET password_hash=?, must_change_pw=0, active=1 WHERE emp_code='HR001'", (hr_pw,))
 
 # 2. Update employee EMP001 with password 123456789

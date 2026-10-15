@@ -3,34 +3,132 @@
 {% block wrapclass %}wide{% endblock %}
 {% block content %}
 {% if office_unset %}<div class="flash warn">Office location is not set yet — nobody can check in. <a href="{{ url_for('hr.settings') }}">Set it in Settings</a>.</div>{% endif %}
-<h2 class="ph">Today · {{ today.strftime('%A, %d %B %Y') }}</h2>
-<section class="kpis">
-  <div class="kpi ok"><b>{{ stats['present'] }}</b><span>Present</span></div>
-  <div class="kpi bad"><b>{{ stats['absent'] }}</b><span>Absent / not in</span></div>
-  <div class="kpi warn"><b>{{ stats['late'] }}</b><span>Late</span></div>
-  <div class="kpi"><b>{{ stats['leave'] }}</b><span>On leave</span></div>
-  <div class="kpi"><b>{{ stats['od'] }}</b><span>On duty</span></div>
-  <div class="kpi"><b>{{ stats['working'] }}</b><span>Working now</span></div>
+
+<!-- Executive Header -->
+<div class="ph" style="align-items:flex-start;margin-bottom:1.25rem;">
+  <div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <h2 style="margin:0;">Executive HR Dashboard</h2>
+      <span class="badge b-approved" style="font-size:0.75rem;">● Live Sync (IST)</span>
+    </div>
+    <div class="muted small" style="margin-top:4px;">
+      Today: <strong>{{ today.strftime('%A, %d %B %Y') }}</strong> · Sri Balaji Gears Attendance Intelligence
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button type="button" class="btn sm" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:var(--hero-gradient);color:#fff;">
+      <span>🤖 Ask AI Assistant</span>
+    </button>
+    <a class="btn sm primary" href="{{ url_for('hr.corrections') }}">+ Manual Punch</a>
+    <a class="btn sm" href="{{ url_for('hr.attendance') }}">Daily Register</a>
+  </div>
+</div>
+
+<!-- Active Employee Category Policies Overview -->
+<div class="card" style="padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--bg-surface);border:1px solid var(--border-default);">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+    <span style="font-weight:700;font-size:0.82rem;color:var(--brand-accent);text-transform:uppercase;letter-spacing:0.5px;">Active Category Working Rules &amp; Overtime Policies</span>
+    <a href="{{ url_for('hr.settings') }}" class="muted small" style="color:var(--brand-accent);">Manage in Settings →</a>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px;">
+    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <span style="font-weight:700;font-size:0.9rem;">Staff Category</span>
+        <span class="muted small" style="display:block">10 Regular Working Hours/day</span>
+      </div>
+      <span class="badge" style="background:var(--bg-surface-hover);color:var(--brand-accent);font-weight:600;">Hours &gt; 10 = OT</span>
+    </div>
+    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <span style="font-weight:700;font-size:0.9rem;">Employees Category</span>
+        <span class="muted small" style="display:block">12 Regular Working Hours/day</span>
+      </div>
+      <span class="badge" style="background:var(--bg-surface-hover);color:var(--brand-accent);font-weight:600;">Hours &gt; 12 = OT</span>
+    </div>
+    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <span style="font-weight:700;font-size:0.9rem;">Contract Employees</span>
+        <span class="muted small" style="display:block">10 Regular Hours + 2 Hours OT</span>
+      </div>
+      <span class="badge" style="background:var(--status-ot-bg);color:var(--status-ot);font-weight:600;">Configured 2h OT</span>
+    </div>
+  </div>
+</div>
+
+<!-- Modern KPI Cards Grid -->
+<section class="kpis" style="margin-bottom:1.25rem;">
+  <div class="kpi ok" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.attendance') }}?filter=present'">
+    <b>{{ stats['present'] }}</b>
+    <span>Present / Checked In</span>
+  </div>
+  <div class="kpi bad" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.attendance') }}?filter=notin'">
+    <b>{{ stats['absent'] }}</b>
+    <span>Absent / Not Checked In</span>
+  </div>
+  <div class="kpi warn" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.attendance') }}'">
+    <b>{{ stats['late'] }}</b>
+    <span>Late Arrivals</span>
+  </div>
+  <div class="kpi" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.approvals') }}'">
+    <b>{{ stats['leave'] }}</b>
+    <span>On Leave</span>
+  </div>
+  <div class="kpi" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.approvals') }}?tab=od'">
+    <b>{{ stats['od'] }}</b>
+    <span>On Duty (OD)</span>
+  </div>
+  <div class="kpi" style="background:var(--hero-gradient);color:#fff;border:none;">
+    <b style="color:#fff;">{{ stats['working'] }}</b>
+    <span style="color:rgba(255,255,255,0.85);">Currently Working</span>
+  </div>
 </section>
+
 <div class="grid2">
   <section class="card">
-    <h3>By shift</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;">Shift Attendance Breakdown</h3>
+      <a class="btn sm" href="{{ url_for('hr.attendance') }}">Daily Register →</a>
+    </div>
     {% for b in by_shift %}
-    <div class="shiftrow">
-      <div><b>{{ b['shift']['name'] }}</b> <span class="muted small">{{ b['shift']['start_time'] }}–{{ b['shift']['end_time'] }}</span></div>
-      <div class="bar"><i style="width: {{ (100 * b['present'] / b['total']) if b['total'] else 0 }}%"></i></div>
-      <div class="small muted">{{ b['present'] }} present · {{ b['absent'] }} not in yet · {{ b['total'] }} total</div>
+    <div class="shiftrow" style="margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;">
+        <b>{{ b['shift']['name'] }} <span class="muted small">({{ b['shift']['start_time'] }}–{{ b['shift']['end_time'] }})</span></b>
+        <span class="small" style="font-weight:700;color:var(--brand-accent);">{{ b['present'] }}/{{ b['total'] }} Present</span>
+      </div>
+      <div class="bar" style="height:8px;border-radius:4px;margin:6px 0;"><i style="width: {{ (100 * b['present'] / b['total']) if b['total'] else 0 }}%"></i></div>
+      <div class="small muted">{{ b['present'] }} present · {{ b['absent'] }} not checked in · {{ b['total'] }} scheduled staff</div>
     </div>
     {% endfor %}
-    <a class="btn sm" href="{{ url_for('hr.attendance') }}">Open daily register</a>
   </section>
+
   <section class="card">
-    <h3>Pending approvals</h3>
-    <p><a href="{{ url_for('hr.approvals') }}"><b>{{ pending_leave }}</b> leave</a> · <a href="{{ url_for('hr.approvals') }}"><b>{{ pending_od }}</b> OD</a> requests waiting</p>
-    <h3>Latest punches</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;">Live Punch Activity</h3>
+      {% if pending_leave or pending_od %}
+      <a href="{{ url_for('hr.approvals') }}" class="pill bad" style="font-size:0.75rem;">
+        {{ pending_leave + pending_od }} Pending Approvals
+      </a>
+      {% endif %}
+    </div>
     <ul class="rows">
-      {% for r in recent %}<li><span>{{ r['name'] }} <span class="muted small">{{ r['emp_code'] }}</span></span><span class="muted">in {{ r['check_in']|hm }}{% if r['check_out'] %} · out {{ r['check_out']|hm }}{% endif %}</span><span class="r">{% if r['late'] %}<span class="late">late</span>{% endif %}</span></li>
-      {% else %}<li class="muted">No punches yet today.</li>{% endfor %}
+      {% for r in recent %}
+      <li>
+        <span>
+          <b>{{ r['name'] }}</b>
+          <span class="muted small" style="display:block;">{{ r['emp_code'] }}</span>
+        </span>
+        <span class="muted">
+          In: <strong>{{ r['check_in']|hm }}</strong>
+          {% if r['check_out'] %} · Out: <strong>{{ r['check_out']|hm }}</strong> · {{ r['work_hours']|hrs }}{% else %} · <span style="color:var(--brand-accent);">Working</span>{% endif %}
+        </span>
+        <span class="r">
+          {% if r['late'] %}<span class="late">Late</span>{% endif %}
+          {% if r['check_out'] and r['status'] == 'OT' %}<span class="badge" style="background:var(--status-ot-bg);color:var(--status-ot);">OT</span>{% endif %}
+        </span>
+      </li>
+      {% else %}
+      <li class="muted" style="text-align:center;padding:1.5rem 0;">No attendance punches recorded yet today.</li>
+      {% endfor %}
     </ul>
   </section>
 </div>

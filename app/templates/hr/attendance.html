@@ -56,6 +56,18 @@
 </div>
 {% endif %}
 
+<!-- Category Policy Reference Bar -->
+<div class="card" style="padding:0.75rem 1.25rem;margin-bottom:1rem;background:var(--bg-surface);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="font-weight:700;font-size:0.82rem;color:var(--brand-accent);text-transform:uppercase;letter-spacing:0.5px;">Active Category Working Rules:</span>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <span class="badge" style="background:var(--bg-card);border:1px solid var(--border-default);padding:4px 10px;font-size:0.78rem;">🏷️ <strong>Staff:</strong> 10h/day (Hours &gt; 10 = OT)</span>
+    <span class="badge" style="background:var(--bg-card);border:1px solid var(--border-default);padding:4px 10px;font-size:0.78rem;">🏷️ <strong>Employees:</strong> 12h/day (Hours &gt; 12 = OT)</span>
+    <span class="badge" style="background:var(--bg-card);border:1px solid var(--border-default);padding:4px 10px;font-size:0.78rem;">🏷️ <strong>Contract:</strong> 10h regular + 2h OT</span>
+  </div>
+</div>
+
 {% for g_ in groups %}
 <section class="card tablewrap shift-section" id="shift-sec-{{ loop.index }}">
   <h3>
@@ -83,7 +95,10 @@
       <tr class="att-row" data-status="{{ 'present' if r['is_present'] else ('notin' if r['is_not_in'] else 'other') }}">
         <td>
           <b>{{ r['emp']['name'] }}</b>
-          <span class="muted small" style="display:block">{{ r['emp']['emp_code'] }}{% if r['emp']['department'] %} · {{ r['emp']['department'] }}{% endif %}</span>
+          <span class="muted small" style="display:block">
+            {{ r['emp']['emp_code'] }}{% if r['emp']['department'] %} · {{ r['emp']['department'] }}{% endif %}
+            {% if r['emp']['category_name'] %} · <span class="badge" style="font-size:0.7rem;padding:1px 7px;background:var(--bg-surface-hover);color:var(--brand-accent);border:1px solid var(--border-default);border-radius:9999px;">🏷️ {{ r['emp']['category_name'] }} ({{ r['emp']['category_work_hours']|int }}h)</span>{% endif %}
+          </span>
         </td>
         <td>
           {% if r['code'] == 'IN' %}
@@ -114,7 +129,12 @@
         </td>
         <td><b>{{ rec['check_in']|hm if rec else '—' }}</b></td>
         <td><b>{{ rec['check_out']|hm if rec else '—' }}</b></td>
-        <td>{{ rec['work_hours']|hrs if rec else '—' }}</td>
+        <td>
+          <b>{{ rec['work_hours']|hrs if rec else '—' }}</b>
+          {% if rec and rec['ot_hours'] and rec['ot_hours'] > 0 %}
+            <span class="badge" style="display:block;margin-top:3px;font-size:0.7rem;background:var(--status-ot-bg);color:var(--status-ot);border:1px solid var(--status-ot-border)">+{{ rec['ot_hours']|hrs }} OT</span>
+          {% endif %}
+        </td>
         <td class="small">
           {% if rec and rec['in_dist'] is not none %}
             <b>{{ rec['in_dist']|int }} m</b>

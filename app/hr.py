@@ -16,7 +16,7 @@ bp = Blueprint("hr", __name__, url_prefix="/hr")
 
 
 def _employees(only_active=True, shift_id=None, dept=None):
-    q = ("SELECT e.*, s.name shift_name, c.name category_name FROM employees e "
+    q = ("SELECT e.*, s.name shift_name, c.name category_name, c.work_hours category_work_hours, c.code category_code FROM employees e "
          "LEFT JOIN shifts s ON s.id=e.shift_id "
          "LEFT JOIN employee_categories c ON c.id=e.category_id "
          "WHERE e.role='employee'")

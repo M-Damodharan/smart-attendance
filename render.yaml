@@ -13,6 +13,6 @@ services:
       - key: ADMIN_CODE
         value: HR001
       - key: ADMIN_PASSWORD
-        value: "123456789"
+        value: "damo12345"
       - key: WEB_CONCURRENCY
         value: "2"

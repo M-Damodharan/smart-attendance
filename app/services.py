@@ -188,7 +188,7 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
     if is_day_shift:
         # Rule: Clock out after 4:00 PM counts as Full Day Present (requiring at least reasonable work period, e.g. >= min_half_hours)
         if (is_after_4pm and hours >= min_half_hours) or hours >= cat_work_hours:
-            if ot_hours >= 1.0:
+            if ot_hours > 0:
                 return "OT", ot_hours
             return "P", ot_hours
         elif is_after_2pm and hours >= (min_half_hours * 0.75):
@@ -200,7 +200,7 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
     else:
         # Night shifts or non-daytime shifts
         if hours >= cat_work_hours:
-            if ot_hours >= 1.0:
+            if ot_hours > 0:
                 return "OT", ot_hours
             return "P", ot_hours
         elif hours >= min_half_hours:

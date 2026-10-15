@@ -226,12 +226,15 @@ def init_db(app):
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
         _seed_demo(con)
     else:
+        code = (os.environ.get("ADMIN_CODE") or "HR001").strip().upper()
+        pw = os.environ.get("ADMIN_PASSWORD") or "damo12345"
         if con.execute("SELECT COUNT(*) FROM employees WHERE role='hr'").fetchone()[0] == 0:
-            code = os.environ.get("ADMIN_CODE") or "HR001"
-            pw = os.environ.get("ADMIN_PASSWORD") or "123456789"
             create_admin(con, code, os.environ.get("ADMIN_NAME", "HR Admin"), pw)
-            con.execute("UPDATE employees SET must_change_pw=0 WHERE emp_code=?", (code.strip().upper(),))
-            print(f"[setup] HR admin {code.upper()} created with active login.")
+            con.execute("UPDATE employees SET must_change_pw=0 WHERE emp_code=?", (code,))
+            print(f"[setup] HR admin {code} created with active login.")
+        else:
+            con.execute("UPDATE employees SET password_hash=?, must_change_pw=0, active=1 WHERE role='hr' AND emp_code=?",
+                        (generate_password_hash(pw), code))
         if con.execute("SELECT COUNT(*) FROM employees WHERE role='employee'").fetchone()[0] == 0:
             emp_pw = generate_password_hash("123456789")
             con.execute(
