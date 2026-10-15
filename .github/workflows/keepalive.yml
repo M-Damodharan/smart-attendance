@@ -1,0 +1,23 @@
+name: 24/7 Render Cloud Keep-Alive
+
+on:
+  schedule:
+    # Runs automatically on GitHub Cloud servers every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Cloud Server
+        run: |
+          echo "Pinging SBG Smart Attendance on Render Cloud..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://smart-attendance-u7e6.onrender.com/healthz)
+          echo "Render HTTP Status: $STATUS"
+          if [ "$STATUS" -eq 200 ]; then
+            echo "Success: Render cloud server is awake and active 24/7!"
+          else
+            echo "Server waking up, retrying..."
+            curl -s -f --retry 3 --max-time 45 https://smart-attendance-u7e6.onrender.com/healthz
+          fi
