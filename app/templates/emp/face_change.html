@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Face ID &amp; Security · SBG{% endblock %}
+{% block content %}
+<div style="max-width:750px;margin:1rem auto;padding:0 1rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:40px;height:40px;border-radius:10px;background:rgba(37,99,235,0.12);display:flex;align-items:center;justify-content:center;color:#2563eb;font-size:1.3rem">
+        👤
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.3rem;font-weight:700">Face ID &amp; Biometric Security</h2>
+        <span class="muted small">One Face, One Account &bull; Identity Protection</span>
+      </div>
+    </div>
+    <a href="{{ url_for('emp.dashboard') }}" class="btn sm">Back to Dashboard</a>
+  </div>
+
+  <!-- Face ID Current Status Banner -->
+  <section class="card" style="margin-bottom:1.5rem;padding:1.25rem;border-radius:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div>
+        <h4 style="margin:0 0 4px">Biometric Face Template</h4>
+        {% if g.user['face_registered'] %}
+          <div style="display:inline-flex;align-items:center;gap:6px;color:#10b981;font-weight:600;font-size:0.9rem">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            Active &amp; Linked to Employee ID ({{ g.user['emp_code'] }})
+          </div>
+          <p class="muted small" style="margin:4px 0 0">Punches are strictly verified against this biometric template.</p>
+        {% elif can_reregister %}
+          <div style="display:inline-flex;align-items:center;gap:6px;color:#3b82f6;font-weight:600;font-size:0.9rem">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            HR Approved! Ready for New Face Registration
+          </div>
+          <p class="muted small" style="margin:4px 0 0">Your face change request was approved. You may now capture your new photo.</p>
+        {% else %}
+          <div style="display:inline-flex;align-items:center;gap:6px;color:#f59e0b;font-weight:600;font-size:0.9rem">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Not Registered
+          </div>
+          <p class="muted small" style="margin:4px 0 0">Please complete face registration before punching attendance.</p>
+        {% endif %}
+      </div>
+
+      {% if can_reregister %}
+        <a href="{{ url_for('auth.onboarding_face') }}" class="btn primary big" style="font-weight:700">
+          📸 Register New Face Now &rarr;
+        </a>
+      {% elif not g.user['face_registered'] %}
+        <a href="{{ url_for('auth.onboarding_face') }}" class="btn primary" style="font-weight:600">
+          Complete Face Setup &rarr;
+        </a>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Request Face Change Form -->
+  <section class="card" style="margin-bottom:1.5rem;padding:1.25rem;border-radius:14px">
+    <h3 style="margin-top:0">Request Face Change</h3>
+    <p class="muted small" style="margin-top:2px;margin-bottom:1rem">
+      If your physical appearance has changed significantly or camera verification is failing, submit a request to HR for approval.
+      To ensure security, identity verification with your account password is required.
+    </p>
+
+    {% if latest and latest['status'] == 'Pending' %}
+      <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:1rem;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <b style="color:#d97706">⏳ Face Change Request Pending Review</b>
+          <p class="muted small" style="margin:4px 0 0">Submitted on {{ latest['requested_at'] }}: &ldquo;{{ latest['reason'] }}&rdquo;</p>
+        </div>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="cancel">
+          <input type="hidden" name="id" value="{{ latest['id'] }}">
+          <button type="submit" class="btn sm danger" onclick="return confirm('Cancel this request?')">Cancel</button>
+        </form>
+      </div>
+    {% else %}
+      <form method="post" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
+        <div class="form-group">
+          <label for="password">Confirm Account Password (Identity Verification)</label>
+          <input type="password" id="password" name="password" required placeholder="Enter your current password">
+        </div>
+
+        <div class="form-group">
+          <label for="reason">Reason for Face Change</label>
+          <textarea id="reason" name="reason" rows="3" required placeholder="Explain why you require a new face registration (e.g. appearance changed, camera detection issue, glasses/beard change)"></textarea>
+        </div>
+
+        <button type="submit" class="btn primary" style="font-weight:600">
+          Submit Face Change Request to HR &rarr;
+        </button>
+      </form>
+    {% endif %}
+  </section>
+
+  <!-- Past Requests History -->
+  <section class="card" style="padding:1.25rem;border-radius:14px">
+    <h3 style="margin-top:0">Request History</h3>
+    {% if rows %}
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+          <thead>
+            <tr style="text-align:left;border-bottom:1px solid var(--border-default,#cbd5e1);color:var(--text-muted,#64748b)">
+              <th style="padding:8px">Date</th>
+              <th style="padding:8px">Reason</th>
+              <th style="padding:8px">Status</th>
+              <th style="padding:8px">HR Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr style="border-bottom:1px solid var(--border-default,#f1f5f9)">
+              <td style="padding:10px 8px;white-space:nowrap">{{ r['requested_at'] }}</td>
+              <td style="padding:10px 8px">{{ r['reason'] }}</td>
+              <td style="padding:10px 8px">{{ badge(r['status']) }}</td>
+              <td style="padding:10px 8px;color:var(--text-muted,#64748b)">{{ r['hr_remarks'] or '–' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted" style="margin:0">No face change requests submitted yet.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

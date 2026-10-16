@@ -133,6 +133,19 @@ CREATE TABLE IF NOT EXISTS od_requests (
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS face_change_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Pending',   -- Pending / Approved / Rejected / Completed
+    requested_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    decided_by INTEGER REFERENCES employees(id),
+    decided_at TEXT,
+    hr_remarks TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_face_change_emp ON face_change_requests(emp_id, status);
+
 CREATE TABLE IF NOT EXISTS holidays (
     date TEXT PRIMARY KEY,
     name TEXT NOT NULL
@@ -243,13 +256,14 @@ def init_db(app):
     emp_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='EMPLOYEES'").fetchone()[0]
     con.execute("UPDATE employees SET category_id=? WHERE role='hr' AND (category_id IS NULL OR category_id=0)", (staff_id,))
     con.execute("UPDATE employees SET category_id=? WHERE (category_id IS NULL OR category_id=0)", (emp_cat_id,))
-
-    # Update Shift 1 to 08:00 to 20:00 and Shift 2 to 20:00 to 08:00
-    con.execute("UPDATE shifts SET start_time='08:00', end_time='20:00' WHERE (name LIKE '%Shift 1%' OR id=1) AND (start_time!='08:00' OR end_time!='20:00')")
-    con.execute("UPDATE shifts SET start_time='20:00', end_time='08:00' WHERE (name LIKE '%Shift 2%' OR id=2) AND (start_time!='20:00' OR end_time!='08:00')")
-
-    if con.execute("SELECT COUNT(*) FROM shifts").fetchone()[0] == 0:
+    if con.execute("SELECT COUNT(*) FROM offices").fetchone()[0] == 0:
         _seed_base(con)
+
+    # Ensure General Shift, Morning Shift, and Evening Shift exist
+    con.execute("UPDATE shifts SET name='Shift 1 (Morning Shift)', start_time='08:00', end_time='20:00' WHERE (name LIKE '%Shift 1%' OR id=1)")
+    con.execute("UPDATE shifts SET name='Shift 2 (Evening Shift)', start_time='20:00', end_time='08:00' WHERE (name LIKE '%Shift 2%' OR id=2)")
+    if con.execute("SELECT COUNT(*) FROM shifts WHERE name LIKE '%General%'").fetchone()[0] == 0:
+        con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('General Shift', '09:00', '18:00', 15, 8.0, 4.0, 1.0)")
 
     # Ensure system_settings has face recognition defaults
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
@@ -268,8 +282,10 @@ def init_db(app):
             con.execute("UPDATE employees SET password_hash=?, must_change_pw=0, active=1 WHERE role='hr' AND emp_code=?",
                         (generate_password_hash(pw), code))
 
-    # Ensure baseline accounts EMP001 and E0012 (Damodharan M) exist
+    # Ensure baseline accounts for all 3 categories: Staff (E0012), Employees (EMP001), Contract Labour (CL001)
     emp_pw = generate_password_hash("123456789")
+    contract_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='CONTRACT'").fetchone()[0]
+
     if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='EMP001'").fetchone()[0] == 0:
         con.execute(
             "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
@@ -284,6 +300,13 @@ def init_db(app):
             "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
             (staff_id, emp_pw))
         print("[setup] Baseline employee E0012 (Damodharan M) created with active login.")
+    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='CL001'").fetchone()[0] == 0:
+        con.execute(
+            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+            "VALUES ('CL001', 'Ramesh Kumar', 'ramesh@sribalajigears.com', 'Contract Operations', 'Contract Labour', 'employee', "
+            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+            (contract_cat_id, emp_pw))
+        print("[setup] Baseline contract labour employee CL001 created with active login.")
     con.commit()
     con.close()
 
@@ -300,8 +323,9 @@ def create_admin(con, code, name, password):
 def _seed_base(con):
     """Minimum config every install needs. HR edits these in Settings."""
     con.execute("INSERT INTO offices (name, lat, lng, radius_m) VALUES ('Main Office', 0, 0, 150)")  # 0,0 = NOT SET YET
-    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 1', '08:00', '20:00', 10, 8.0, 4.0, 1.0)")
-    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 2', '20:00', '08:00', 10, 8.0, 4.0, 1.0)")
+    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('General Shift', '09:00', '18:00', 15, 8.0, 4.0, 1.0)")
+    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 1 (Morning Shift)', '08:00', '20:00', 10, 8.0, 4.0, 1.0)")
+    con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 2 (Evening Shift)', '20:00', '08:00', 10, 8.0, 4.0, 1.0)")
     for code, name, q in (("CL", "Casual Leave", 12), ("SL", "Sick Leave", 12), ("PL", "Privilege Leave", 15)):
         con.execute("INSERT INTO leave_types (code, name, annual_quota) VALUES (?,?,?)", (code, name, q))
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '350')")

@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Shift Management &amp; Bulk Assignment · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="ph" style="align-items:flex-start;margin-bottom:1.25rem">
+  <div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <h2 style="margin:0">HR Shift &amp; Rotation Management</h2>
+      <span class="badge b-approved" style="font-size:0.75rem">Bulk Engine</span>
+    </div>
+    <div class="muted small" style="margin-top:4px">
+      Assign shifts in bulk across Staff, Rotating Employees, and Contract Labour.
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="{{ url_for('hr.dashboard') }}" class="btn sm">Dashboard</a>
+    <a href="{{ url_for('hr.attendance') }}" class="btn sm">Daily Register</a>
+  </div>
+</div>
+
+<!-- Filters Bar -->
+<section class="card" style="padding:1rem 1.25rem;margin-bottom:1.25rem;border-radius:12px">
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div style="flex:1;min-width:180px">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Category / Workforce</label>
+      <select name="category" onchange="this.form.submit()" style="width:100%;font-size:0.85rem">
+        <option value="">All Categories (Staff, Employees, Contract)</option>
+        {% for c in categories %}
+        <option value="{{ c['id'] }}" {% if category_id == c['id'] %}selected{% endif %}>
+          {% if c['code'] == 'STAFF' %}💼 Staff
+          {% elif c['code'] == 'CONTRACT' %}👷 Contract Labour
+          {% else %}⚙️ Employees
+          {% endif %}
+          ({{ c['name'] }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex:1;min-width:160px">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Department</label>
+      <select name="dept" onchange="this.form.submit()" style="width:100%;font-size:0.85rem">
+        <option value="">All Departments</option>
+        {% for d in depts %}
+        <option value="{{ d }}" {% if dept == d %}selected{% endif %}>{{ d }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex:1;min-width:180px">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Current Shift</label>
+      <select name="shift" onchange="this.form.submit()" style="width:100%;font-size:0.85rem">
+        <option value="">All Current Shifts</option>
+        {% for s in shifts %}
+        <option value="{{ s['id'] }}" {% if shift_id == s['id'] %}selected{% endif %}>{{ s['name'] }} ({{ s['start_time'] }}–{{ s['end_time'] }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex:1;min-width:130px">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Status</label>
+      <select name="status" onchange="this.form.submit()" style="width:100%;font-size:0.85rem">
+        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active Only</option>
+        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Records</option>
+      </select>
+    </div>
+
+    <div style="flex:1.2;min-width:180px">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Search Name / Code</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Search code or name..." style="width:100%;font-size:0.85rem">
+    </div>
+
+    <div style="display:flex;gap:6px">
+      <button type="submit" class="btn sm primary">Filter</button>
+      <a href="{{ url_for('hr.shifts') }}" class="btn sm">Reset</a>
+    </div>
+  </form>
+</section>
+
+<!-- Bulk Assignment Form wrapping the table and toolbar -->
+<form method="post" action="{{ url_for('hr.bulk_assign_shifts') }}" id="bulkShiftForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <!-- Sticky Bulk Action Toolbar -->
+  <section class="card" style="position:sticky;top:10px;z-index:20;padding:1rem 1.25rem;margin-bottom:1.25rem;border-radius:12px;background:var(--bg-card);border:2px solid var(--primary,#2563eb);box-shadow:0 8px 24px rgba(0,0,0,0.15)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="background:rgba(37,99,235,0.12);padding:6px 14px;border-radius:8px;font-weight:700;color:#2563eb">
+          <span id="selectedCountBadge" style="font-size:1.15rem">0</span> selected
+        </div>
+        <div>
+          <strong style="font-size:0.95rem">Bulk Shift Assignment</strong>
+          <span class="muted small" style="display:block">Apply to all checked employees</span>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+        
+        <div>
+          <label style="font-size:0.75rem;font-weight:600;color:var(--text-muted);display:block">Target Shift</label>
+          <select name="shift_id" id="targetShiftSelect" required style="font-size:0.85rem;padding:6px 10px;font-weight:600">
+            {% for s in shifts %}
+            <option value="{{ s['id'] }}">{{ s['name'] }} ({{ s['start_time'] }}–{{ s['end_time'] }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size:0.75rem;font-weight:600;color:var(--text-muted);display:block">Assignment Mode</label>
+          <select name="assignment_type" id="assignmentTypeSelect" onchange="toggleWeeklyFields(this.value)" style="font-size:0.85rem;padding:6px 10px;font-weight:600">
+            <option value="permanent">Permanent / Default Shift</option>
+            <option value="weekly">Weekly Rotation (Scheduled)</option>
+          </select>
+        </div>
+
+        <!-- Weekly Rotation fields (hidden by default) -->
+        <div id="weeklyFields" style="display:none;align-items:center;gap:8px">
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:var(--text-muted);display:block">Start Date</label>
+            <input type="date" name="start_date" id="startDateInput" style="font-size:0.85rem;padding:5px 8px">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:var(--text-muted);display:block">End Date</label>
+            <input type="date" name="end_date" id="endDateInput" style="font-size:0.85rem;padding:5px 8px">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;font-weight:600;color:var(--text-muted);display:block">Rotation Note</label>
+            <input type="text" name="notes" placeholder="e.g. Week 43 Rotation" style="font-size:0.85rem;padding:5px 8px;width:150px">
+          </div>
+        </div>
+
+        <div style="margin-top:auto">
+          <button type="submit" id="applyShiftBtn" class="btn primary" style="font-weight:700;padding:8px 18px" disabled>
+            Apply Shift to Selected
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Employees Table -->
+  <section class="card" style="padding:1.25rem;border-radius:14px;overflow-x:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h3 style="margin:0">{{ employees|length }} Employee(s) Listed</h3>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn sm" onclick="selectAll(true)">Select All</button>
+        <button type="button" class="btn sm" onclick="selectAll(false)">Clear Selection</button>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+      <thead>
+        <tr style="text-align:left;border-bottom:2px solid var(--border-default,#cbd5e1);color:var(--text-muted,#64748b)">
+          <th style="padding:10px 8px;width:36px">
+            <input type="checkbox" id="masterCheckbox" title="Select / Deselect all" style="transform:scale(1.2)">
+          </th>
+          <th style="padding:10px 8px">Employee</th>
+          <th style="padding:10px 8px">Workforce Tier</th>
+          <th style="padding:10px 8px">Department</th>
+          <th style="padding:10px 8px">Current Assigned Shift</th>
+          <th style="padding:10px 8px">Status</th>
+          <th style="padding:10px 8px;text-align:right">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in employees %}
+        <tr style="border-bottom:1px solid var(--border-default,#f1f5f9);transition:background .15s ease" class="emp-row">
+          <td style="padding:10px 8px">
+            <input type="checkbox" name="emp_ids" value="{{ e['id'] }}" class="emp-chk" onchange="updateSelectedCount()" style="transform:scale(1.2)">
+          </td>
+          <td style="padding:10px 8px">
+            <strong>{{ e['name'] }}</strong>
+            <span class="muted small" style="display:block">{{ e['emp_code'] }} &bull; {{ e['designation'] or 'Staff' }}</span>
+          </td>
+          <td style="padding:10px 8px">
+            {% if e['category_code'] == 'STAFF' %}
+              <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(37,99,235,0.12);color:#2563eb;font-weight:600;font-size:0.75rem">
+                💼 Staff
+              </span>
+            {% elif e['category_code'] == 'CONTRACT' %}
+              <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(217,119,6,0.12);color:#d97706;font-weight:600;font-size:0.75rem">
+                👷 Contract Labour
+              </span>
+            {% else %}
+              <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,0.12);color:#059669;font-weight:600;font-size:0.75rem">
+                ⚙️ Employee
+              </span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 8px">{{ e['department'] or '–' }}</td>
+          <td style="padding:10px 8px">
+            <span style="font-weight:600">{{ e['shift_name'] or 'Not Assigned' }}</span>
+            {% if e['shift_start'] %}
+            <span class="muted small" style="display:block">{{ e['shift_start'] }}–{{ e['shift_end'] }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 8px">
+            {% if e['active'] %}
+              <span class="badge b-approved" style="font-size:0.75rem">Active</span>
+            {% else %}
+              <span class="badge b-rejected" style="font-size:0.75rem">Inactive</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 8px;text-align:right">
+            <a href="{{ url_for('hr.employee_form', eid=e['id']) }}" class="btn sm" style="font-size:0.75rem;padding:3px 8px">Edit</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="muted" style="text-align:center;padding:2rem">No employees match the selected filters.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</form>
+
+<!-- Active & Upcoming Weekly Schedules -->
+{% if schedules %}
+<section class="card" style="margin-top:1.5rem;padding:1.25rem;border-radius:14px">
+  <h3 style="margin-top:0">Active &amp; Upcoming Weekly Shift Rotations</h3>
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+      <thead>
+        <tr style="text-align:left;border-bottom:1px solid var(--border-default,#cbd5e1);color:var(--text-muted,#64748b)">
+          <th style="padding:8px">Employee</th>
+          <th style="padding:8px">Scheduled Shift</th>
+          <th style="padding:8px">Date Range</th>
+          <th style="padding:8px">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in schedules %}
+        <tr style="border-bottom:1px solid var(--border-default,#f1f5f9)">
+          <td style="padding:8px"><b>{{ s['emp_name'] }}</b> <span class="muted small">({{ s['emp_code'] }})</span></td>
+          <td style="padding:8px;font-weight:600">{{ s['shift_name'] }}</td>
+          <td style="padding:8px">{{ s['start_date']|dmy }} &rarr; {{ s['end_date']|dmy }}</td>
+          <td style="padding:8px;color:var(--text-muted)">{{ s['notes'] or '–' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateSelectedCount() {
+  const checkboxes = document.querySelectorAll('.emp-chk:checked');
+  const count = checkboxes.length;
+  document.getElementById('selectedCountBadge').textContent = count;
+  const applyBtn = document.getElementById('applyShiftBtn');
+  applyBtn.disabled = (count === 0);
+  if (count > 0) {
+    applyBtn.textContent = 'Apply Shift to ' + count + ' Employee(s)';
+  } else {
+    applyBtn.textContent = 'Apply Shift to Selected';
+  }
+}
+
+function selectAll(checked) {
+  document.querySelectorAll('.emp-chk').forEach(c => c.checked = checked);
+  document.getElementById('masterCheckbox').checked = checked;
+  updateSelectedCount();
+}
+
+document.getElementById('masterCheckbox').addEventListener('change', function() {
+  selectAll(this.checked);
+});
+
+function toggleWeeklyFields(val) {
+  const weeklyFields = document.getElementById('weeklyFields');
+  const startDateInput = document.getElementById('startDateInput');
+  const endDateInput = document.getElementById('endDateInput');
+  if (val === 'weekly') {
+    weeklyFields.style.display = 'inline-flex';
+    startDateInput.required = true;
+    endDateInput.required = true;
+  } else {
+    weeklyFields.style.display = 'none';
+    startDateInput.required = false;
+    endDateInput.required = false;
+  }
+}
+
+document.getElementById('bulkShiftForm').addEventListener('submit', function(e) {
+  const count = document.querySelectorAll('.emp-chk:checked').length;
+  if (count === 0) {
+    e.preventDefault();
+    alert('Please select at least one employee.');
+    return;
+  }
+  const shiftSelect = document.getElementById('targetShiftSelect');
+  const shiftName = shiftSelect.options[shiftSelect.selectedIndex].text;
+  const mode = document.getElementById('assignmentTypeSelect').value;
+  const modeText = mode === 'weekly' ? 'Weekly Rotation' : 'Permanent Default';
+  
+  if (!confirm('Are you sure you want to assign ' + shiftName + ' (' + modeText + ') to ' + count + ' selected employee(s)?')) {
+    e.preventDefault();
+  }
+});
+</script>
+{% endblock %}

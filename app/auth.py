@@ -6,6 +6,7 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_db
+from .face_engine import register_face_for_employee
 from .services import audit
 
 bp = Blueprint("auth", __name__)
@@ -129,17 +130,27 @@ def index():
 
 
 @bp.route("/login", methods=["GET", "POST"])
-def login():
+@bp.route("/login/<login_type>", methods=["GET", "POST"])
+def login(login_type=None):
+
+    # Determine effective login type: URL param, query param, or default to employee
+    active_type = (login_type or request.args.get("type") or "employee").lower()
+    if active_type not in ("staff", "employee", "contract"):
+        active_type = "employee"
+
     if request.method == "POST":
+        login_type_post = (request.form.get("login_type") or active_type).lower()
         raw_code = request.form.get("emp_code", "").strip()
         code = raw_code.upper()
         pw = request.form.get("password", "")
         ip = request.remote_addr
         db = get_db()
 
-        # Strict match by employee code or registered email
+        # Strict match by employee code or registered email, including category info
         u = db.execute(
-            "SELECT * FROM employees WHERE (UPPER(emp_code)=? OR UPPER(email)=?) AND active=1",
+            "SELECT e.*, c.code category_code, c.name category_name FROM employees e "
+            "LEFT JOIN employee_categories c ON c.id=e.category_id "
+            "WHERE (UPPER(e.emp_code)=? OR UPPER(e.email)=?) AND e.active=1",
             (code, code)
         ).fetchone()
 
@@ -160,14 +171,42 @@ def login():
 
         key = f"{code}|{ip}"
         if u and is_pw_valid:
+            cat_code = (u["category_code"] or "").upper()
+            # Enforce 3 Separate Login Types Permissions
+            if login_type_post == "staff":
+                if u["role"] != "hr" and cat_code != "STAFF":
+                    if cat_code == "CONTRACT":
+                        flash("This account is registered under Contract Labour. Please use the Contract Labour Login.", "err")
+                    else:
+                        flash("This account is registered under Employee Staff. Please use the Employee Login.", "err")
+                    return render_template("login.html", active_type=login_type_post), 403
+            elif login_type_post == "employee":
+                if cat_code == "CONTRACT":
+                    flash("This account is registered under Contract Labour. Please use the Contract Labour Login.", "err")
+                    return render_template("login.html", active_type=login_type_post), 403
+            elif login_type_post == "contract":
+                if cat_code != "CONTRACT":
+                    flash("This portal is exclusively for Contract Labour. Regular staff and employees must use their dedicated login.", "err")
+                    return render_template("login.html", active_type=login_type_post), 403
+
             db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
             session.permanent = True
             existing_csrf = session.get("csrf")
             session.clear()
             session["uid"], session["name"], session["role"] = u["id"], u["name"], u["role"]
+            session["login_type"] = login_type_post
+            session["category"] = cat_code
             session["csrf"] = existing_csrf or secrets.token_hex(16)
-            audit("LOGIN", "employee", u["id"], actor=u)
+            audit("LOGIN", "employee", u["id"], actor=u, details=f"login_type={login_type_post}")
             get_db().commit()
+
+            # Check First-Time Login workflow: Password setup, then Face Registration
+            if u["must_change_pw"]:
+                session["first_time_login"] = True
+                return redirect(url_for("auth.change_password"))
+            if session.get("first_time_login") and u["role"] == "employee" and not u["face_registered"]:
+                return redirect(url_for("auth.onboarding_face"))
+
             nxt = request.args.get("next")
             if nxt and nxt.startswith("/") and not nxt.startswith("//"):
                 # Prevent 403 Forbidden on role mismatch
@@ -187,14 +226,16 @@ def login():
             audit("LOGIN_LOCKED", "employee", u["id"] if u else None, f"Lockout active: {code} from IP {ip}")
             db.commit()
             flash("Too many failed attempts. Try again in a few minutes.", "err")
-            return render_template("login.html"), 429
+            return render_template("login.html", active_type=active_type), 429
 
         db.execute("INSERT INTO login_attempts (key, count, first_ts) VALUES (?,?,?) "
                    "ON CONFLICT(key) DO UPDATE SET count=?, first_ts=?", (key, cnt + 1, first, cnt + 1, first))
         audit("LOGIN_FAILED", "employee", u["id"] if u else None, f"Failed login for {code} from IP {ip}")
         db.commit()
         flash("Invalid employee code or password.", "err")
-    return render_template("login.html")
+        return render_template("login.html", active_type=active_type)
+
+    return render_template("login.html", active_type=active_type)
 
 
 @bp.route("/logout", methods=["POST", "GET"])
@@ -227,6 +268,40 @@ def change_password():
                        (generate_password_hash(new), g.user["id"]))
             audit("PASSWORD_CHANGE", "employee", g.user["id"], f"{g.user['emp_code']} ({g.user['role']})")
             db.commit()
-            flash("Password updated.", "ok")
+            is_first = session.pop("first_time_login", False) or g.user.get("must_change_pw")
+            flash("Password updated successfully.", "ok")
+            if is_first and g.user["role"] == "employee" and not g.user.get("face_registered"):
+                return redirect(url_for("auth.onboarding_face"))
             return redirect(url_for("auth.index"))
     return render_template("change_password.html")
+
+
+@bp.route("/onboarding/face-registration", methods=["GET", "POST"])
+@login_required
+def onboarding_face():
+    if g.user["role"] == "hr":
+        return redirect(url_for("hr.dashboard"))
+    if g.user.get("face_registered"):
+        return redirect(url_for("emp.dashboard"))
+
+    db = get_db()
+    if request.method == "POST":
+        img_data = request.form.get("face_camera_data")
+        if not img_data and "face_file" in request.files:
+            f = request.files["face_file"]
+            if f and f.filename:
+                img_data = f.read()
+
+        if not img_data:
+            flash("Please capture or upload your face photo to complete onboarding.", "err")
+            return render_template("emp/onboarding_face.html")
+
+        ok, msg, other_emp = register_face_for_employee(db, g.user["id"], img_data, registered_by_id=g.user["id"])
+        if ok:
+            flash("Biometric Face ID successfully verified and linked to your account! You may now punch attendance.", "ok")
+            return redirect(url_for("emp.punch"))
+        else:
+            flash(msg, "err")
+            return render_template("emp/onboarding_face.html")
+
+    return render_template("emp/onboarding_face.html")

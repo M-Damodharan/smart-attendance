@@ -33,4 +33,18 @@
   </div>
   {% else %}<p class="muted">Nothing here.</p>{% endfor %}
 </section>
+
+<section class="card">
+  <h3>Face ID Change Requests</h3>
+  {% for r in face_changes %}
+  <div class="req">
+    <div>
+      <b>{{ r['name'] }}</b> <span class="muted small">{{ r['emp_code'] }}</span> &bull; <span class="muted small">{{ r['requested_at'] }}</span><br>
+      <span>Reason: <strong>{{ r['reason'] }}</strong></span>
+      {% if r['hr_remarks'] %}<br><span class="muted small">HR Remarks: {{ r['hr_remarks'] }}</span>{% endif %}
+    </div>
+    {% if r['status']=='Pending' %}{{ actions('face', r['id']) }}{% else %}{{ badge(r['status']) }}{% endif %}
+  </div>
+  {% else %}<p class="muted">No face change requests.</p>{% endfor %}
+</section>
 {% endblock %}

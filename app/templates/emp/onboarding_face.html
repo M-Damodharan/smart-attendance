@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Face ID Onboarding · SBG Attendance{% endblock %}
+{% block content %}
+<div class="onboarding-wrapper" style="max-width:560px;margin:1.5rem auto;padding:0 1rem">
+  <div class="card" style="padding:1.75rem;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.12)">
+    
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.25rem">
+      <div style="width:44px;height:44px;border-radius:12px;background:rgba(37,99,235,0.15);display:flex;align-items:center;justify-content:center;color:#2563eb;font-size:1.4rem">
+        👤
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.35rem;font-weight:700">Biometric Face Registration</h2>
+        <span style="font-size:0.8rem;color:var(--text-muted,#94a3b8);font-weight:600">ONBOARDING &bull; STEP 2 OF 2</span>
+      </div>
+    </div>
+
+    <div style="background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.25);border-radius:10px;padding:0.85rem 1rem;margin-bottom:1.25rem;font-size:0.85rem;line-height:1.5">
+      <strong>One Face, One Account Binding:</strong>
+      <p style="margin:4px 0 0;color:var(--text-muted,#64748b)">
+        Please capture your face photo to securely link your biometric template to your Employee ID (<strong>{{ g.user['emp_code'] }} - {{ g.user['name'] }}</strong>).
+        This template is encrypted and used exclusively to verify your punches.
+      </p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" id="onboardingFaceForm" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="face_camera_data" id="face_camera_data">
+
+      <!-- Camera Preview -->
+      <div class="camera-box" style="position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center">
+        <video id="webcam" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+        <canvas id="photoCanvas" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover"></canvas>
+        
+        <!-- Oval Guide Overlay -->
+        <div id="ovalGuide" style="position:absolute;width:60%;height:75%;border:2.5px dashed rgba(255,255,255,0.7);border-radius:50%;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,0.3)"></div>
+        
+        <!-- Live Status Pill -->
+        <div id="camStatus" style="position:absolute;bottom:12px;background:rgba(0,0,0,0.65);color:#fff;padding:4px 12px;border-radius:20px;font-size:0.75rem;backdrop-filter:blur(4px)">
+          Initializing camera...
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:0.75rem">
+        <button type="button" id="snapBtn" class="btn primary" style="flex:1;font-weight:600">
+          📸 Capture Photo
+        </button>
+        <button type="button" id="retakeBtn" class="btn" style="display:none;font-weight:600">
+          🔄 Retake
+        </button>
+      </div>
+
+      <!-- Fallback file upload -->
+      <div style="margin-top:0.75rem;border-top:1px dashed var(--border-default,#cbd5e1);padding-top:0.75rem">
+        <label for="face_file" style="font-size:0.8rem;color:var(--text-muted,#64748b);display:block;margin-bottom:4px">
+          Or upload a front-facing selfie:
+        </label>
+        <input type="file" id="face_file" name="face_file" accept="image/*" capture="user" style="font-size:0.8rem;width:100%">
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn success block big" style="margin-top:1rem;font-weight:700" disabled>
+        Complete Face Setup &amp; Start Punching &rarr;
+      </button>
+    </form>
+
+    <div style="margin-top:1rem;font-size:0.75rem;color:var(--text-muted,#94a3b8);text-align:center">
+      🔒 Protected by Enterprise Biometric Anti-Spoofing &bull; One Face, One Account
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const video = document.getElementById('webcam');
+  const canvas = document.getElementById('photoCanvas');
+  const snapBtn = document.getElementById('snapBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
+  const submitBtn = document.getElementById('submitBtn');
+  const camStatus = document.getElementById('camStatus');
+  const faceInput = document.getElementById('face_camera_data');
+  const fileInput = document.getElementById('face_file');
+  let stream = null;
+
+  async function startCam() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      camStatus.textContent = 'Position face inside the oval and tap Capture';
+    } catch (err) {
+      console.warn('Webcam error:', err);
+      camStatus.textContent = 'Camera unavailable. Please upload a selfie photo below.';
+      submitBtn.disabled = false;
+    }
+  }
+
+  snapBtn.addEventListener('click', function() {
+    if (!video.videoWidth) {
+      alert('Camera is not ready yet.');
+      return;
+    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    faceInput.value = dataUrl;
+    
+    canvas.style.display = 'block';
+    video.style.display = 'none';
+    snapBtn.style.display = 'none';
+    retakeBtn.style.display = 'inline-block';
+    submitBtn.disabled = false;
+    camStatus.textContent = 'Photo captured! Tap Complete Face Setup to finish.';
+  });
+
+  retakeBtn.addEventListener('click', function() {
+    canvas.style.display = 'none';
+    video.style.display = 'block';
+    snapBtn.style.display = 'inline-block';
+    retakeBtn.style.display = 'none';
+    faceInput.value = '';
+    if (!fileInput.value) {
+      submitBtn.disabled = true;
+    }
+    camStatus.textContent = 'Position face inside the oval and tap Capture';
+  });
+
+  fileInput.addEventListener('change', function() {
+    if (fileInput.files && fileInput.files.length > 0) {
+      submitBtn.disabled = false;
+      camStatus.textContent = 'File selected: ' + fileInput.files[0].name;
+    }
+  });
+
+  startCam();
+})();
+</script>
+{% endblock %}

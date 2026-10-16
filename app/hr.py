@@ -77,16 +77,40 @@ def dashboard():
                 bs["absent"] += 1
         if code == "IN":
             stats["working"] += 1
-        if rec and rec["late"]:
-            stats["late"] += 1
     pending_leave = db.execute("SELECT COUNT(*) FROM leaves WHERE status='Pending'").fetchone()[0]
     pending_od = db.execute("SELECT COUNT(*) FROM od_requests WHERE status='Pending'").fetchone()[0]
+    pending_face_changes = db.execute("SELECT COUNT(*) FROM face_change_requests WHERE status='Pending'").fetchone()[0]
+
+    workforce = {
+        "staff": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='STAFF'").fetchone()[0],
+        "employees": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='EMPLOYEES'").fetchone()[0],
+        "contract": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='CONTRACT'").fetchone()[0],
+    }
+
+    face_stats = {
+        "registered": db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND face_registered=1").fetchone()[0],
+        "pending_setup": db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND (face_registered=0 OR face_registered IS NULL)").fetchone()[0],
+    }
+
+    upcoming_schedules = db.execute(
+        "SELECT w.*, e.name emp_name, e.emp_code, s.name shift_name FROM weekly_shift_schedules w "
+        "JOIN employees e ON e.id=w.emp_id JOIN shifts s ON s.id=w.shift_id "
+        "WHERE w.end_date >= date('now') ORDER BY w.start_date ASC LIMIT 5"
+    ).fetchall()
+
+    security_exceptions = db.execute(
+        "SELECT * FROM audit_log WHERE action IN ('FACE_MISMATCH_BLOCKED', 'FACE_DUPLICATE_REJECTED', 'STRANGER_FACE_BLOCKED', 'LOGIN_LOCKED', 'LOGIN_FAILED') "
+        "ORDER BY id DESC LIMIT 6"
+    ).fetchall()
+
     recent = db.execute(
         "SELECT a.*, e.name, e.emp_code FROM attendance a JOIN employees e ON e.id=a.emp_id "
         "WHERE a.date=? ORDER BY COALESCE(a.check_out, a.check_in) DESC LIMIT 8", (d2s(t),)).fetchall()
     office_unset = db.execute("SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0").fetchone()[0] > 0
     return render_template("hr/dashboard.html", office_unset=office_unset, stats=stats, by_shift=by_shift.values(), total=len(emps),
-                           pending_leave=pending_leave, pending_od=pending_od, recent=recent, today=t)
+                           pending_leave=pending_leave, pending_od=pending_od, pending_face_changes=pending_face_changes,
+                           workforce=workforce, face_stats=face_stats, upcoming_schedules=upcoming_schedules,
+                           security_exceptions=security_exceptions, recent=recent, today=t)
 
 
 # ------------------------------------------------------------------ employee master
@@ -284,6 +308,141 @@ def attendance():
                            prev=d2s(d - timedelta(days=1)), nxt=d2s(d + timedelta(days=1)))
 
 
+# ------------------------------------------------------------------ Shift Management & Bulk Assignment
+@bp.route("/shifts", methods=["GET"])
+@hr_required
+def shifts():
+    db = get_db()
+    dept = request.args.get("dept") or None
+    category_id = request.args.get("category", type=int)
+    shift_id = request.args.get("shift", type=int)
+    status_filter = request.args.get("status", "active")
+    q = request.args.get("q", "").strip()
+
+    sql = (
+        "SELECT e.*, s.name shift_name, s.start_time shift_start, s.end_time shift_end, "
+        "c.name category_name, c.code category_code "
+        "FROM employees e "
+        "LEFT JOIN shifts s ON s.id=e.shift_id "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id "
+        "WHERE 1=1 "
+    )
+    args = []
+    if status_filter == "active":
+        sql += " AND e.active=1"
+    elif status_filter == "inactive":
+        sql += " AND e.active=0"
+
+    if dept:
+        sql += " AND e.department=?"
+        args.append(dept)
+    if category_id:
+        sql += " AND e.category_id=?"
+        args.append(category_id)
+    if shift_id:
+        sql += " AND e.shift_id=?"
+        args.append(shift_id)
+    if q:
+        sql += " AND (e.emp_code LIKE ? OR e.name LIKE ?)"
+        args.extend([f"%{q}%", f"%{q}%"])
+
+    sql += " ORDER BY c.id, e.emp_code"
+    employees_list = db.execute(sql, args).fetchall()
+
+    all_shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+    all_categories = db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()
+    all_depts = [r[0] for r in db.execute("SELECT DISTINCT department FROM employees WHERE department<>'' ORDER BY 1")]
+
+    # Weekly schedules active for today onwards
+    today_str = d2s(today())
+    schedules = db.execute(
+        "SELECT w.*, e.emp_code, e.name emp_name, s.name shift_name FROM weekly_shift_schedules w "
+        "JOIN employees e ON e.id=w.emp_id JOIN shifts s ON s.id=w.shift_id "
+        "WHERE w.end_date >= ? ORDER BY w.start_date ASC LIMIT 50", (today_str,)
+    ).fetchall()
+
+    return render_template(
+        "hr/shifts.html",
+        employees=employees_list,
+        shifts=all_shifts,
+        categories=all_categories,
+        depts=all_depts,
+        schedules=schedules,
+        dept=dept,
+        category_id=category_id,
+        shift_id=shift_id,
+        status_filter=status_filter,
+        q=q,
+        today=today()
+    )
+
+
+@bp.post("/shifts/bulk-assign")
+@hr_required
+def bulk_assign_shifts():
+    db = get_db()
+    emp_ids = request.form.getlist("emp_ids")
+    if not emp_ids:
+        flash("Please select at least one employee using the checkboxes.", "err")
+        return redirect(url_for("hr.shifts"))
+
+    shift_id = request.form.get("shift_id", type=int)
+    target_shift = db.execute("SELECT * FROM shifts WHERE id=?", (shift_id,)).fetchone()
+    if not target_shift:
+        flash("Invalid target shift selected.", "err")
+        return redirect(url_for("hr.shifts"))
+
+    assignment_type = request.form.get("assignment_type", "permanent")
+    count = 0
+
+    if assignment_type == "weekly":
+        start_date = request.form.get("start_date", "").strip()
+        end_date = request.form.get("end_date", "").strip()
+        notes = request.form.get("notes", "").strip() or f"Bulk Rotation: {target_shift['name']}"
+
+        try:
+            d_start = s2d(start_date)
+            d_end = s2d(end_date)
+            if d_end < d_start:
+                flash("End date cannot be earlier than start date for weekly rotation.", "err")
+                return redirect(url_for("hr.shifts"))
+        except Exception:
+            flash("Please enter valid start and end dates for the weekly rotation schedule.", "err")
+            return redirect(url_for("hr.shifts"))
+
+        for eid in emp_ids:
+            try:
+                db.execute(
+                    "INSERT INTO weekly_shift_schedules (emp_id, shift_id, start_date, end_date, notes) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (int(eid), shift_id, start_date, end_date, notes)
+                )
+                count += 1
+            except Exception:
+                pass
+
+        audit("BULK_WEEKLY_SHIFT_ROTATION", "shift", shift_id,
+              f"Scheduled {count} employees to {target_shift['name']} from {start_date} to {end_date}")
+        db.commit()
+        flash(f"Successfully scheduled weekly rotation to '{target_shift['name']}' ({start_date} to {end_date}) for {count} employee(s).", "ok")
+
+    else:
+        # Permanent / Default shift update
+        for eid in emp_ids:
+            try:
+                db.execute("UPDATE employees SET shift_id=? WHERE id=?", (shift_id, int(eid)))
+                count += 1
+            except Exception:
+                pass
+
+        audit("BULK_SHIFT_ASSIGNMENT", "shift", shift_id,
+              f"Assigned {target_shift['name']} to {count} employees as default shift")
+        db.commit()
+        flash(f"Successfully updated default shift to '{target_shift['name']}' for {count} employee(s).", "ok")
+
+    return redirect(url_for("hr.shifts"))
+
+
 # ------------------------------------------------------------------ approvals
 @bp.route("/approvals")
 @hr_required
@@ -297,14 +456,17 @@ def approvals():
     ods = db.execute(
         f"SELECT o.*, e.name, e.emp_code FROM od_requests o JOIN employees e ON e.id=o.emp_id "
         f"WHERE o.status {cond} ORDER BY o.id DESC LIMIT 100").fetchall()
-    return render_template("hr/approvals.html", leaves=leaves, ods=ods, tab=tab)
+    face_changes = db.execute(
+        f"SELECT f.*, e.name, e.emp_code FROM face_change_requests f JOIN employees e ON e.id=f.emp_id "
+        f"WHERE f.status {cond} ORDER BY f.id DESC LIMIT 100").fetchall()
+    return render_template("hr/approvals.html", leaves=leaves, ods=ods, face_changes=face_changes, tab=tab)
 
 
 @bp.post("/approvals/<kind>/<int:rid>")
 @hr_required
 def decide(kind, rid):
     db = get_db()
-    table = {"leave": "leaves", "od": "od_requests"}.get(kind) or abort(404)
+    table = {"leave": "leaves", "od": "od_requests", "face": "face_change_requests"}.get(kind) or abort(404)
     decision = request.form.get("decision")
     if decision not in ("Approved", "Rejected"):
         abort(400)
@@ -312,11 +474,19 @@ def decide(kind, rid):
     if row["status"] != "Pending":
         flash("This request was already processed.", "warn")
     else:
+        remarks = request.form.get("remarks", "").strip()[:300]
         db.execute(f"UPDATE {table} SET status=?, decided_by=?, decided_at=?, hr_remarks=? WHERE id=?",
-                   (decision, g.user["id"], now().strftime(DT_FMT), request.form.get("remarks", "").strip()[:300], rid))
-        audit(f"{kind.upper()}_{decision.upper()}", kind, rid, request.form.get("remarks", "").strip()[:300])
+                   (decision, g.user["id"], now().strftime(DT_FMT), remarks, rid))
+        if kind == "face" and decision == "Approved":
+            reset_face_for_employee(db, row["emp_id"], reset_by_id=g.user["id"])
+            audit("FACE_CHANGE_APPROVED", "employee", row["emp_id"], f"HR {g.user['emp_code']} approved face reset: {remarks}")
+        elif kind == "face" and decision == "Rejected":
+            audit("FACE_CHANGE_REJECTED", "employee", row["emp_id"], f"HR {g.user['emp_code']} rejected face change: {remarks}")
+        else:
+            audit(f"{kind.upper()}_{decision.upper()}", kind, rid, remarks)
         db.commit()
-        flash(f"{kind.title()} request {decision.lower()}.", "ok")
+        label = "Face change" if kind == "face" else kind.title()
+        flash(f"{label} request {decision.lower()}.", "ok")
     return redirect(url_for("hr.approvals", tab=request.args.get("tab", "pending")))
 
 

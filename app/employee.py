@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for, send_file
+from werkzeug.security import check_password_hash
 
 from .auth import employee_required
 from .db import get_db
@@ -45,8 +46,9 @@ def dashboard():
     od_today = db.execute("SELECT * FROM od_requests WHERE emp_id=? AND od_date=? AND status='Approved'",
                           (u["id"], d2s(t))).fetchone()
     category = get_employee_category(u["id"])
+    face_req = db.execute("SELECT * FROM face_change_requests WHERE emp_id=? ORDER BY id DESC LIMIT 1", (u["id"],)).fetchone()
     return render_template("emp/dashboard.html", rec=rec, shift=_shift(u), category=category, summary=reg["summary"], recent=recent,
-                           pend=pend_l + pend_o, holiday=holiday, od_today=od_today, today=t, month_name=t.strftime("%B %Y"))
+                           pend=pend_l + pend_o, holiday=holiday, od_today=od_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"))
 
 
 @bp.route("/punch")
@@ -217,3 +219,53 @@ def od():
         return redirect(url_for("emp.od"))
     rows = db.execute("SELECT * FROM od_requests WHERE emp_id=? ORDER BY id DESC LIMIT 30", (u["id"],)).fetchall()
     return render_template("emp/od.html", rows=rows, today=t)
+
+
+@bp.route("/face-change", methods=["GET", "POST"])
+@employee_required
+def face_change():
+    db, u = get_db(), g.user
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "cancel":
+            rid = request.form.get("id", type=int)
+            row = db.execute("SELECT * FROM face_change_requests WHERE id=? AND emp_id=?", (rid, u["id"])).fetchone()
+            if row and row["status"] == "Pending":
+                db.execute("UPDATE face_change_requests SET status='Cancelled' WHERE id=?", (rid,))
+                audit("FACE_CHANGE_CANCEL", "face_change", rid, f"Employee {u['emp_code']} cancelled request")
+                db.commit()
+                flash("Face change request cancelled.", "ok")
+            return redirect(url_for("emp.face_change"))
+
+        pwd = request.form.get("password", "")
+        reason = request.form.get("reason", "").strip()
+
+        # Step 2 of workflow: identity verification with password
+        if not check_password_hash(u["password_hash"], pwd):
+            flash("Identity verification failed: Incorrect current password.", "err")
+            return redirect(url_for("emp.face_change"))
+
+        if not reason or len(reason) < 5:
+            flash("Please provide a valid explanation for requesting face re-registration (minimum 5 characters).", "err")
+            return redirect(url_for("emp.face_change"))
+
+        existing = db.execute("SELECT id FROM face_change_requests WHERE emp_id=? AND status='Pending'", (u["id"],)).fetchone()
+        if existing:
+            flash("You already have a pending Face Change request awaiting HR review.", "warn")
+            return redirect(url_for("emp.face_change"))
+
+        cur = db.execute(
+            "INSERT INTO face_change_requests (emp_id, reason, status) VALUES (?,?, 'Pending')",
+            (u["id"], reason)
+        )
+        audit("FACE_CHANGE_REQUEST", "face_change", cur.lastrowid, f"Employee {u['emp_code']}: {reason}")
+        db.commit()
+        flash("Face change request submitted successfully. Once HR approves, you will be able to register your new face.", "ok")
+        return redirect(url_for("emp.face_change"))
+
+    rows = db.execute("SELECT * FROM face_change_requests WHERE emp_id=? ORDER BY id DESC LIMIT 20", (u["id"],)).fetchall()
+    latest = rows[0] if rows else None
+    # Can re-register if approved and face_registered is 0 (cleared upon approval)
+    can_reregister = bool(latest and latest["status"] == "Approved" and not u.get("face_registered"))
+    return render_template("emp/face_change.html", rows=rows, latest=latest, can_reregister=can_reregister)
+
