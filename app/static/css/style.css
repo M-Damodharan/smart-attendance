@@ -730,7 +730,79 @@ body.login-page .wrap {
 .login-subtitle {
   font-size: 0.88rem;
   color: var(--text-muted);
-  margin: 0.25rem 0 1.5rem;
+  margin: 0.25rem 0 1rem;
+}
+
+/* 3-Tier Login Architecture Tabs & Badges */
+.login-type-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  background: var(--bg-surface);
+  padding: 5px;
+  border-radius: 12px;
+  margin: 0.85rem 0 0.85rem;
+  border: 1px solid var(--border-default);
+  box-sizing: border-box;
+}
+
+.login-tab-btn {
+  text-align: center;
+  padding: 8px 4px;
+  font-size: clamp(0.72rem, 2.4vw, 0.82rem);
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.login-tab-btn:hover {
+  color: var(--text-main);
+  background: var(--bg-surface-hover);
+}
+
+.login-tab-btn.active {
+  background: var(--brand-accent);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.35);
+}
+
+.login-portal-badge {
+  font-size: clamp(0.7rem, 2.2vw, 0.76rem);
+  padding: 7px 10px;
+  border-radius: 8px;
+  margin-bottom: 1.15rem;
+  text-align: center;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.login-portal-badge.badge-staff {
+  background: rgba(37, 99, 235, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+.login-portal-badge.badge-employee {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.login-portal-badge.badge-contract {
+  background: rgba(217, 119, 6, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(217, 119, 6, 0.25);
 }
 
 .form-group {

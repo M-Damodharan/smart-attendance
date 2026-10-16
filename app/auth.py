@@ -139,7 +139,9 @@ def login(login_type=None):
         active_type = "employee"
 
     if request.method == "POST":
-        login_type_post = (request.form.get("login_type") or active_type).lower()
+        # Form submission specifies login_type; if omitted (e.g. legacy test/API call to /login), check URL
+        raw_login_type = request.form.get("login_type") or login_type or request.args.get("type")
+        login_type_post = raw_login_type.lower() if raw_login_type else None
         raw_code = request.form.get("emp_code", "").strip()
         code = raw_code.upper()
         pw = request.form.get("password", "")
@@ -172,22 +174,39 @@ def login(login_type=None):
         key = f"{code}|{ip}"
         if u and is_pw_valid:
             cat_code = (u["category_code"] or "").upper()
-            # Enforce 3 Separate Login Types Permissions
+            # Strict 3-Tier Category Enforcement when a specific portal is selected
             if login_type_post == "staff":
+                # Staff portal: Category 'STAFF' or HR Admin only
                 if u["role"] != "hr" and cat_code != "STAFF":
                     if cat_code == "CONTRACT":
-                        flash("This account is registered under Contract Labour. Please use the Contract Labour Login.", "err")
+                        flash("Access Denied: This account is registered under Contract Labour. Please use the Contract Labour Login.", "err")
                     else:
-                        flash("This account is registered under Employee Staff. Please use the Employee Login.", "err")
-                    return render_template("login.html", active_type=login_type_post), 403
+                        flash("Access Denied: This account is registered under Employee Staff. Please use the Employee Login.", "err")
+                    return render_template("login.html", active_type="staff"), 403
+
             elif login_type_post == "employee":
+                # Employee portal: Category 'EMPLOYEES' only (strictly rejects HR Admin, Staff, and Contract)
+                if u["role"] == "hr":
+                    flash("Access Denied: HR Administrators must sign in through the Staff Portal.", "err")
+                    return render_template("login.html", active_type="employee"), 403
+                if cat_code == "STAFF":
+                    flash("Access Denied: This account is registered under Staff. Please use the Staff Login portal.", "err")
+                    return render_template("login.html", active_type="employee"), 403
                 if cat_code == "CONTRACT":
-                    flash("This account is registered under Contract Labour. Please use the Contract Labour Login.", "err")
-                    return render_template("login.html", active_type=login_type_post), 403
+                    flash("Access Denied: This account is registered under Contract Labour. Please use the Contract Labour Login.", "err")
+                    return render_template("login.html", active_type="employee"), 403
+                if cat_code != "EMPLOYEES":
+                    flash("Access Denied: This portal is for regular Employees only.", "err")
+                    return render_template("login.html", active_type="employee"), 403
+
             elif login_type_post == "contract":
+                # Contract Labour portal: Category 'CONTRACT' only
                 if cat_code != "CONTRACT":
-                    flash("This portal is exclusively for Contract Labour. Regular staff and employees must use their dedicated login.", "err")
-                    return render_template("login.html", active_type=login_type_post), 403
+                    if u["role"] == "hr" or cat_code == "STAFF":
+                        flash("Access Denied: Staff and HR members cannot log in here. Please use the Staff Login portal.", "err")
+                    else:
+                        flash("Access Denied: Regular Employees cannot log in here. Please use the Employee Login portal.", "err")
+                    return render_template("login.html", active_type="contract"), 403
 
             db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
             session.permanent = True

@@ -26,32 +26,22 @@
     <p class="login-subtitle">Secure biometric &amp; GPS verified attendance system</p>
 
     <!-- 3-Tier Login Architecture Selector -->
-    <div class="login-type-tabs" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--bg-canvas,#0f172a);padding:4px;border-radius:12px;margin:1rem 0;border:1px solid var(--border-default,#334155)">
+    <div class="login-type-tabs">
       <a href="{{ url_for('auth.login', login_type='staff') }}"
-         class="login-tab-btn {% if active_type == 'staff' %}active{% endif %}"
-         style="text-align:center;padding:8px 4px;font-size:0.8rem;font-weight:600;border-radius:8px;text-decoration:none;transition:all .2s ease;{% if active_type == 'staff' %}background:var(--primary,#2563eb);color:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.4);{% else %}color:var(--text-muted,#94a3b8);background:transparent;{% endif %}">
-        💼 Staff
+         class="login-tab-btn {% if active_type == 'staff' %}active{% endif %}">
+        💼 <span>Staff</span>
       </a>
       <a href="{{ url_for('auth.login', login_type='employee') }}"
-         class="login-tab-btn {% if active_type == 'employee' %}active{% endif %}"
-         style="text-align:center;padding:8px 4px;font-size:0.8rem;font-weight:600;border-radius:8px;text-decoration:none;transition:all .2s ease;{% if active_type == 'employee' %}background:var(--primary,#2563eb);color:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.4);{% else %}color:var(--text-muted,#94a3b8);background:transparent;{% endif %}">
-        ⚙️ Employee
+         class="login-tab-btn {% if active_type == 'employee' %}active{% endif %}">
+        ⚙️ <span>Employee</span>
       </a>
       <a href="{{ url_for('auth.login', login_type='contract') }}"
-         class="login-tab-btn {% if active_type == 'contract' %}active{% endif %}"
-         style="text-align:center;padding:8px 4px;font-size:0.8rem;font-weight:600;border-radius:8px;text-decoration:none;transition:all .2s ease;{% if active_type == 'contract' %}background:var(--primary,#2563eb);color:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.4);{% else %}color:var(--text-muted,#94a3b8);background:transparent;{% endif %}">
-        👷 Contract
+         class="login-tab-btn {% if active_type == 'contract' %}active{% endif %}">
+        👷 <span>Contract</span>
       </a>
     </div>
 
-    <div class="login-portal-badge" style="font-size:0.75rem;padding:6px 12px;border-radius:6px;margin-bottom:1rem;text-align:center;font-weight:600;
-      {% if active_type == 'staff' %}
-        background:rgba(37,99,235,0.12);color:#60a5fa;border:1px solid rgba(37,99,235,0.25);
-      {% elif active_type == 'contract' %}
-        background:rgba(217,119,6,0.12);color:#fbbf24;border:1px solid rgba(217,119,6,0.25);
-      {% else %}
-        background:rgba(16,185,129,0.12);color:#34d399;border:1px solid rgba(16,185,129,0.25);
-      {% endif %}">
+    <div class="login-portal-badge {% if active_type == 'staff' %}badge-staff{% elif active_type == 'contract' %}badge-contract{% else %}badge-employee{% endif %}">
       {% if active_type == 'staff' %}
         💼 Staff Portal &bull; Office, HR &amp; Administrative Staff
       {% elif active_type == 'contract' %}
