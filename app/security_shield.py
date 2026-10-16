@@ -62,7 +62,7 @@ REGEX_XSS = [re.compile(p, re.IGNORECASE) for p in XSS_PATTERNS]
 REGEX_PATH = [re.compile(p, re.IGNORECASE) for p in PATH_TRAVERSAL_PATTERNS]
 
 
-def scan_threats(text: str):
+def scan_threats(text: str, check_prompt_injection: bool = True):
     """Scans input text for cyber threats, prompt injections, and exploit attempts.
     Returns: (is_threat: bool, threat_type: str, matched_pattern: str)
     """
@@ -70,10 +70,11 @@ def scan_threats(text: str):
         return False, "", ""
 
     # Check for Prompt Injection / AI Jailbreaking
-    for rx in REGEX_PROMPT_INJECTION:
-        m = rx.search(text)
-        if m:
-            return True, "PROMPT_INJECTION_ATTEMPT", m.group(0)
+    if check_prompt_injection:
+        for rx in REGEX_PROMPT_INJECTION:
+            m = rx.search(text)
+            if m:
+                return True, "PROMPT_INJECTION_ATTEMPT", m.group(0)
 
     # Check for SQL Injection
     for rx in REGEX_SQLI:
@@ -138,9 +139,11 @@ def waf_request_interceptor():
     if path.startswith("/static/") or path == "/favicon.ico":
         return
 
+    is_ai_endpoint = path.startswith("/api/ai") or path.startswith("/ai-assistant")
+
     # 1. Inspect URL parameters
     for k, v in request.args.items():
-        is_threat, threat_type, matched = scan_threats(f"{k} {v}")
+        is_threat, threat_type, matched = scan_threats(f"{k} {v}", check_prompt_injection=is_ai_endpoint)
         if is_threat:
             log_security_event(threat_type, f"GET query param: {k}={matched}", source="WAF_URL")
             abort(403, "Access Denied: Malicious activity detected by SBG Cyber Defense Shield.")
@@ -148,9 +151,12 @@ def waf_request_interceptor():
     # 2. Inspect Form submissions
     if request.form:
         for k, v in request.form.items():
-            if k in ("password", "old_password", "new_password", "confirm_password"):
-                continue  # Passwords may contain arbitrary chars
-            is_threat, threat_type, matched = scan_threats(str(v))
+            if k in ("password", "old_password", "new_password", "confirm_password", "csrf_token"):
+                continue  # Passwords and CSRF tokens may contain arbitrary chars
+            # Skip large base64 strings or image payloads
+            if isinstance(v, str) and (len(v) > 4000 or v.startswith("data:image/")):
+                continue
+            is_threat, threat_type, matched = scan_threats(str(v), check_prompt_injection=is_ai_endpoint)
             if is_threat:
                 log_security_event(threat_type, f"POST form field: {k}={matched}", source="WAF_FORM")
                 abort(403, "Access Denied: Malicious request payload blocked by SBG Cyber Defense Shield.")
@@ -160,11 +166,15 @@ def waf_request_interceptor():
         data = request.get_json(silent=True) or {}
         if isinstance(data, dict):
             for k, v in data.items():
+                # Skip image/biometric data, frames, and CSRF tokens from WAF regex inspection
+                if k in ("selfie", "frames", "in_selfie", "out_selfie", "image", "photo", "csrf_token", "csrf"):
+                    continue
                 if isinstance(v, str):
-                    is_threat, threat_type, matched = scan_threats(v)
+                    if len(v) > 4000 or v.startswith("data:image/"):
+                        continue
+                    is_threat, threat_type, matched = scan_threats(v, check_prompt_injection=is_ai_endpoint)
                     if is_threat:
                         log_security_event(threat_type, f"JSON payload: {k}={matched}", source="WAF_JSON")
-                        # For API endpoints, return JSON 403
                         resp = jsonify({
                             "ok": False,
                             "error": "Access Denied: Malicious payload blocked by SBG Cyber Defense Shield.",

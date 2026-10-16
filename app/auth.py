@@ -81,9 +81,29 @@ def check_csrf():
     if current_app.config.get("TESTING") and current_app.config.get("WTF_CSRF_ENABLED") is False:
         return
     if request.method in ("POST", "PUT", "DELETE"):
-        tok = request.headers.get("X-CSRFToken") or request.form.get("csrf_token")
+        tok = (
+            request.headers.get("X-CSRFToken")
+            or request.headers.get("X-CSRF-Token")
+            or request.headers.get("X-XSRF-Token")
+            or request.form.get("csrf_token")
+        )
+        if not tok and request.is_json:
+            j = request.get_json(silent=True) or {}
+            if isinstance(j, dict):
+                tok = j.get("csrf_token") or j.get("csrf")
+
         sess_tok = session.get("csrf", "")
-        if not tok or not sess_tok or not secrets.compare_digest(tok, sess_tok):
+
+        # Safe self-healing for authenticated users:
+        if not sess_tok and session.get("uid"):
+            sess_tok = csrf_token()
+
+        if not tok or not sess_tok or not secrets.compare_digest(str(tok), str(sess_tok)):
+            if request.path.startswith("/api/") or request.is_json:
+                from flask import jsonify
+                resp = jsonify(ok=False, error="Session expired or invalid CSRF token. Please refresh the page.", code="CSRF_INVALID")
+                resp.status_code = 400
+                return resp
             abort(400, "Invalid or missing CSRF token. Refresh the page and try again.")
 
 
@@ -142,13 +162,19 @@ def login():
         if u and is_pw_valid:
             db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
             session.permanent = True
+            existing_csrf = session.get("csrf")
             session.clear()
             session["uid"], session["name"], session["role"] = u["id"], u["name"], u["role"]
-            csrf_token()
+            session["csrf"] = existing_csrf or secrets.token_hex(16)
             audit("LOGIN", "employee", u["id"], actor=u)
             get_db().commit()
             nxt = request.args.get("next")
             if nxt and nxt.startswith("/") and not nxt.startswith("//"):
+                # Prevent 403 Forbidden on role mismatch
+                if u["role"] != "hr" and nxt.startswith("/hr"):
+                    return redirect(url_for("emp.dashboard"))
+                if u["role"] == "hr" and nxt.startswith(("/dashboard", "/punch", "/leave", "/od")):
+                    return redirect(url_for("hr.dashboard"))
                 return redirect(nxt)
             return redirect(url_for("auth.index"))
 

@@ -233,6 +233,6 @@ def punch():
 @login_required
 def selfie(name):
     safe = os.path.basename(name)
-    if g.user["role"] != "hr" and not safe.startswith(g.user["emp_code"] + "_"):
+    if g.user["role"] != "hr" and not safe.upper().startswith(g.user["emp_code"].upper() + "_"):
         abort(403)
     return send_from_directory(current_app.config["SELFIE_DIR"], safe, mimetype="image/jpeg")

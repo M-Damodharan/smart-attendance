@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from flask import Flask, g, render_template, session
+from flask import Flask, g, render_template, request, session
 
 from config import Config
 
@@ -118,7 +118,12 @@ def create_app():
     @app.errorhandler(404)
     @app.errorhandler(400)
     def err(e):
-        return render_template("error.html", e=e), e.code
+        code = getattr(e, "code", 400)
+        desc = getattr(e, "description", str(e))
+        if request.path.startswith("/api/") or request.is_json:
+            from flask import jsonify
+            return jsonify(ok=False, error=desc, code=code), code
+        return render_template("error.html", e=e), code
 
     if not app.config.get("TESTING") and (os.environ.get("APP_ENV") == "production" or os.environ.get("RENDER")):
         _start_keep_alive(app)
