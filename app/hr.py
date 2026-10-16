@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash
 
 from .auth import hr_required
 from .db import get_db
+from .face_engine import register_face_for_employee, reset_face_for_employee
 from .services import (coords_from_maps_link, audit, build_register, d2s, daterange,
                        finalize_attendance, format_duration, get_employee_category,
                        get_employee_shift_for_date, month_range, now, s2d, today,
@@ -179,6 +180,40 @@ def reset_password(eid):
     audit("PASSWORD_RESET", "employee", eid, emp["emp_code"])
     db.commit()
     flash(f"Password for {emp['emp_code']} reset to {pw} (must change at next login).", "ok")
+    return redirect(url_for("hr.employee_form", eid=eid))
+
+
+@bp.post("/employees/<int:eid>/register-face")
+@hr_required
+def register_face(eid):
+    db = get_db()
+    emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() or abort(404)
+    img_data = request.form.get("face_camera_data")
+    if not img_data and "face_file" in request.files:
+        f = request.files["face_file"]
+        if f and f.filename:
+            img_data = f.read()
+
+    if not img_data:
+        flash("Please capture a photo from camera or upload an image file.", "err")
+        return redirect(url_for("hr.employee_form", eid=eid))
+
+    force = request.form.get("force") == "1"
+    ok, msg, other_emp = register_face_for_employee(db, eid, img_data, registered_by_id=g.user["id"], force=force)
+    if ok:
+        flash(msg, "ok")
+    else:
+        flash(msg, "err")
+    return redirect(url_for("hr.employee_form", eid=eid))
+
+
+@bp.post("/employees/<int:eid>/reset-face")
+@hr_required
+def reset_face(eid):
+    db = get_db()
+    emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() or abort(404)
+    reset_face_for_employee(db, eid, reset_by_id=g.user["id"])
+    flash(f"Face registration reset for {emp['name']} ({emp['emp_code']}). HR can now register a new face.", "ok")
     return redirect(url_for("hr.employee_form", eid=eid))
 
 
@@ -542,9 +577,13 @@ def settings():
             elif act == "system_settings":
                 max_acc = int(f.get("max_gps_accuracy_m", 350))
                 tol = int(f.get("geofence_tolerance_m", 50))
+                req_face = "1" if f.get("require_face_match") in ("1", "on", "true") else "0"
+                face_thresh = float(f.get("face_match_threshold") or 0.75)
                 db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', ?)", (str(max_acc),))
                 db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', ?)", (str(tol),))
-                audit("SETTINGS_SAVE", "system_settings", 1, f"max_gps_accuracy_m={max_acc}, geofence_tolerance_m={tol}")
+                db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('require_face_match', ?)", (req_face,))
+                db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('face_match_threshold', ?)", (str(face_thresh),))
+                audit("SETTINGS_SAVE", "system_settings", 1, f"max_gps_accuracy_m={max_acc}, geofence_tolerance_m={tol}, require_face={req_face}, thresh={face_thresh}")
             db.commit()
             flash("Saved successfully.", "ok")
         except (KeyError, ValueError, sqlite3.IntegrityError):

@@ -91,12 +91,22 @@ def haversine(lat1, lon1, lat2, lon2) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
-# ------------------------------------------------------------------ audit
 def audit(action, entity=None, entity_id=None, details=None, actor=None):
+    from flask import has_request_context
     db = get_db()
-    uid = actor["id"] if actor else session.get("uid")
-    name = actor["name"] if actor else session.get("name")
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr) if request else None
+    uid = None
+    name = None
+    ip = None
+    if actor:
+        uid = actor.get("id") if isinstance(actor, dict) else getattr(actor, "id", None)
+        name = actor.get("name") if isinstance(actor, dict) else getattr(actor, "name", None)
+    elif has_request_context():
+        try:
+            uid = session.get("uid")
+            name = session.get("name")
+            ip = request.headers.get("X-Forwarded-For", request.remote_addr) if request else None
+        except Exception:
+            pass
     db.execute(
         "INSERT INTO audit_log (actor_id, actor_name, action, entity, entity_id, details, ip) VALUES (?,?,?,?,?,?,?)",
         (uid, name, action, entity, str(entity_id) if entity_id is not None else None, details, ip),

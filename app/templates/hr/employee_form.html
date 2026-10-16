@@ -35,8 +35,77 @@
     <div class="actions"><button class="btn primary">Save</button><a class="btn" href="{{ url_for('hr.employees') }}">Cancel</a></div>
   </form>
   {% if emp %}
-  <form method="post" action="{{ url_for('hr.reset_password', eid=emp['id']) }}" class="mt" onsubmit="return confirm('Reset password to Welcome@123?')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger">Reset password</button>
-  </form>{% endif %}
+  <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border-default);">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <form method="post" action="{{ url_for('hr.reset_password', eid=emp['id']) }}" onsubmit="return confirm('Reset password to Welcome@123?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn danger">Reset password</button>
+    </form>
+  </div>
+  {% endif %}
 </section>
+
+{% if emp %}
+<section class="card" style="margin-top: 1.5rem;">
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:1rem;">
+    <div>
+      <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+        <span>👤 Biometric Face ID Binding</span>
+        {% if emp['face_registered'] %}
+          <span class="badge b-approved" style="font-size:0.75rem;">✓ Bound &amp; Active</span>
+        {% else %}
+          <span class="badge b-pending" style="font-size:0.75rem;">⚠ Face Not Registered</span>
+        {% endif %}
+      </h3>
+      <p class="muted small" style="margin-top:4px; margin-bottom:0;">
+        Strict One Face, One Account policy: Rejects duplicate face registrations across accounts and prevents cross-account proxy attendance.
+      </p>
+    </div>
+  </div>
+
+  {% if emp['face_registered'] %}
+  <div style="display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap; background:var(--bg-surface); padding:1rem; border-radius:8px; border:1px solid var(--border-default);">
+    {% if emp['face_image'] %}
+    <img src="{{ url_for('api.selfie', name=emp['face_image']) }}" alt="Registered Face" style="width:100px; height:100px; border-radius:10px; object-fit:cover; border:2px solid var(--brand-accent); box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+    {% endif %}
+    <div style="flex:1; min-width:220px;">
+      <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">Registered Face Template</div>
+      <div class="muted small" style="margin-top:4px;">
+        Registered on: <b>{{ emp['face_registered_at'] or 'Active' }}</b><br>
+        Algorithm: <b>DoG Multi-scale Spatial Projections</b><br>
+        Security status: <b>Exclusive to Employee {{ emp['emp_code'] }}</b>
+      </div>
+    </div>
+    <div>
+      <form method="post" action="{{ url_for('hr.reset_face', eid=emp['id']) }}" onsubmit="return confirm('Are you sure you want to RESET this employee\'s face registration? This is recommended if their appearance changes or they need a fresh verification.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn danger sm" style="padding:8px 14px;">🔄 Reset Face Registration</button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <div style="background:var(--bg-surface); padding:1.25rem; border-radius:8px; border:1px dashed var(--border-default);">
+    <div style="margin-bottom:0.75rem;">
+      <b style="color:var(--text-main);">Register Employee Face:</b>
+      <p class="muted small" style="margin-top:4px;">
+        Capture or upload a clear, front-facing photo of <b>{{ emp['name'] }}</b>. The system will verify that this person is not already registered under another Employee ID before binding.
+      </p>
+    </div>
+
+    <form method="post" action="{{ url_for('hr.register_face', eid=emp['id']) }}" enctype="multipart/form-data" class="stack" style="gap:1rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="two">
+        <label>
+          Choose Photo (File or Camera)
+          <input type="file" name="face_file" accept="image/*" capture="user" required>
+        </label>
+        <div style="display:flex; align-items:flex-end;">
+          <button type="submit" class="btn primary" style="width:100%; height:42px;">📸 Register &amp; Bind Face</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

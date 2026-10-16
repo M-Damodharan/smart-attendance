@@ -1,0 +1,344 @@
+================================================================================
+          SRI BALAJI GEARS (SBG) - SMART ATTENDANCE SYSTEM
+                PROJECT WORKFLOW & FILE-BY-FILE GUIDE
+================================================================================
+
+This document explains the complete working workflow of the application, 
+the purpose of every file and folder, why each file is used, and how data
+moves from the mobile app/browser to the database and cloud.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS:
+--------------------------------------------------------------------------------
+1. High-Level Working Workflow (How the System Operates)
+   - Flow A: Employee Daily Attendance Journey (Check-In & Check-Out)
+   - Flow B: Shift 1 vs Shift 2 Dynamic Detection
+   - Flow C: Category-Wise Rules (Staff, Regular, Contract)
+   - Flow D: HR Administration & Approval Journey
+   - Flow E: 24/7 Cloud Architecture & Mobile APK Sync
+2. Complete Directory Structure
+3. File-by-File Breakdown (What Each File Does & Why It Is Used)
+4. Database Tables & Data Storage
+5. Security Shield & Cyber Protection
+6. How to Run Locally & In Cloud
+
+================================================================================
+1. HIGH-LEVEL WORKING WORKFLOW (HOW THE SYSTEM OPERATES)
+================================================================================
+
+--------------------------------------------------------------------------------
+FLOW A: EMPLOYEE DAILY ATTENDANCE JOURNEY (PUNCH IN / OUT)
+--------------------------------------------------------------------------------
+1. EMPLOYEE OPENS APP / WEBSITE:
+   - Employee opens the Android APK or visits https://smart-attendance-u7e6.onrender.com
+   - Enters Employee Code (e.g., EMP001) and Password.
+   - The system checks credentials with salted password hashing (app/auth.py).
+   - If role is 'employee', system automatically redirects to /dashboard.
+
+2. PUNCH SCREEN (app/templates/emp/punch.html & app/static/js/punch.js):
+   - Employee taps "Punch Check-In" or "Punch Check-Out".
+   - STEP 1 (GPS Geofencing):
+     * Browser/Phone captures exact latitude, longitude, and accuracy radius.
+     * Sends coordinates to `/api/geo-check`.
+     * System computes distance using the Haversine formula (app/services.py).
+     * If distance <= office radius + tolerance (default 200m), GPS turns GREEN.
+     * If employee has an approved On-Duty (OD) request, GPS check is bypassed.
+   - STEP 2 (Front Camera & Biometric Challenge):
+     * Phone's front-facing camera turns on.
+     * System issues a random biometric liveness challenge from `/api/challenge`
+       (e.g., "Blink twice", "Smile", "Turn head left").
+     * Captures consecutive face frames and calculates motion score to guarantee
+       a real human face is present (prevents photo/screen spoofing).
+   - STEP 3 (Final Verification & Submit):
+     * Employee taps the button. Payload is sent to `/api/punch`.
+     * The selfie photo is securely stored on disk.
+     * Attendance record is created or updated in the SQLite database.
+
+--------------------------------------------------------------------------------
+FLOW B: SHIFT 1 VS SHIFT 2 DYNAMIC DETECTION
+--------------------------------------------------------------------------------
+The system automatically classifies employees into the correct shift based
+on actual punch time:
+
+- SHIFT 1 (Day Shift): 08:00 AM to 08:00 PM (12 Hours)
+  * If employee punches in between 06:00 AM and 01:59 PM:
+    Stored and tracked under Shift 1.
+- SHIFT 2 (Night Shift): 08:00 PM to 08:00 AM (12 Hours)
+  * If employee punches in between 06:00 PM and 05:59 AM:
+    Stored and tracked under Shift 2 across midnight.
+
+--------------------------------------------------------------------------------
+FLOW C: CATEGORY-WISE RULES & OVERTIME (OT)
+--------------------------------------------------------------------------------
+Every employee belongs to one of three categories:
+1. STAFF:
+   - Standard: 10 Hours/day | Overtime: 0 Hours
+2. REGULAR EMPLOYEES:
+   - Standard: 12 Hours/day | Overtime: 2 Hours
+3. CONTRACT EMPLOYEES:
+   - Standard: 10 Hours/day | Overtime: 2 Hours
+   - Example: 12 hours worked = 10 Hours Regular Present + 2 Hours Overtime (OT).
+   - Daily & monthly registers compute both regular and OT hours separately.
+
+--------------------------------------------------------------------------------
+FLOW D: HR ADMINISTRATION JOURNEY
+--------------------------------------------------------------------------------
+1. HR Admin logs in with code HR001 (default password: damo12345 or 123456789).
+2. HR Dashboard (/hr/): Real-time KPI counters (Present, Working, Absent, OD, Leave).
+3. Employee Master (/hr/employees): Add, update, assign shifts/categories, delete.
+4. Attendance Register (/hr/attendance): Live category & shift filter table.
+5. Approvals (/hr/approvals): 1-click Approve or Reject for Leave and On-Duty.
+6. Monthly Reports (/hr/reports): Complete 1-to-31 day monthly matrix with Excel export.
+7. Settings (/hr/settings): Adjust office GPS location, radius, shifts, and holidays.
+8. Audit Ledger (/hr/audit): Tamper-proof log of all logins, edits, and security blocks.
+
+--------------------------------------------------------------------------------
+FLOW E: 24/7 CLOUD ARCHITECTURE & MOBILE APP
+--------------------------------------------------------------------------------
+1. CLOUD SERVER (RENDER.COM):
+   - Hosted at: https://smart-attendance-u7e6.onrender.com
+   - Runs Gunicorn WSGI multi-threaded server.
+2. 24/7 GITHUB HEARTBEAT (.github/workflows/keepalive.yml):
+   - Runs every 5 minutes in the cloud to ping /healthz.
+   - Prevents Render free-tier from sleeping.
+   - Allows mobile app & cloud website to run 24/7 EVEN IF YOUR LAPTOP IS OFF.
+3. ANDROID APK (android-sbg/):
+   - Standalone native Android wrapper with GPS & camera permissions enabled.
+   - Loads the live server URL with seamless touch gestures and offline resilience.
+
+
+================================================================================
+2. COMPLETE DIRECTORY STRUCTURE
+================================================================================
+
+d:\smart-attendance\
+│
+├── app/                              # Main Application Package
+│   ├── __init__.py                   # App factory, blueprints, error handlers
+│   ├── auth.py                       # Login, sessions, CSRF, password rules
+│   ├── employee.py                   # Employee portal routes (Dashboard, Leaves, OD)
+│   ├── hr.py                         # HR portal routes (CRUD, Reports, Register)
+│   ├── api.py                        # REST APIs (Punch, GPS Check, Liveness, Selfie)
+│   ├── ai_assistant.py               # AI Attendance Assistant chat engine
+│   ├── security_shield.py            # WAF, SQLi/XSS defense, Cyber attack blocker
+│   ├── services.py                   # Core business logic (Haversine GPS, Shifts, OT)
+│   ├── db.py                         # SQLite database schema, connections, seeds
+│   │
+│   ├── templates/                    # HTML UI Templates (Jinja2)
+│   │   ├── base.html                 # Main layout with header, navigation, theme toggle
+│   │   ├── login.html                # Modern split-pane login interface
+│   │   ├── error.html                # Error page (400, 403, 404, 500) with recovery buttons
+│   │   ├── emp/                      # Employee views
+│   │   │   ├── dashboard.html        # Daily status, hours counter, 7-day strip
+│   │   │   ├── punch.html            # Biometric camera + GPS punch interface
+│   │   │   ├── history.html          # Monthly attendance history table
+│   │   │   ├── leave.html            # Leave balance and application form
+│   │   │   └── od.html               # On-Duty field application form
+│   │   └── hr/                       # HR Administration views
+│   │       ├── dashboard.html        # Live KPI cards, category breakdown, quick links
+│   │       ├── employees.html        # Employee master list with filters & search
+│   │       ├── employee_form.html    # Add / edit employee form with category & shift
+│   │       ├── attendance.html       # Daily attendance register with status pills
+│   │       ├── approvals.html        # Pending leave & OD approval cards
+│   │       ├── corrections.html      # Manual attendance correction tool
+│   │       ├── reports.html          # 1-to-31 day monthly matrix report
+│   │       ├── settings.html         # Office geofence, shifts, holidays, policies
+│   │       └── audit.html            # System audit ledger
+│   │
+│   └── static/                       # Static Assets
+│       ├── css/style.css             # Responsive enterprise dark/light theme CSS
+│       ├── js/app.js                 # Global JavaScript, CSRF handler, AI modal
+│       ├── js/punch.js               # Camera stream, GPS watcher, liveness engine
+│       ├── js/sw.js                  # Service Worker for PWA offline caching
+│       └── manifest.json             # Progressive Web App (PWA) manifest
+│
+├── android-sbg/                      # Android Native Mobile App Studio Project
+│   ├── app/src/main/AndroidManifest.xml # Permissions (GPS, Camera, Internet)
+│   ├── app/src/main/java/.../MainActivity.java # WebView, cookie manager, file chooser
+│   └── build/outputs/apk/debug/app-debug.apk   # Ready-to-install Android APK file
+│
+├── instance/                         # Local Runtime Data
+│   ├── attendance.db                 # SQLite database file (WAL mode enabled)
+│   └── selfies/                      # Captured biometric attendance selfie photos
+│
+├── scripts/                          # Background Maintenance Utilities
+│   └── watchdog_24_7.py              # Automatic restart monitor for local server
+│
+├── tests/                            # Automated Pytest Verification Suite (81 Tests)
+│   ├── test_20_points.py             # Verifies 20 core enterprise requirements
+│   ├── test_all_pages.py             # Audits every single web route and screen
+│   ├── test_employee_crud.py         # Tests employee creation, edit, cascade delete
+│   ├── test_security_db.py           # Tests SQLi defense, CSRF, RBAC, path traversal
+│   ├── test_cyber_security.py        # Tests AI prompt injection and WAF filters
+│   ├── test_dynamic_shifts.py        # Tests Shift 1 (Day) vs Shift 2 (Night)
+│   ├── test_category_and_docs.py     # Tests Staff/Employee/Contract OT calculation
+│   ├── test_e2e.py                   # Full end-to-end punch & approval journey
+│   └── test_improvements.py          # Edge case and performance benchmarks
+│
+├── .github/workflows/
+│   └── keepalive.yml                 # GitHub Cloud cron job to ping Render every 5 mins
+│
+├── config.py                         # Environment variables and configuration classes
+├── run.py                            # Production Waitress WSGI server (Local Windows)
+├── wsgi.py                           # Gunicorn entry point (Cloud Linux / Render)
+├── gunicorn.conf.py                  # Concurrency and worker settings for Render
+├── render.yaml                       # Infrastructure-as-code deployment configuration
+├── requirements.txt                  # Python dependencies (Flask, Pillow, OpenPyXL, etc.)
+└── README.md                         # Project documentation and quick-start guide
+
+
+================================================================================
+3. FILE-BY-FILE BREAKDOWN (WHAT EACH FILE DOES & WHY IT IS USED)
+================================================================================
+
+1. app/__init__.py:
+   - WHY IT'S USED: Application Factory. Initializes Flask, registers blueprints, 
+     configures reverse proxy handling (ProxyFix), and attaches security error handlers.
+   - WHAT IT DOES: Sets up SQLite teardown, attaches before_request interceptors 
+     for authentication, CSRF, and WAF cyber defense. Returns JSON for API errors.
+
+2. app/auth.py:
+   - WHY IT'S USED: Authentication & Access Control.
+   - WHAT IT DOES: Handles /login, /logout, /change-password. Provides decorators:
+     * @login_required: Ensures user is signed in.
+     * @hr_required: Restricts route to HR administrators only.
+     * @employee_required: Directs regular employees to employee portal.
+     * check_csrf(): Validates CSRF tokens across forms, headers, and JSON bodies.
+     * Login Throttling: Protects against brute-force attacks while preventing DoS.
+
+3. app/employee.py:
+   - WHY IT'S USED: Employee Self-Service Portal.
+   - WHAT IT DOES: Manages employee dashboard, punch screen view, monthly attendance 
+     history, CSV/Excel history export, leave balance tracking, and on-duty (OD) requests.
+
+4. app/hr.py:
+   - WHY IT'S USED: HR Management & Operations Portal.
+   - WHAT IT DOES: Full CRUD for employees (Add, Edit, Activate/Deactivate, Delete), 
+     attendance register view, shift scheduling, approval workflow for leaves and OD, 
+     attendance corrections, monthly 1-to-31 day reports with Excel export, and system settings.
+
+5. app/api.py:
+   - WHY IT'S USED: REST API Endpoints for Mobile App & Web Punches.
+   - WHAT IT DOES:
+     * POST /api/geo-check: Evaluates GPS location against office radius and tolerance.
+     * POST /api/challenge: Generates random biometric liveness prompts.
+     * POST /api/punch: Validates punch, computes duration, assigns Shift 1 or 2, 
+       calculates overtime, and stores selfie photo.
+     * GET /api/selfie/<name>: Serves encrypted selfie images with role-based checks.
+
+6. app/ai_assistant.py:
+   - WHY IT'S USED: Intelligent AI Attendance Assistant.
+   - WHAT IT DOES: Answers natural language questions from employees and HR:
+     * "How many hours have I worked today?"
+     * "What time did I punch in?"
+     * "Show Shift 1 present list" (HR only)
+     * "Show today's absent employees" (HR only)
+     * "What are my leave balances?"
+
+7. app/security_shield.py:
+   - WHY IT'S USED: Cyber Defense Shield & Web Application Firewall (WAF).
+   - WHAT IT DOES: Inspects incoming requests for SQL injection (SQLi), Cross-Site 
+     Scripting (XSS), Path Traversal, and AI Prompt Injection attempts. Blocks attackers 
+     with HTTP 403 and records incidents in the audit ledger.
+
+8. app/services.py:
+   - WHY IT'S USED: Reusable Business Logic & Mathematical Formulas.
+   - WHAT IT DOES:
+     * haversine(lat1, lon1, lat2, lon2): Calculates distance in meters between GPS points.
+     * determine_shift_from_punch(): Automatically assigns Shift 1 or Shift 2 based on punch time.
+     * finalize_attendance(): Calculates working hours, overtime hours, and status (P, HD, A, OT).
+     * build_register(): Generates the monthly attendance matrix for reports.
+
+9. app/db.py:
+   - WHY IT'S USED: Database Management & Migrations.
+   - WHAT IT DOES: Defines database schema, enables WAL (Write-Ahead Logging) mode, 
+     executes schema migrations, and seeds baseline shifts, offices, categories, and admin users.
+
+10. config.py:
+    - WHY IT'S USED: Centralized Configuration.
+    - WHAT IT DOES: Reads environment variables (APP_ENV, SECRET_KEY, DATABASE), sets 
+      GPS accuracy limits, geofence tolerance, session lifetimes, and security flags.
+
+11. run.py:
+    - WHY IT'S USED: Production Local Server Launcher.
+    - WHAT IT DOES: Runs a multi-threaded Waitress WSGI server on port 5000 on Windows.
+
+12. wsgi.py & gunicorn.conf.py:
+    - WHY IT'S USED: Cloud Production Server Entrypoints.
+    - WHAT IT DOES: Connects the Flask application to Gunicorn on Render cloud with 
+      optimized worker concurrency, timeouts, and preloading.
+
+13. render.yaml:
+    - WHY IT'S USED: Cloud Deployment Automation.
+    - WHAT IT DOES: Infrastructure-as-code for Render.com. Automatically triggers build, 
+      installs dependencies, sets environment variables, and launches Gunicorn.
+
+14. .github/workflows/keepalive.yml:
+    - WHY IT'S USED: 24/7 Cloud Heartbeat.
+    - WHAT IT DOES: Runs on GitHub cloud servers every 5 minutes to ping the Render URL, 
+      keeping the server awake even when your laptop is turned off.
+
+15. android-sbg/MainActivity.java:
+    - WHY IT'S USED: Android Mobile App Logic.
+    - WHAT IT DOES: Loads the attendance web portal in a high-speed Android WebView, 
+      bridges GPS hardware and camera permissions, manages session cookies, and handles 
+      pull-to-refresh.
+
+
+================================================================================
+4. DATABASE TABLES & DATA STORAGE (SQLite WAL MODE)
+================================================================================
+
+1. employees:
+   - Stores employee records: emp_code, name, email, phone, role ('hr'/'employee'), 
+     shift_id, category_id, office_id, password_hash, active, joined_on.
+
+2. attendance:
+   - Daily attendance records: emp_id, date, shift_id, check_in, check_out, 
+     in_lat, in_lng, in_dist, out_lat, out_lng, out_dist, in_selfie, out_selfie, 
+     work_hours, ot_hours, status ('P', 'HD', 'A', 'OT', 'IN'), late (0/1).
+
+3. shifts:
+   - Shift definitions: name ('Shift 1', 'Shift 2'), start_time, end_time, 
+     grace_min, full_hours, half_hours, ot_min_hours, active.
+
+4. employee_categories:
+   - Category rules: code ('STAFF', 'EMPLOYEES', 'CONTRACT'), work_hours, overtime_hours.
+
+5. offices:
+   - Geofence coordinates: name, lat, lng, radius_m, active.
+
+6. leaves & leave_types:
+   - Leave applications, quotas (CL, SL, PL), balances, and approvals.
+
+7. od_requests:
+   - On-Duty requests with client location, date, purpose, and approval status.
+
+8. audit_log:
+   - Security ledger recording actor, action, timestamp, details, and client IP.
+
+9. login_attempts:
+   - Tracks failed attempts per IP/code to enforce lockout throttling.
+
+
+================================================================================
+5. HOW TO RUN THE SYSTEM
+================================================================================
+
+A. LOCAL ENVIRONMENT (ON YOUR LAPTOP):
+   1. Open PowerShell in d:\smart-attendance
+   2. Run: .\venv\Scripts\python.exe run.py
+   3. Open browser: http://127.0.0.1:5000
+   4. Or run the 24/7 watchdog: .\venv\Scripts\python.exe scripts\watchdog_24_7.py
+
+B. LIVE CLOUD ENVIRONMENT (ANY DEVICE, 24/7):
+   1. Open browser on any phone, tablet, or PC:
+      https://smart-attendance-u7e6.onrender.com
+   2. Or open the Android SBG Attendance Mobile App.
+   3. Sign In Credentials:
+      - HR Administrator: HR001 | Password: damo12345 (or 123456789)
+      - Employee: EMP001 | Password: 123456789
+
+================================================================================
+                    END OF SYSTEM GUIDE & WORKFLOW
+================================================================================

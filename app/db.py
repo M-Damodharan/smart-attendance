@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS employees (
     password_hash TEXT NOT NULL,
     must_change_pw INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
+    face_registered INTEGER NOT NULL DEFAULT 0,
+    face_template TEXT,
+    face_registered_at TEXT,
+    face_registered_by INTEGER REFERENCES employees(id),
+    face_image TEXT,
     joined_on TEXT NOT NULL DEFAULT (date('now')),
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
@@ -83,6 +88,8 @@ CREATE TABLE IF NOT EXISTS attendance (
     ot_hours REAL NOT NULL DEFAULT 0,
     status TEXT,                        -- P / HD / A / OT (set at check-out)
     late INTEGER NOT NULL DEFAULT 0,
+    face_verified INTEGER NOT NULL DEFAULT 0,
+    face_similarity REAL NOT NULL DEFAULT 0.0,
     source TEXT NOT NULL DEFAULT 'app', -- app | correction
     remarks TEXT,
     UNIQUE (emp_id, date)
@@ -210,10 +217,24 @@ def init_db(app):
     emp_cols = [c[1] for c in con.execute("PRAGMA table_info(employees)").fetchall()]
     if "category_id" not in emp_cols:
         con.execute("ALTER TABLE employees ADD COLUMN category_id INTEGER REFERENCES employee_categories(id)")
+    if "face_registered" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN face_registered INTEGER NOT NULL DEFAULT 0")
+    if "face_template" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN face_template TEXT")
+    if "face_registered_at" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN face_registered_at TEXT")
+    if "face_registered_by" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN face_registered_by INTEGER REFERENCES employees(id)")
+    if "face_image" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN face_image TEXT")
 
     att_cols = [c[1] for c in con.execute("PRAGMA table_info(attendance)").fetchall()]
     if "shift_id" not in att_cols:
         con.execute("ALTER TABLE attendance ADD COLUMN shift_id INTEGER REFERENCES shifts(id)")
+    if "face_verified" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN face_verified INTEGER NOT NULL DEFAULT 0")
+    if "face_similarity" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN face_similarity REAL NOT NULL DEFAULT 0.0")
 
     _seed_categories(con)
 
@@ -229,6 +250,11 @@ def init_db(app):
 
     if con.execute("SELECT COUNT(*) FROM shifts").fetchone()[0] == 0:
         _seed_base(con)
+
+    # Ensure system_settings has face recognition defaults
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.75')")
+
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
         _seed_demo(con)
     else:
@@ -241,14 +267,23 @@ def init_db(app):
         else:
             con.execute("UPDATE employees SET password_hash=?, must_change_pw=0, active=1 WHERE role='hr' AND emp_code=?",
                         (generate_password_hash(pw), code))
-        if con.execute("SELECT COUNT(*) FROM employees WHERE role='employee'").fetchone()[0] == 0:
-            emp_pw = generate_password_hash("123456789")
-            con.execute(
-                "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
-                "VALUES ('EMP001', 'Employee Staff', 'staff@sribalajigears.com', 'Production', 'Operator', 'employee', "
-                "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
-                (emp_cat_id, emp_pw))
-            print("[setup] Baseline employee EMP001 created with active login.")
+
+    # Ensure baseline accounts EMP001 and E0012 (Damodharan M) exist
+    emp_pw = generate_password_hash("123456789")
+    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='EMP001'").fetchone()[0] == 0:
+        con.execute(
+            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+            "VALUES ('EMP001', 'Employee Staff', 'staff@sribalajigears.com', 'Production', 'Operator', 'employee', "
+            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+            (emp_cat_id, emp_pw))
+        print("[setup] Baseline employee EMP001 created with active login.")
+    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='E0012'").fetchone()[0] == 0:
+        con.execute(
+            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+            "VALUES ('E0012', 'Damodharan M', 'damodharan@sribalajigears.com', 'Engineering', 'Developer', 'employee', "
+            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+            (staff_id, emp_pw))
+        print("[setup] Baseline employee E0012 (Damodharan M) created with active login.")
     con.commit()
     con.close()
 
@@ -271,6 +306,8 @@ def _seed_base(con):
         con.execute("INSERT INTO leave_types (code, name, annual_quota) VALUES (?,?,?)", (code, name, q))
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '350')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '50')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.75')")
 
 
 def _seed_demo(con):

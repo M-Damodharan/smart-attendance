@@ -12,6 +12,7 @@ from PIL import Image, ImageChops, ImageStat
 
 from .auth import employee_required, login_required
 from .db import get_db
+from .face_engine import verify_face_for_employee, FACE_MATCH_THRESHOLD
 from .services import (approved_od_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
                        get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s)
 
@@ -191,6 +192,39 @@ def punch():
         db.commit()
         return _err(f"You are {geo['distance']} m from {geo['office']} (allowed {geo['radius']} m).")
 
+    # 4) One Face, One Account Biometric Face Verification
+    thresh_row = db.execute("SELECT value FROM system_settings WHERE key='face_match_threshold'").fetchone()
+    face_thresh = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else FACE_MATCH_THRESHOLD
+
+    req_match_row = db.execute("SELECT value FROM system_settings WHERE key='require_face_match'").fetchone()
+    require_face_match = (req_match_row["value"] == "1") if req_match_row else True
+
+    face_verified = 0
+    face_sim = 0.0
+
+    face_res = verify_face_for_employee(db, user["id"], selfie, threshold=face_thresh)
+    if face_res["verified"]:
+        face_verified = 1
+        face_sim = face_res.get("similarity", 1.0)
+    else:
+        # Cross-account breach detection: Live face matches another registered employee
+        if face_res["status"] == "BOUND_TO_OTHER_ACCOUNT":
+            return _err("Face does not match this employee account. Please log in with your registered account.", 403)
+
+        # Registered face mismatch
+        if face_res["status"] == "FACE_MISMATCH":
+            return _err("Face verification failed. Live face does not match the registered face for this employee.", 403)
+
+        # Unregistered employee
+        if face_res["status"] == "NOT_REGISTERED":
+            if require_face_match and not current_app.config.get("TESTING", False):
+                return _err("Face not registered for your account. Please contact HR to register your face.", 403)
+            face_verified = 0
+            face_sim = 0.0
+        elif face_res["status"] == "EXTRACT_FAILED":
+            if require_face_match and not current_app.config.get("TESTING", False):
+                return _err("Face verification could not detect a valid face in selfie.", 403)
+
     selfie_name = _save_selfie(selfie, user, kind)
     shift = determine_shift_from_punch(t, db)
     cat = get_employee_category(user["id"])
@@ -198,11 +232,11 @@ def punch():
     if kind == "in":
         late = 1 if finalize_attendance({"check_in": t.strftime("%Y-%m-%d %H:%M:%S"), "check_out": None}, shift, cat)["late"] else 0
         db.execute(
-            "INSERT INTO attendance (emp_id, date, shift_id, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO attendance (emp_id, date, shift_id, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late, face_verified, face_similarity) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (user["id"], today_s, shift["id"], t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"],
-             selfie_name, 1 if geo["inside"] else 0, late))
-        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late} od={geo['od']}")
+             selfie_name, 1 if geo["inside"] else 0, late, face_verified, round(face_sim, 4)))
+        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late} od={geo['od']} face_ok={face_verified}")
         db.commit()
         return jsonify(ok=True, message=f"Checked in for {shift['name']}" + (" — marked late" if late else ""), time=f"{t:%I:%M %p}", shift=shift["name"], late=bool(late))
 
@@ -211,10 +245,11 @@ def punch():
     dur_str = format_duration(upd["work_hours"])
     db.execute(
         "UPDATE attendance SET shift_id=?, check_out=?, out_lat=?, out_lng=?, out_dist=?, out_selfie=?, out_geo_ok=?, "
-        "work_hours=?, ot_hours=?, status=?, late=? WHERE id=?",
+        "work_hours=?, ot_hours=?, status=?, late=?, face_verified=?, face_similarity=? WHERE id=?",
         (shift_target["id"], t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"], selfie_name,
-         1 if geo["inside"] else 0, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], target_rec["id"]))
-    audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift_target['name']} hours={upd['work_hours']} status={upd['status']}")
+         1 if geo["inside"] else 0, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"],
+         face_verified, round(face_sim, 4), target_rec["id"]))
+    audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift_target['name']} hours={upd['work_hours']} status={upd['status']} face_ok={face_verified}")
     db.commit()
     return jsonify(
         ok=True,
