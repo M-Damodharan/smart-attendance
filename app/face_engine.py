@@ -9,9 +9,15 @@ Enforces the strict security policy:
 import base64
 import io
 import json
+import math
 import os
 from datetime import datetime
-import numpy as np
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
 from PIL import Image, ImageOps, ImageFilter
 from flask import current_app
 
@@ -64,52 +70,95 @@ def extract_face_embedding(img_input) -> list:
 
     # Canonical 64x64 resolution
     im = im.resize((64, 64), Image.Resampling.BILINEAR)
-    arr = np.asarray(im, dtype=np.float32)
 
-    # Difference of Gaussians (DoG): isolates structural facial geometry (eyes, nose, jaw)
-    blurred = np.asarray(im.filter(ImageFilter.GaussianBlur(radius=2)), dtype=np.float32)
-    structure = arr - blurred
+    if np is not None:
+        arr = np.asarray(im, dtype=np.float32)
+        blurred = np.asarray(im.filter(ImageFilter.GaussianBlur(radius=2)), dtype=np.float32)
+        structure = arr - blurred
 
-    # Multi-scale block spatial projections: 4x4 blocks (16x16 pixels each)
-    block_feats = []
-    cell_size = 16
-    for r in range(4):
-        for c in range(4):
-            b = structure[r * cell_size : (r + 1) * cell_size, c * cell_size : (c + 1) * cell_size]
-            # Standard deviation of local structure
-            block_feats.append(float(np.std(b)))
+        block_feats = []
+        cell_size = 16
+        for r in range(4):
+            for c in range(4):
+                b = structure[r * cell_size : (r + 1) * cell_size, c * cell_size : (c + 1) * cell_size]
+                block_feats.append(float(np.std(b)))
 
-            # Horizontal & vertical spatial intensity profiles
-            h_proj = np.mean(b, axis=0)  # 16 values
-            v_proj = np.mean(b, axis=1)  # 16 values
+                h_proj = np.mean(b, axis=0)
+                v_proj = np.mean(b, axis=1)
 
-            # First 4 low-frequency cosine basis projections
-            for k in range(1, 5):
-                cos_k = np.cos(np.pi * (np.arange(16) + 0.5) * k / 16.0)
-                block_feats.append(float(np.dot(h_proj, cos_k)))
-                block_feats.append(float(np.dot(v_proj, cos_k)))
+                for k in range(1, 5):
+                    cos_k = np.cos(np.pi * (np.arange(16) + 0.5) * k / 16.0)
+                    block_feats.append(float(np.dot(h_proj, cos_k)))
+                    block_feats.append(float(np.dot(v_proj, cos_k)))
 
-    # Global structural descriptors (downscaled 16x16 macro geometry)
-    macro = np.asarray(im.resize((16, 16), Image.Resampling.BILINEAR), dtype=np.float32)
-    macro_norm = (macro - np.mean(macro)) / (np.std(macro) + 1e-5)
-    for u in range(4):
-        for v in range(4):
-            if u == 0 and v == 0:
-                continue
-            cos_u = np.cos((2 * np.arange(16) + 1) * u * np.pi / 32.0)
-            cos_v = np.cos((2 * np.arange(16) + 1) * v * np.pi / 32.0)
-            val = np.sum(macro_norm * np.outer(cos_u, cos_v))
-            block_feats.append(float(val))
+        macro = np.asarray(im.resize((16, 16), Image.Resampling.BILINEAR), dtype=np.float32)
+        macro_norm = (macro - np.mean(macro)) / (np.std(macro) + 1e-5)
+        for u in range(4):
+            for v in range(4):
+                if u == 0 and v == 0:
+                    continue
+                cos_u = np.cos((2 * np.arange(16) + 1) * u * np.pi / 32.0)
+                cos_v = np.cos((2 * np.arange(16) + 1) * v * np.pi / 32.0)
+                val = np.sum(macro_norm * np.outer(cos_u, cos_v))
+                block_feats.append(float(val))
 
-    vec = np.array(block_feats, dtype=np.float32)
+        vec = np.array(block_feats, dtype=np.float32)
+        vec = vec - np.mean(vec)
+        norm = float(np.linalg.norm(vec))
+        if norm > 1e-7:
+            vec = vec / norm
 
-    # Zero-mean center and L2 normalize
-    vec = vec - np.mean(vec)
-    norm = float(np.linalg.norm(vec))
-    if norm > 1e-7:
-        vec = vec / norm
+        return [round(float(x), 6) for x in vec]
+    else:
+        # High-precision pure Python fallback (zero external dependencies)
+        pixels = list(im.getdata())
+        blurred_pixels = list(im.filter(ImageFilter.GaussianBlur(radius=2)).getdata())
+        structure = [float(p) - float(b) for p, b in zip(pixels, blurred_pixels)]
 
-    return [round(float(x), 6) for x in vec]
+        block_feats = []
+        cell_size = 16
+        for r in range(4):
+            for c in range(4):
+                block_vals = []
+                for br in range(16):
+                    row_idx = (r * cell_size + br) * 64 + (c * cell_size)
+                    block_vals.extend(structure[row_idx : row_idx + 16])
+                b_mean = sum(block_vals) / 256.0
+                b_std = math.sqrt(sum((x - b_mean) ** 2 for x in block_vals) / 256.0)
+                block_feats.append(b_std)
+
+                h_proj = [sum(block_vals[br * 16 + bc] for br in range(16)) / 16.0 for bc in range(16)]
+                v_proj = [sum(block_vals[br * 16 + bc] for bc in range(16)) / 16.0 for br in range(16)]
+
+                for k in range(1, 5):
+                    cos_k = [math.cos(math.pi * (idx + 0.5) * k / 16.0) for idx in range(16)]
+                    block_feats.append(sum(h * c for h, c in zip(h_proj, cos_k)))
+                    block_feats.append(sum(v * c for v, c in zip(v_proj, cos_k)))
+
+        macro_im = im.resize((16, 16), Image.Resampling.BILINEAR)
+        macro_vals = [float(x) for x in macro_im.getdata()]
+        m_mean = sum(macro_vals) / 256.0
+        m_std = math.sqrt(sum((x - m_mean) ** 2 for x in macro_vals) / 256.0) + 1e-5
+        macro_norm = [(x - m_mean) / m_std for x in macro_vals]
+
+        for u in range(4):
+            for v in range(4):
+                if u == 0 and v == 0:
+                    continue
+                cos_u = [math.cos((2 * idx + 1) * u * math.pi / 32.0) for idx in range(16)]
+                cos_v = [math.cos((2 * idx + 1) * v * math.pi / 32.0) for idx in range(16)]
+                val = 0.0
+                for r_idx in range(16):
+                    for c_idx in range(16):
+                        val += macro_norm[r_idx * 16 + c_idx] * cos_u[r_idx] * cos_v[c_idx]
+                block_feats.append(val)
+
+        mean_feat = sum(block_feats) / len(block_feats)
+        centered = [x - mean_feat for x in block_feats]
+        norm = math.sqrt(sum(x * x for x in centered))
+        if norm > 1e-7:
+            centered = [x / norm for x in centered]
+        return [round(float(x), 6) for x in centered]
 
 
 def compute_similarity(v1, v2) -> float:
@@ -118,11 +167,12 @@ def compute_similarity(v1, v2) -> float:
     """
     if not v1 or not v2:
         return 0.0
-    a = np.array(v1, dtype=np.float32)
-    b = np.array(v2, dtype=np.float32)
-    dot = float(np.dot(a, b))
-    # Cosine similarity for unit vectors is simply dot product
-    # Clamp to [0.0, 1.0]
+    if np is not None:
+        a = np.array(v1, dtype=np.float32)
+        b = np.array(v2, dtype=np.float32)
+        dot = float(np.dot(a, b))
+    else:
+        dot = sum(float(x) * float(y) for x, y in zip(v1, v2))
     return max(0.0, min(1.0, dot))
 
 
@@ -191,7 +241,7 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
       - similarity: float
       - error: str (user-friendly error message if verification fails)
     """
-    if isinstance(live_input, (list, tuple, np.ndarray)):
+    if isinstance(live_input, (list, tuple)) or (np is not None and isinstance(live_input, np.ndarray)):
         live_embedding = list(live_input)
     else:
         try:
