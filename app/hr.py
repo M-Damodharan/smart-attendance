@@ -38,6 +38,7 @@ def _employees(only_active=True, shift_id=None, dept=None, category_id=None):
 
 # ------------------------------------------------------------------ dashboard
 @bp.route("/")
+@bp.route("/dashboard")
 @hr_required
 def dashboard():
     db, t = get_db(), today()
