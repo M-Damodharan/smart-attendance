@@ -15,7 +15,7 @@
       <span class="badge" style="background:var(--bg-card);border:1px solid var(--border-default);padding:4px 10px;font-size:0.8rem;font-weight:700;color:var(--brand-accent)">
         🏷️ {{ category['name'] if category else 'Employee' }} ({{ category['work_hours']|int if category else 12 }}h/day)
       </span>
-      {% if category and category.get('code') == 'CONTRACT' %}
+      {% if category and category['code'] == 'CONTRACT' %}
       <span class="muted small" style="margin-left:6px;display:inline-block">10 hrs regular + 2 hrs OT</span>
       {% endif %}
     </div>
