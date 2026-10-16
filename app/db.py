@@ -279,7 +279,7 @@ def _seed_demo(con):
     for d, n in (("2026-10-02", "Gandhi Jayanti"), ("2026-12-25", "Christmas"), ("2027-01-26", "Republic Day")):
         con.execute("INSERT OR IGNORE INTO holidays (date, name) VALUES (?,?)", (d, n))
     create_admin(con, "HR001", "HR Admin", "admin123")
-    con.execute("UPDATE employees SET joined_on='2024-01-01' WHERE emp_code='HR001'")
+    con.execute("UPDATE employees SET joined_on='2024-01-01', must_change_pw=0 WHERE emp_code='HR001'")
     emp_pw = generate_password_hash("emp123")
     emp_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='EMPLOYEES'").fetchone()[0]
     contract_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='CONTRACT'").fetchone()[0]

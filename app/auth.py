@@ -78,6 +78,8 @@ def load_user():
 
 
 def check_csrf():
+    if current_app.config.get("TESTING") and current_app.config.get("WTF_CSRF_ENABLED") is False:
+        return
     if request.method in ("POST", "PUT", "DELETE"):
         tok = request.headers.get("X-CSRFToken") or request.form.get("csrf_token")
         sess_tok = session.get("csrf", "")

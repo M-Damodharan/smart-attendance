@@ -118,13 +118,23 @@ def employee_form(eid=None):
             # Fallback based on role
             cat_code = "STAFF" if role == "hr" else "EMPLOYEES"
             crow = db.execute("SELECT id FROM employee_categories WHERE code=?", (cat_code,)).fetchone()
-            category_id = crow[0] if crow else None
+            category_id = crow[0] if crow else 1
+
+        shift_id = f.get("shift_id", type=int)
+        if not shift_id:
+            srow = db.execute("SELECT MIN(id) FROM shifts WHERE active=1").fetchone()
+            shift_id = srow[0] if srow and srow[0] else None
+
+        office_id = f.get("office_id", type=int)
+        if not office_id:
+            orow = db.execute("SELECT MIN(id) FROM offices WHERE active=1").fetchone()
+            office_id = orow[0] if orow and orow[0] else None
 
         if not code or not name or role not in ("employee", "hr"):
             flash("Employee code and name are required.", "err")
         else:
             vals = (code, name, f.get("email", "").strip(), f.get("phone", "").strip(), f.get("department", "").strip(),
-                    f.get("designation", "").strip(), role, f.get("shift_id", type=int), f.get("office_id", type=int),
+                    f.get("designation", "").strip(), role, shift_id, office_id,
                     category_id, f.get("joined_on") or d2s(today()), 1 if f.get("active") else 0)
             try:
                 if emp:
@@ -136,14 +146,17 @@ def employee_form(eid=None):
                     pw = f.get("password") or "Welcome@123"
                     cur = db.execute(
                         "INSERT INTO employees (emp_code, name, email, phone, department, designation, role, shift_id, "
-                        "office_id, category_id, joined_on, active, password_hash, must_change_pw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
-                        (*vals, generate_password_hash(pw)))
+                        "office_id, category_id, joined_on, active, password_hash, must_change_pw) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (*vals, generate_password_hash(pw), 1))
                     audit("EMPLOYEE_CREATE", "employee", cur.lastrowid, f"{code} {name} (cat={category_id})")
                     flash(f"Employee created. Temporary password: {pw}", "ok")
                 db.commit()
                 return redirect(url_for("hr.employees"))
             except sqlite3.IntegrityError:
-                flash("That employee code already exists.", "err")
+                flash(f"Employee code '{code}' already exists.", "err")
+            except Exception as e:
+                flash(f"Error saving employee: {e}", "err")
     shifts = db.execute("SELECT * FROM shifts WHERE active=1").fetchall()
     offices = db.execute("SELECT * FROM offices WHERE active=1").fetchall()
     categories = db.execute("SELECT * FROM employee_categories WHERE active=1 ORDER BY id").fetchall()
@@ -597,7 +610,7 @@ def delete_employee(eid):
                 except OSError:
                     pass
     n_att = db.execute("SELECT COUNT(*) FROM attendance WHERE emp_id=?", (eid,)).fetchone()[0]
-    for t in ("attendance", "leaves", "od_requests", "challenges"):
+    for t in ("attendance", "leaves", "od_requests", "challenges", "weekly_shift_schedules"):
         db.execute(f"DELETE FROM {t} WHERE emp_id=?", (eid,))
     db.execute("UPDATE leaves SET decided_by=NULL WHERE decided_by=?", (eid,))
     db.execute("UPDATE od_requests SET decided_by=NULL WHERE decided_by=?", (eid,))
