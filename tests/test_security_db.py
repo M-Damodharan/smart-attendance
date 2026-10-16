@@ -14,17 +14,21 @@ os.environ["DATABASE"] = db_path
 os.environ["SELFIE_DIR"] = selfie_dir
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
+config.Config.DATABASE = db_path
+config.Config.DEMO_DATA = True
+config.Config.SELFIE_DIR = selfie_dir
+
 from app import create_app
 from app.db import get_db
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def app_instance():
     app = create_app()
-    app.config["WTF_CSRF_ENABLED"] = False
     app.config["TESTING"] = True
     return app
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def client(app_instance):
     return app_instance.test_client()
 
@@ -121,8 +125,8 @@ def test_sql_injection_on_login(client):
             "password": "wrong_password",
             "csrf_token": token
         })
-        # Should NOT log in, should show invalid credentials
-        assert b"Invalid employee code or password" in post_res.data or post_res.status_code == 200
+        # Should NOT log in, should show invalid credentials or be blocked by WAF
+        assert b"Invalid employee code or password" in post_res.data or post_res.status_code in (200, 403)
 
 
 # ==============================================================================
