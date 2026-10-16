@@ -171,7 +171,11 @@
       const res = await postJSON('/api/punch', payload);
       promptEl.textContent = '';
 
-      if (!res.ok) throw new Error(res.error || 'Something went wrong.');
+      if (!res.ok) {
+        const err = new Error(res.error || 'Something went wrong.');
+        err.shield_status = res.shield_status;
+        throw err;
+      }
 
       result.className = 'result ok';
       result.hidden = false;
@@ -197,6 +201,12 @@
       countEl.textContent = '';
       result.className = 'result bad';
       result.hidden = false;
+      if (e.shield_status === 'BLOCKED' || (e.message && (e.message.includes('Blocked') || e.message.includes('locked')))) {
+        result.innerHTML = `🚨 <b>AI Biometric Defense:</b> ${e.message}<br><small style="margin-top:6px;display:block;opacity:0.9">Your employee ID has been locked for security. Please contact HR Administration to review the biometric audit log and unlock your ID.</small>`;
+        go.disabled = true;
+        go.textContent = '🔒 Account Locked by AI';
+        return;
+      }
       result.textContent = e.message;
       locate(); // refresh GPS for retry
     }

@@ -228,6 +228,50 @@ def punch():
     except Exception:
         return _err("Could not read attendance camera photo. Please retry.")
 
+    # REAL-TIME AI BIOMETRIC BUDDY PUNCH DEFENSE:
+    # Compares live selfie against today's punches by other employees and registered templates.
+    # If the same face is used across 2 or more IDs, immediately blocks the account and rejects punch.
+    from .security_shield import check_cross_punch_buddy_face_realtime, block_employee_account_by_ai
+    cross_check = check_cross_punch_buddy_face_realtime(db, selfie, user["id"], today_s)
+    if cross_check.get("violation"):
+        other = cross_check.get("other_emp") or {}
+        other_name = other.get("name", "another employee")
+        other_code = other.get("emp_code", "another account")
+        sim_val = cross_check.get("similarity", 0.0)
+        selfie_name = _save_selfie(selfie, user, kind)
+        if cross_check.get("type") == "REGISTERED_FACE_MATCH":
+            client_err = "Face does not match this employee account. Please log in with your registered account."
+            reason_msg = (
+                f"AI Buddy Punch Violation: Live face matches registered employee {other_name} ({other_code}) "
+                f"with {sim_val*100:.1f}% similarity. Account locked pending HR permission."
+            )
+        else:
+            client_err = (
+                f"AI Buddy Punch Blocked: Live face matches employee {other_name} ({other_code}) "
+                f"who already checked in today (Similarity: {sim_val*100:.1f}%). "
+                f"Account locked pending HR permission."
+            )
+            reason_msg = client_err
+        block_employee_account_by_ai(
+            db, user["id"], reason=reason_msg,
+            target_emp_id=other.get("id"),
+            similarity=sim_val,
+            selfie_path=selfie_name,
+            target_selfie_path=cross_check.get("other_selfie")
+        )
+        audit("AI_BUDDY_PUNCH_BLOCKED", "attendance", user["id"],
+              f"Blocked punch under {user['emp_code']} - live face matches {other_code} ({sim_val*100:.1f}%)")
+        audit("FACE_ACCOUNT_MISMATCH", "employee", user["id"],
+              f"SPOOF_ATTEMPT: Live face belongs to {other_name} ({other_code}, sim={sim_val:.2f}) but punch attempted under account {user['name']} ({user['emp_code']})")
+        db.commit()
+        return jsonify({
+            "ok": False,
+            "error": client_err,
+            "shield_status": "BLOCKED",
+            "similarity": round(sim_val * 100, 1),
+            "conflicting_account": f"{other_name} ({other_code})"
+        }), 403
+
     webauthn_assertion = d.get("webauthn_assertion")
     auth_method = "webauthn_face_id" if webauthn_assertion else "camera_face_id"
     device_cred_id = None

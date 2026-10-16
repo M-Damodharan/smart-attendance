@@ -187,6 +187,92 @@ class TestAIBuddyPunchDefense(unittest.TestCase):
             violations = scan_daily_punches_for_buddy_punches(db, target_date_str=today_s)
             self.assertIsInstance(violations, list)
 
+            # Also test DD-MM-YYYY format normalization
+            violations_normalized = scan_daily_punches_for_buddy_punches(db, target_date_str="16-10-2026")
+            self.assertIsInstance(violations_normalized, list)
+
+    def test_05_cross_employee_same_face_punch_today_blocks_second_employee(self):
+        """If Employee A checks in with Face X, and Employee B later attempts to check in
+        with the same Face X, AI Biometric Defense immediately blocks Employee B with HTTP 403.
+        """
+        c = self.app.test_client()
+
+        with self.app.app_context():
+            db = get_db()
+            e1 = db.execute("SELECT id, emp_code FROM employees WHERE emp_code='EMP001'").fetchone()
+            # Ensure an active contract employee exists
+            e_cl = db.execute("SELECT id, emp_code FROM employees WHERE emp_code='CL001'").fetchone()
+            if not e_cl:
+                db.execute(
+                    "INSERT INTO employees (emp_code, name, role, active, category_id, office_id, password_hash, must_change_pw) "
+                    "VALUES ('CL001', 'Ramesh Kumar', 'employee', 1, 3, 1, 'scrypt:...', 0)"
+                )
+                db.commit()
+            # Reset attendance for today for clean test
+            today_s = "2026-10-16"
+            db.execute("DELETE FROM attendance WHERE date=?", (today_s,))
+            # Put Employee 1 attendance check-in photo in today's records
+            selfie_fn = "EMP001_20261016_in_090000.jpg"
+            db.execute(
+                "INSERT INTO attendance (emp_id, date, in_selfie, check_in, source, face_verified) "
+                "VALUES (?, ?, ?, '2026-10-16 09:00:00', 'app', 1)",
+                (e1["id"], today_s, selfie_fn)
+            )
+            db.commit()
+
+            # Save face_emp1 as the saved punch photo
+            from PIL import Image
+            import base64
+            raw = base64.b64decode(self.face_emp1.split(",", 1)[1])
+            with open(os.path.join(self.selfie_dir, selfie_fn), "wb") as f:
+                f.write(raw)
+
+        # Now CL001 attempts to punch in using the same face!
+        self._login(c, "CL001", "123456789", portal="contract")
+        t = self._get_csrf(c, "/dashboard")
+        ch = c.post("/api/challenge", headers={"X-CSRFToken": t}).get_json()
+
+        # Punch with identical/same face
+        res = c.post("/api/punch", json={
+            "kind": "in",
+            "token": ch.get("token"),
+            "frames": [self.face_emp1, self.face_emp1, self.face_emp1],
+            "selfie": self.face_emp1,
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "accuracy": 15
+        }, headers={"X-CSRFToken": t})
+
+        # MUST be blocked with HTTP 403
+        self.assertEqual(res.status_code, 403)
+        res_json = res.get_json()
+        self.assertFalse(res_json["ok"])
+        self.assertEqual(res_json.get("shield_status"), "BLOCKED")
+        self.assertIn("AI Buddy Punch Blocked", res_json["error"])
+
+        # Offending employee (CL001) MUST now be blocked in DB!
+        with self.app.app_context():
+            db = get_db()
+            cl_row = db.execute("SELECT active, block_reason FROM employees WHERE emp_code='CL001'").fetchone()
+            self.assertEqual(cl_row["active"], 0)
+            self.assertIn("EMP001", cl_row["block_reason"])
+
+    def test_06_hr_dashboard_displays_ai_alert_popup_and_card(self):
+        """HR Dashboard must display the pop-up modal and alert banner when duplicate face attacks are active."""
+        c = self.app.test_client()
+        self._login(c, "HR001", "damo12345", portal="staff")
+
+        dash_res = c.get("/hr/dashboard")
+        self.assertEqual(dash_res.status_code, 200)
+        txt = dash_res.get_data(as_text=True)
+
+        # Verify Pop-up Modal and Banner are present in HTML
+        self.assertIn("aiSecurityModal", txt)
+        self.assertIn("AI Security Alert: Duplicate Face Detected on 2 Different IDs!", txt)
+        self.assertIn("CRITICAL BIOMETRIC ALERT: Duplicate Face Detected on 2 Different IDs!", txt)
+        self.assertIn("CL001", txt)
+
 
 if __name__ == "__main__":
     unittest.main()
+

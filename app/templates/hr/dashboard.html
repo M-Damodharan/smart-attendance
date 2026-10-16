@@ -4,6 +4,113 @@
 {% block content %}
 {% if office_unset %}<div class="flash warn">Office location is not set yet — nobody can check in. <a href="{{ url_for('hr.settings') }}">Set it in Settings</a>.</div>{% endif %}
 
+{% if active_face_alerts %}
+<!-- AI Biometric Breach Pop-Up Modal -->
+<div id="aiSecurityModal" class="modal-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--bg-card,#1e293b);border:2px solid #ef4444;box-shadow:0 12px 48px rgba(239,68,68,0.4);border-radius:16px;max-width:640px;width:100%;overflow:hidden;animation:popIn 0.25s ease-out;">
+    <div style="background:linear-gradient(135deg,#b91c1c,#ef4444);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:1.8rem;line-height:1;">🚨</span>
+        <div>
+          <h3 style="margin:0;font-size:1.1rem;font-weight:800;letter-spacing:0.2px;">AI Security Alert: Duplicate Face Detected on 2 Different IDs!</h3>
+          <span style="font-size:0.75rem;opacity:0.92;">Real-Time AI Buddy Punch Defense &bull; Account Auto-Locked</span>
+        </div>
+      </div>
+      <button type="button" onclick="document.getElementById('aiSecurityModal').style.display='none'" style="background:none;border:none;color:#fff;font-size:1.6rem;cursor:pointer;line-height:1;padding:0 4px;">&times;</button>
+    </div>
+
+    <div style="padding:18px 20px;max-height:68vh;overflow-y:auto;">
+      <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:0.84rem;">
+        <b>⚠️ Biometric Breach Detected:</b> An employee attempted to punch attendance using a face that was already used to punch in today by another employee ID (or registered to another account). The offending account has been locked immediately.
+      </div>
+
+      {% for a in active_face_alerts %}
+      <div style="border:1px solid var(--border-default,#334155);background:var(--bg-canvas,#0f172a);border-radius:12px;padding:14px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+          <div>
+            <span class="pill bad" style="font-size:0.7rem;font-weight:800;padding:2px 8px;">🔒 ACCOUNT LOCKED</span>
+            <span class="muted small" style="margin-left:6px;">{{ a.date }} · {{ a.created_at }}</span>
+          </div>
+          <div style="font-weight:800;color:#ef4444;font-size:0.9rem;">
+            ⚡ {{ (a.similarity * 100)|round(1) }}% Face Match
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;">
+          <div style="text-align:center;padding:8px;background:var(--bg-card,#1e293b);border-radius:8px;border:1px solid #ef4444;">
+            <span class="muted small" style="display:block;margin-bottom:4px;font-weight:600;color:#ef4444;">Offending Punch</span>
+            {% if a.selfie_path %}
+            <img src="{{ url_for('api.selfie', name=a.selfie_path) }}" alt="Punch Face" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid #ef4444;margin:0 auto;display:block;">
+            {% else %}
+            <div style="width:64px;height:64px;border-radius:8px;background:var(--bg-canvas);margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">👤</div>
+            {% endif %}
+            <b style="font-size:0.86rem;display:block;margin-top:4px;">{{ a.emp_name }}</b>
+            <code style="font-size:0.75rem;color:var(--text-muted)">{{ a.emp_code }}</code>
+          </div>
+
+          <div style="text-align:center;font-size:1.4rem;color:#ef4444;font-weight:900;">
+            ⟷
+          </div>
+
+          <div style="text-align:center;padding:8px;background:var(--bg-card,#1e293b);border-radius:8px;border:1px solid #f59e0b;">
+            <span class="muted small" style="display:block;margin-bottom:4px;font-weight:600;color:#f59e0b;">Conflicting Account</span>
+            {% if a.target_selfie_path %}
+            <img src="{{ url_for('api.selfie', name=a.target_selfie_path) }}" alt="Target Face" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid #f59e0b;margin:0 auto;display:block;">
+            {% else %}
+            <div style="width:64px;height:64px;border-radius:8px;background:var(--bg-canvas);margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">👤</div>
+            {% endif %}
+            <b style="font-size:0.86rem;display:block;margin-top:4px;">{{ a.target_emp_name or 'Other Employee' }}</b>
+            <code style="font-size:0.75rem;color:var(--text-muted)">{{ a.target_emp_code or 'ID' }}</code>
+          </div>
+        </div>
+
+        {% if a.details %}
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:10px;line-height:1.4;background:var(--bg-card);padding:6px 10px;border-radius:6px;">
+          {{ a.details }}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div style="padding:14px 20px;background:var(--bg-canvas,#0f172a);border-top:1px solid var(--border-default,#334155);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <a href="{{ url_for('hr.face_security_audit') }}" class="btn primary sm" style="background:#ef4444;border-color:#ef4444;font-weight:700;">
+        🛡️ Review &amp; Unlock in Face Audit &rarr;
+      </a>
+      <button type="button" class="btn sm" onclick="document.getElementById('aiSecurityModal').style.display='none'">
+        Acknowledge &amp; Dismiss Pop-up
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Urgent High-Visibility Security Card in Dashboard -->
+<div class="card" style="margin-bottom:1.25rem;border:2px solid #ef4444;background:linear-gradient(135deg,rgba(239,68,68,0.14),rgba(185,28,28,0.22));border-radius:12px;padding:1rem 1.25rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:2rem;animation:pulse 1.5s infinite">🚨</span>
+      <div>
+        <div style="font-weight:800;color:#ef4444;font-size:1.05rem">
+          CRITICAL BIOMETRIC ALERT: Duplicate Face Detected on 2 Different IDs!
+        </div>
+        <div style="font-size:0.86rem;color:var(--text-main);margin-top:2px">
+          The AI Biometric Shield detected that the same person punched attendance using multiple employee IDs today.
+          Offending account(s) have been auto-locked pending HR review.
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button type="button" class="btn sm" onclick="document.getElementById('aiSecurityModal').style.display='flex'" style="border-color:#ef4444;color:#ef4444;font-weight:700">
+        🔍 View Pop-up Alert
+      </button>
+      <a href="{{ url_for('hr.face_security_audit') }}" class="btn primary sm" style="background:#ef4444;border-color:#ef4444;font-weight:700">
+        🛡️ Review in Face Audit &rarr;
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Executive Header -->
 <div class="ph" style="align-items:flex-start;margin-bottom:1.25rem;">
   <div>

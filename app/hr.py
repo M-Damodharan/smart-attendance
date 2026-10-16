@@ -110,9 +110,21 @@ def dashboard():
         "SELECT a.*, e.name, e.emp_code FROM attendance a JOIN employees e ON e.id=a.emp_id "
         "WHERE a.date=? ORDER BY COALESCE(a.check_out, a.check_in) DESC LIMIT 8", (d2s(t),)).fetchall()
     office_unset = db.execute("SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0").fetchone()[0] > 0
+    active_face_alerts = db.execute("""
+        SELECT a.*, 
+               e1.emp_code as emp_code, e1.name as emp_name, e1.department as emp_dept,
+               e2.emp_code as target_emp_code, e2.name as target_emp_name
+        FROM ai_face_alerts a
+        JOIN employees e1 ON e1.id=a.emp_id
+        LEFT JOIN employees e2 ON e2.id=a.target_emp_id
+        WHERE a.status='BLOCKED'
+        ORDER BY a.id DESC LIMIT 5
+    """).fetchall()
+
     return render_template("hr/dashboard.html", office_unset=office_unset, stats=stats, by_shift=by_shift.values(), total=len(emps),
                            pending_leave=pending_leave, pending_od=pending_od, pending_face_changes=pending_face_changes,
                            pending_ai_alerts=pending_ai_alerts, ai_blocked_count=ai_blocked_count,
+                           active_face_alerts=active_face_alerts,
                            workforce=workforce, face_stats=face_stats, upcoming_schedules=upcoming_schedules,
                            security_exceptions=security_exceptions, recent=recent, today=t)
 
@@ -844,6 +856,16 @@ def delete_employee(eid):
 @hr_required
 def face_security_audit():
     db = get_db()
+    from .services import d2s, today
+    cur_date = request.args.get("date") or d2s(today())
+
+    from .security_shield import scan_daily_punches_for_buddy_punches
+    # Automatically analyze all stored daily punch images across employee accounts
+    try:
+        scan_daily_punches_for_buddy_punches(db, target_date_str=cur_date)
+    except Exception:
+        pass
+
     alerts = db.execute("""
         SELECT a.*, 
                e1.emp_code as emp_code, e1.name as emp_name, e1.active as emp_active, e1.department as emp_dept,
@@ -859,9 +881,6 @@ def face_security_audit():
     blocked_count = db.execute("SELECT COUNT(*) FROM employees WHERE active=0 AND block_reason IS NOT NULL").fetchone()[0]
     total_alerts = db.execute("SELECT COUNT(*) FROM ai_face_alerts").fetchone()[0]
     resolved_count = db.execute("SELECT COUNT(*) FROM ai_face_alerts WHERE status='RESOLVED_UNLOCKED'").fetchone()[0]
-
-    from .services import d2s, today
-    cur_date = request.args.get("date") or d2s(today())
 
     return render_template(
         "hr/face_security_audit.html",

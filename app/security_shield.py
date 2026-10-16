@@ -221,12 +221,24 @@ def block_employee_account_by_ai(db, emp_id: int, reason: str, target_emp_id: in
         (reason, now_ts, emp_id)
     )
 
-    # 2. Record incident in ai_face_alerts
-    db.execute(
-        "INSERT INTO ai_face_alerts (date, emp_id, target_emp_id, similarity, selfie_path, "
-        "target_selfie_path, alert_type, status, details) VALUES (?,?,?,?,?,?, 'BUDDY_PUNCH', 'BLOCKED', ?)",
-        (date_str, emp_id, target_emp_id, round(float(similarity), 4), selfie_path, target_selfie_path, reason)
-    )
+    # 2. Record incident in ai_face_alerts (avoid duplicate open alerts for same emp/date)
+    existing = db.execute(
+        "SELECT id FROM ai_face_alerts WHERE date=? AND emp_id=? AND (target_emp_id=? OR target_emp_id IS NULL) AND status='BLOCKED'",
+        (date_str, emp_id, target_emp_id)
+    ).fetchone()
+
+    if not existing:
+        db.execute(
+            "INSERT INTO ai_face_alerts (date, emp_id, target_emp_id, similarity, selfie_path, "
+            "target_selfie_path, alert_type, status, details) VALUES (?,?,?,?,?,?, 'BUDDY_PUNCH', 'BLOCKED', ?)",
+            (date_str, emp_id, target_emp_id, round(float(similarity), 4), selfie_path, target_selfie_path, reason)
+        )
+    else:
+        db.execute(
+            "UPDATE ai_face_alerts SET similarity=MAX(similarity, ?), selfie_path=COALESCE(?, selfie_path), "
+            "target_selfie_path=COALESCE(?, target_selfie_path), details=? WHERE id=?",
+            (round(float(similarity), 4), selfie_path, target_selfie_path, reason, existing["id"])
+        )
 
     # 3. Audit log
     db.execute(
@@ -234,6 +246,121 @@ def block_employee_account_by_ai(db, emp_id: int, reason: str, target_emp_id: in
         (str(emp_id), f"Account locked by AI Defense Shield. Reason: {reason}")
     )
     db.commit()
+
+
+def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: str = None) -> dict:
+    """Real-Time Cross-Punch Buddy Face & Biometric Defense:
+    Executed before ANY attendance punch (both WebAuthn and camera-based).
+    Compares the incoming live camera selfie against:
+    1. All attendance check-in/check-out photos recorded today by ANY OTHER employee.
+    2. All other employees' registered 360-degree face templates.
+    If similarity >= threshold (default 0.65), immediately flags a buddy-punch violation,
+    allowing caller to auto-block the employee ID and abort the punch.
+    """
+    import os
+    from flask import current_app
+    from .services import d2s, today
+    from .face_engine import (
+        get_candidate_live_embeddings,
+        compute_multi_angle_similarity,
+        parse_template_angles,
+        extract_face_embedding
+    )
+
+    if not date_str:
+        date_str = d2s(today())
+
+    # 1. Extract multi-scale invariant candidate vectors from incoming live image
+    try:
+        live_candidates = get_candidate_live_embeddings(live_img)
+    except Exception:
+        try:
+            live_candidates = [extract_face_embedding(live_img)]
+        except Exception as e:
+            return {"violation": False, "error": f"Failed to extract face features: {e}"}
+
+    # 2. Get dynamic similarity threshold from system settings (default 0.65 for high accuracy)
+    thresh_row = db.execute("SELECT value FROM system_settings WHERE key='ai_buddy_punch_block_threshold'").fetchone()
+    threshold = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else 0.65
+
+    selfie_dir = current_app.config.get("SELFIE_DIR")
+
+    # 3. Check against today's punches from OTHER employees
+    # (Did another employee ID already check in today with this same face?)
+    att_rows = db.execute(
+        "SELECT a.id, a.emp_id, a.in_selfie, a.out_selfie, a.check_in, a.device_credential_id, "
+        "e.emp_code, e.name, e.department, e.face_image "
+        "FROM attendance a "
+        "JOIN employees e ON e.id=a.emp_id "
+        "WHERE a.date=? AND a.emp_id != ? AND (a.in_selfie IS NOT NULL OR a.out_selfie IS NOT NULL)",
+        (date_str, emp_id)
+    ).fetchall()
+
+    for r in att_rows:
+        for s_file in (r["in_selfie"], r["out_selfie"]):
+            if not s_file or not selfie_dir:
+                continue
+            s_path = os.path.join(selfie_dir, s_file)
+            if not os.path.exists(s_path):
+                continue
+            try:
+                other_candidates = get_candidate_live_embeddings(s_path)
+                sim = compute_multi_angle_similarity(live_candidates, other_candidates)
+                if sim >= threshold:
+                    return {
+                        "violation": True,
+                        "type": "TODAY_PUNCH_DUPLICATE",
+                        "similarity": sim,
+                        "other_emp": dict(r),
+                        "other_selfie": s_file,
+                        "message": (
+                            f"AI Buddy Punch Blocked: Live face matches employee {r['name']} ({r['emp_code']}) "
+                            f"who already punched today (Similarity: {sim*100:.1f}%)."
+                        )
+                    }
+            except Exception:
+                pass
+
+    # 4. Check against all OTHER registered employee templates
+    # If the user has their own face registered, verify if it matches their own template first
+    cur_user = db.execute("SELECT id, face_registered, face_template FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if cur_user and cur_user["face_registered"] and cur_user["face_template"]:
+        own_angles = parse_template_angles(cur_user["face_template"])
+        if own_angles:
+            own_sim = compute_multi_angle_similarity(live_candidates, own_angles)
+            if own_sim >= 0.70:
+                # Face matches the user's own registered account, so not a cross-account template spoof
+                return {"violation": False}
+
+    # Only check other employees' registered templates with a strict threshold (0.78)
+    reg_threshold = max(threshold, 0.78)
+    reg_rows = db.execute(
+        "SELECT id, emp_code, name, department, face_template, face_image "
+        "FROM employees WHERE face_registered=1 AND id != ?",
+        (emp_id,)
+    ).fetchall()
+
+    for r in reg_rows:
+        if not r["face_template"]:
+            continue
+        stored_angles = parse_template_angles(r["face_template"])
+        if not stored_angles:
+            continue
+        sim = compute_multi_angle_similarity(live_candidates, stored_angles)
+        if sim >= reg_threshold:
+            return {
+                "violation": True,
+                "type": "REGISTERED_FACE_MATCH",
+                "similarity": sim,
+                "other_emp": dict(r),
+                "other_selfie": r["face_image"],
+                "message": (
+                    f"AI Biometric Policy Violation: Live face matches registered face of employee {r['name']} ({r['emp_code']}) "
+                    f"(Similarity: {sim*100:.1f}%)."
+                )
+            }
+
+    return {"violation": False}
 
 
 def unlock_employee_account_by_hr(db, alert_id: int, hr_id: int, notes: str = ""):
@@ -265,20 +392,36 @@ def unlock_employee_account_by_hr(db, alert_id: int, hr_id: int, notes: str = ""
     return True
 
 
-def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, threshold: float = 0.70) -> list:
+def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, threshold: float = None) -> list:
     """Automated AI Database Scanner:
     Inspects all daily attendance punch photos in the database.
     Detects if the same face was used across multiple employee IDs (EMP001 vs EMP002 buddy punch),
-    filtering through variations in dress, eyes, and background noise.
+    filtering through variations in dress, eyes, distance, and background noise.
     Flags violations and blocks offending accounts pending HR permission.
     """
     import os
+    import re
     from flask import current_app
     from .services import d2s, today
-    from .face_engine import extract_face_embedding, compute_similarity, compute_multi_angle_similarity, parse_template_angles
+    from .face_engine import (
+        get_candidate_live_embeddings,
+        compute_multi_angle_similarity,
+        parse_template_angles,
+        extract_face_embedding
+    )
 
-    if not target_date_str:
+    if target_date_str:
+        s = str(target_date_str).strip()
+        # Normalize DD-MM-YYYY or DD/MM/YYYY to YYYY-MM-DD
+        m = re.match(r"^(\d{2})[-/](\d{2})[-/](\d{4})$", s)
+        if m:
+            target_date_str = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    else:
         target_date_str = d2s(today())
+
+    if threshold is None:
+        thresh_row = db.execute("SELECT value FROM system_settings WHERE key='ai_buddy_punch_block_threshold'").fetchone()
+        threshold = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else 0.65
 
     selfie_dir = current_app.config.get("SELFIE_DIR")
 
@@ -303,19 +446,30 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
         s_path = os.path.join(selfie_dir, s_name)
         if os.path.exists(s_path):
             try:
-                emb = extract_face_embedding(s_path)
+                candidates = get_candidate_live_embeddings(s_path)
                 punch_items.append({
                     "rec_id": r["id"],
                     "emp_id": r["emp_id"],
                     "emp_code": r["emp_code"],
                     "name": r["name"],
                     "selfie_file": s_name,
-                    "embedding": emb,
+                    "candidates": candidates,
                 })
             except Exception:
-                pass
+                try:
+                    candidates = [extract_face_embedding(s_path)]
+                    punch_items.append({
+                        "rec_id": r["id"],
+                        "emp_id": r["emp_id"],
+                        "emp_code": r["emp_code"],
+                        "name": r["name"],
+                        "selfie_file": s_name,
+                        "candidates": candidates,
+                    })
+                except Exception:
+                    pass
 
-    # 1. Cross-Punch Evaluation (Did EMP001 and EMP002 use the exact same face today?)
+    # 1. Cross-Punch Evaluation (Did EMP001, CL001, E0012 use the exact same face today?)
     n = len(punch_items)
     for i in range(n):
         for j in range(i + 1, n):
@@ -324,7 +478,7 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
             if p1["emp_id"] == p2["emp_id"]:
                 continue
 
-            sim = compute_similarity(p1["embedding"], p2["embedding"])
+            sim = compute_multi_angle_similarity(p1["candidates"], p2["candidates"])
             if sim >= threshold:
                 existing = db.execute(
                     "SELECT id FROM ai_face_alerts WHERE date=? AND emp_id=? AND target_emp_id=?",
@@ -353,7 +507,9 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
             if other["id"] == p["emp_id"] or not other["face_template"]:
                 continue
             other_angles = parse_template_angles(other["face_template"])
-            sim = compute_multi_angle_similarity(p["embedding"], other_angles)
+            if not other_angles:
+                continue
+            sim = compute_multi_angle_similarity(p["candidates"], other_angles)
             if sim >= threshold:
                 existing = db.execute(
                     "SELECT id FROM ai_face_alerts WHERE date=? AND emp_id=? AND target_emp_id=?",
