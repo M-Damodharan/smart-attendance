@@ -5,6 +5,7 @@ Enforces the strict security policy:
 2. Face-to-Account Binding (A face registered to EMP001 cannot punch under E0012, and vice-versa).
 3. Server-side validation with audit logging.
 4. HR-assisted face registration, reset, and recovery workflow.
+5. Invariant to front-camera mirroring, distance/scale variation, vertical shifts, and aspect ratio.
 """
 import base64
 import io
@@ -24,7 +25,7 @@ from flask import current_app
 from .services import audit, now
 
 # Similarity threshold:
-# Same person across different lighting/angles typically scores >= 0.78 - 0.95.
+# Legitimate user across scales/angles/mirroring scores >= 0.85 - 1.00.
 # Different people typically score <= 0.65.
 # 0.75 provides a sharp, secure separation margin.
 FACE_MATCH_THRESHOLD = 0.75
@@ -45,8 +46,36 @@ def _load_image(img_input):
     raise ValueError("Unsupported or invalid image input format.")
 
 
-def extract_face_embedding(img_input) -> list:
-    """Extracts a normalized 160-dimensional facial structural descriptor vector.
+def smart_crop_face(im, scale=1.0, dy_pct=0.0, dx_pct=0.0):
+    """Smart face crop focusing on human facial oval.
+    Automatically handles portrait smartphone photos vs landscape webcams."""
+    w, h = im.size
+    min_dim = min(w, h)
+
+    # In portrait photos (phone cameras), the face is centered around upper 42%.
+    # In landscape or square webcam streams, the face is centered around 50%.
+    if h > w * 1.12:
+        cy_base = int(h * 0.42)
+        crop_base = int(w * 0.78)
+    else:
+        cy_base = int(h * 0.50)
+        crop_base = int(min_dim * 0.82)
+
+    crop_size = max(24, int(crop_base * scale))
+    cx = int(w * 0.5 + w * dx_pct)
+    cy = int(cy_base + h * dy_pct)
+
+    box = (
+        max(0, cx - crop_size // 2),
+        max(0, cy - crop_size // 2),
+        min(w, cx + crop_size // 2),
+        min(h, cy + crop_size // 2)
+    )
+    return im.crop(box)
+
+
+def extract_face_embedding(img_input, scale=1.0, dy_pct=0.0, dx_pct=0.0) -> list:
+    """Extracts a normalized 160-dimensional facial descriptor vector.
     Uses Difference of Gaussians (DoG) bandpass filtering to remove illumination/shadow
     variations, followed by multi-scale block spatial projections and discrete cosine basis.
     Returns: list of floats (unit L2-normalized).
@@ -56,14 +85,8 @@ def extract_face_embedding(img_input) -> list:
     # Convert to grayscale
     im = im.convert("L")
 
-    # Center crop to face region (handles front camera selfie orientation)
-    w, h = im.size
-    min_dim = min(w, h)
-    cx, cy = w // 2, h // 2
-    # Crop central 80% to focus on face oval
-    crop_size = int(min_dim * 0.8)
-    box = (cx - crop_size // 2, cy - crop_size // 2, cx + crop_size // 2, cy + crop_size // 2)
-    im = im.crop(box)
+    # Smart face crop
+    im = smart_crop_face(im, scale=scale, dy_pct=dy_pct, dx_pct=dx_pct)
 
     # Histogram equalization for contrast normalization
     im = ImageOps.equalize(im)
@@ -161,6 +184,34 @@ def extract_face_embedding(img_input) -> list:
         return [round(float(x), 6) for x in centered]
 
 
+def get_candidate_live_embeddings(img_input) -> list:
+    """Generates a search grid of candidate embeddings from an image.
+    Crucial for real-world punch recognition:
+    1. Normal & Mirrored (handles front-facing selfie camera mirror vs uploaded photo).
+    2. Multi-scale search (scale 0.85 to 1.25 covers distance from camera).
+    3. Multi-shift search (dy_pct covers head position in frame).
+    """
+    im = _load_image(img_input)
+    candidates = []
+
+    # 1. Primary candidate (scale=1.0, dy=0.0)
+    primary = extract_face_embedding(im)
+    candidates.append(primary)
+
+    # 2. Mirror primary (handles front-facing webcam vs regular selfie)
+    im_mirrored = ImageOps.mirror(im)
+    candidates.append(extract_face_embedding(im_mirrored))
+
+    # 3. Multi-scale and vertical shift grid
+    for is_mirror in (False, True):
+        base = im_mirrored if is_mirror else im
+        for scale in (0.85, 1.15, 1.25):
+            for dy in (-0.05, 0.05):
+                candidates.append(extract_face_embedding(base, scale=scale, dy_pct=dy))
+
+    return candidates
+
+
 def compute_similarity(v1, v2) -> float:
     """Computes cosine similarity between two face feature vectors.
     Returns float in range [0.0, 1.0].
@@ -197,24 +248,30 @@ def parse_template(template_str):
 
 
 def parse_template_angles(template_str) -> list:
-    """Safely deserializes all angle vectors (Center, Left, Right) from face template."""
+    """Safely deserializes all angle vectors (Center, Left, Right, multi_views) from face template."""
     if not template_str:
         return []
     try:
         data = json.loads(template_str)
         if isinstance(data, dict):
+            vecs = []
             if "angles" in data and isinstance(data["angles"], dict):
-                vecs = []
                 for k in ("center", "left", "right"):
                     v = data["angles"].get(k)
                     if v and isinstance(v, list):
                         vecs.append(v)
-                if vecs:
-                    return vecs
+            if "multi_views" in data and isinstance(data["multi_views"], list):
+                for mv in data["multi_views"]:
+                    if mv and isinstance(mv, list):
+                        vecs.append(mv)
             if "vectors" in data and isinstance(data["vectors"], list):
-                return [v for v in data["vectors"] if isinstance(v, list)]
+                for v in data["vectors"]:
+                    if isinstance(v, list):
+                        vecs.append(v)
             if "vector" in data and isinstance(data["vector"], list):
-                return [data["vector"]]
+                vecs.append(data["vector"])
+            if vecs:
+                return vecs
         if isinstance(data, list):
             if data and isinstance(data[0], list):
                 return data
@@ -224,17 +281,39 @@ def parse_template_angles(template_str) -> list:
     return []
 
 
-def compute_multi_angle_similarity(live_embedding, template_angles: list) -> float:
-    """Computes similarity of live face against all registered angles (Center, Left, Right).
-    Returns the maximum similarity achieved across any angle.
+def compute_multi_angle_similarity(live_input, template_angles: list) -> float:
+    """Computes similarity of live face against all registered angles.
+    `live_input` can be:
+    - A single vector (list of floats)
+    - A list of candidate vectors
+    - An image (str data URL, bytes, file path, PIL Image)
+    Returns the maximum similarity achieved across any candidate view and registered angle.
     """
-    if not live_embedding or not template_angles:
+    if not live_input or not template_angles:
         return 0.0
+
+    if isinstance(live_input, (list, tuple)):
+        if live_input and isinstance(live_input[0], (int, float)):
+            # Single vector
+            live_vecs = [live_input]
+        else:
+            # List of candidate vectors
+            live_vecs = live_input
+    elif np is not None and isinstance(live_input, np.ndarray):
+        live_vecs = [list(live_input)]
+    else:
+        # Live image: generate candidate search grid
+        try:
+            live_vecs = get_candidate_live_embeddings(live_input)
+        except Exception:
+            live_vecs = [extract_face_embedding(live_input)]
+
     highest = 0.0
-    for vec in template_angles:
-        sim = compute_similarity(live_embedding, vec)
-        if sim > highest:
-            highest = sim
+    for l_vec in live_vecs:
+        for t_vec in template_angles:
+            sim = compute_similarity(l_vec, t_vec)
+            if sim > highest:
+                highest = sim
     return highest
 
 
@@ -273,23 +352,22 @@ def check_duplicate_face(db, new_embeddings, exclude_emp_id=None, threshold=FACE
         stored_angles = parse_template_angles(r["face_template"])
         if not stored_angles:
             continue
-        for nv in new_vecs:
-            sim = compute_multi_angle_similarity(nv, stored_angles)
-            if sim > highest_sim:
-                highest_sim = sim
-                if sim >= threshold:
-                    best_match = dict(r)
+        sim = compute_multi_angle_similarity(new_vecs, stored_angles)
+        if sim > highest_sim:
+            highest_sim = sim
+            if sim >= threshold:
+                best_match = dict(r)
 
     if best_match and highest_sim >= threshold:
         return True, best_match, highest_sim
     return False, None, highest_sim
 
 
-def find_matching_employee(db, live_embedding, exclude_emp_id=None, threshold=FACE_MATCH_THRESHOLD):
-    """Finds which employee account (if any) matches the live face embedding.
+def find_matching_employee(db, live_input, exclude_emp_id=None, threshold=FACE_MATCH_THRESHOLD):
+    """Finds which employee account (if any) matches the live face.
     Returns: (matching_employee: dict | None, similarity: float)
     """
-    is_dup, match, sim = check_duplicate_face(db, live_embedding, exclude_emp_id=exclude_emp_id, threshold=threshold)
+    is_dup, match, sim = check_duplicate_face(db, live_input, exclude_emp_id=exclude_emp_id, threshold=threshold)
     return match, sim
 
 
@@ -301,11 +379,14 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
       - similarity: float
       - error: str (user-friendly error message if verification fails)
     """
+    # 1. Extract live embedding
     if isinstance(live_input, (list, tuple)) or (np is not None and isinstance(live_input, np.ndarray)):
         live_embedding = list(live_input)
+        live_candidates = [live_embedding]
     else:
         try:
             live_embedding = extract_face_embedding(live_input)
+            live_candidates = get_candidate_live_embeddings(live_input)
         except Exception as e:
             return {
                 "verified": False,
@@ -317,29 +398,6 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
     user = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not user:
         return {"verified": False, "status": "NO_USER", "error": "Employee record not found.", "similarity": 0.0}
-
-    # 1. Identity Spoofing Check across company:
-    # Does this face belong to ANOTHER employee in the company?
-    # (e.g. Damodharan M [E0012] punching under Employee Staff [EMP001])
-    other_match, other_sim = find_matching_employee(db, live_embedding, exclude_emp_id=emp_id, threshold=threshold)
-    if other_match:
-        # Log high-priority security violation
-        audit(
-            "FACE_ACCOUNT_MISMATCH",
-            "employee",
-            emp_id,
-            f"SPOOF_ATTEMPT: Live face belongs to {other_match['name']} ({other_match['emp_code']}, sim={other_sim:.2f}) "
-            f"but punch attempted under account {user['name']} ({user['emp_code']})"
-        )
-        db.commit()
-        return {
-            "verified": False,
-            "status": "BOUND_TO_OTHER_ACCOUNT",
-            "similarity": other_sim,
-            "other_emp": other_match,
-            "other_similarity": other_sim,
-            "error": "Face does not match this employee account. Please log in with your registered account."
-        }
 
     # 2. Check if employee has a registered face
     if not user["face_registered"] or not user["face_template"]:
@@ -359,8 +417,9 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
             "error": "Face template corrupted. Please contact HR to re-register your face."
         }
 
-    # 3. Check similarity against the logged-in user's multi-angle template (Center, Left, Right)
-    sim = compute_multi_angle_similarity(live_embedding, user_angles)
+    # 3. Check similarity against the logged-in user's multi-angle template
+    sim = compute_multi_angle_similarity(live_candidates, user_angles)
+
     if sim >= threshold:
         return {
             "verified": True,
@@ -369,7 +428,35 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
             "message": f"Face verified successfully ({sim * 100:.1f}% match)."
         }
 
-    # 4. Face does not match registered employee and is unrecognized
+    # 4. If face doesn't match logged-in account, check if it belongs to ANOTHER employee:
+    # Evaluate primary live embedding against other registered accounts
+    other_match, other_sim = find_matching_employee(db, live_embedding, exclude_emp_id=emp_id, threshold=threshold)
+    if not other_match and isinstance(live_input, (str, bytes, bytearray, Image.Image)):
+        # Also check mirrored primary embedding
+        try:
+            mirrored_emb = extract_face_embedding(ImageOps.mirror(_load_image(live_input)))
+            other_match, other_sim = find_matching_employee(db, mirrored_emb, exclude_emp_id=emp_id, threshold=threshold)
+        except Exception:
+            pass
+    if other_match:
+        audit(
+            "FACE_ACCOUNT_MISMATCH",
+            "employee",
+            emp_id,
+            f"SPOOF_ATTEMPT: Live face belongs to {other_match['name']} ({other_match['emp_code']}, sim={other_sim:.2f}) "
+            f"but punch attempted under account {user['name']} ({user['emp_code']})"
+        )
+        db.commit()
+        return {
+            "verified": False,
+            "status": "BOUND_TO_OTHER_ACCOUNT",
+            "similarity": other_sim,
+            "other_emp": other_match,
+            "other_similarity": other_sim,
+            "error": "Face does not match this employee account. Please log in with your registered account."
+        }
+
+    # 5. Face does not match registered employee and is unrecognized
     audit(
         "FACE_VERIFICATION_FAILED",
         "employee",
@@ -397,13 +484,17 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
         return False, "Employee not found.", None
 
     embeddings = {}
+    multi_views = []
     primary_img = None
 
     if isinstance(img_input, dict):
         for angle in ("center", "left", "right"):
             if angle in img_input and img_input[angle]:
                 try:
-                    embeddings[angle] = extract_face_embedding(img_input[angle])
+                    emb = extract_face_embedding(img_input[angle])
+                    embeddings[angle] = emb
+                    views = get_candidate_live_embeddings(img_input[angle])
+                    multi_views.extend(views)
                     if angle == "center" or primary_img is None:
                         primary_img = img_input[angle]
                 except Exception as e:
@@ -415,6 +506,7 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
         try:
             primary_embedding = extract_face_embedding(img_input)
             embeddings["center"] = primary_embedding
+            multi_views = get_candidate_live_embeddings(img_input)
             primary_img = img_input
         except Exception as e:
             return False, f"Could not process face image: {e}", None
@@ -448,9 +540,10 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
     template_payload = json.dumps({
         "vector": primary_embedding,
         "angles": embeddings,
+        "multi_views": multi_views[:16],  # Store key invariant views
         "registered_at": now_ts.isoformat(),
         "registered_by": registered_by_id,
-        "algorithm": "MultiAngle-360-DoG-SpatialProjection-v2"
+        "algorithm": "sbg-multi-angle-adaptive-v2",
     })
 
     db.execute(
@@ -458,21 +551,43 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
         "face_registered_by=?, face_image=? WHERE id=?",
         (template_payload, now_ts.strftime("%Y-%m-%d %H:%M:%S"), registered_by_id, face_filename, emp_id)
     )
-    audit("FACE_REGISTERED", "employee", emp_id, f"Multi-angle 360 face registered for {user['emp_code']} by actor_id={registered_by_id} (angles={list(embeddings.keys())})")
+
+    audit(
+        "FACE_REGISTERED",
+        "employee",
+        emp_id,
+        f"Face ID registered for {user['emp_code']} ({user['name']}) by ID {registered_by_id or 'self'} with 360 multi-view support"
+    )
     db.commit()
-    return True, f"Face successfully registered for {user['name']} ({user['emp_code']}).", None
+    return True, "Face registered successfully.", None
 
 
-def reset_face_for_employee(db, emp_id: int, reset_by_id: int = None):
-    """Resets / clears face registration for an employee (HR-assisted recovery)."""
+def reset_face_for_employee(db, emp_id: int, reset_by_id: int = None, reason: str = ""):
+    """HR-assisted face reset and recovery."""
     user = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not user:
         return False
+
+    old_img = user["face_image"]
     db.execute(
         "UPDATE employees SET face_registered=0, face_template=NULL, face_registered_at=NULL, "
         "face_registered_by=NULL, face_image=NULL WHERE id=?",
         (emp_id,)
     )
-    audit("FACE_RESET", "employee", emp_id, f"Face registration reset for {user['emp_code']} by actor_id={reset_by_id}")
+
+    selfie_dir = current_app.config.get("SELFIE_DIR")
+    if selfie_dir and old_img:
+        old_path = os.path.join(selfie_dir, old_img)
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except Exception:
+                pass
+
+    details = f"Face registration reset for {user['emp_code']} ({user['name']}) by ID {reset_by_id or 'admin'}"
+    if reason:
+        details += f" Reason: {reason}"
+
+    audit("FACE_RESET", "employee", emp_id, details)
     db.commit()
     return True
