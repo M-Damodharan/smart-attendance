@@ -207,8 +207,29 @@ def punch():
         face_verified = 1
         face_sim = face_res.get("similarity", 1.0)
     else:
-        # Cross-account breach detection: Live face matches another registered employee
+        # Cross-account breach detection: Live face matches another registered employee (Buddy Punch / Spoof)
         if face_res["status"] == "BOUND_TO_OTHER_ACCOUNT":
+            other_emp = face_res.get("other_emp")
+            other_sim = face_res.get("other_similarity", 0.0)
+            try:
+                from .security_shield import block_employee_account_by_ai
+                selfie_name = _save_selfie(selfie, user, kind)
+                other_name = other_emp.get("name") if other_emp else "another employee"
+                other_code = other_emp.get("emp_code") if other_emp else "other"
+                block_msg = (
+                    f"AI Buddy Punch Violation: Live face matches registered employee {other_name} ({other_code}) "
+                    f"with {other_sim*100:.1f}% similarity. Account locked pending HR permission."
+                )
+                block_employee_account_by_ai(
+                    db, user["id"], reason=block_msg,
+                    target_emp_id=other_emp["id"] if other_emp else None,
+                    similarity=other_sim,
+                    selfie_path=selfie_name,
+                    target_selfie_path=other_emp.get("face_image") if other_emp else None
+                )
+            except Exception as block_err:
+                current_app.logger.error(f"Could not record AI auto-block: {block_err}")
+
             return _err("Face does not match this employee account. Please log in with your registered account.", 403)
 
         # Registered face mismatch

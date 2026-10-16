@@ -19,6 +19,7 @@
     <button type="button" class="btn sm" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:var(--hero-gradient);color:#fff;">
       <span>🤖 Ask AI Assistant</span>
     </button>
+    <a class="btn sm" href="{{ url_for('hr.face_security_audit') }}" style="border-color:#ef4444;color:#ef4444;font-weight:700">🛡️ AI Face Audit</a>
     <a class="btn sm primary" href="{{ url_for('hr.shifts') }}">⚡ Bulk Shifts &amp; Rotation</a>
     <a class="btn sm" href="{{ url_for('hr.corrections') }}">+ Manual Punch</a>
     <a class="btn sm" href="{{ url_for('hr.attendance') }}">Daily Register</a>
@@ -32,11 +33,18 @@
       <h3 style="margin:0;font-size:1.05rem">Workforce &amp; Biometric Security Overview</h3>
       <span class="muted small">3-Tier Login Architecture &bull; One Face, One Account Binding</span>
     </div>
-    {% if pending_face_changes %}
-    <a href="{{ url_for('hr.approvals') }}" class="pill bad" style="font-size:0.8rem;padding:4px 10px;font-weight:700">
-      ⚠️ {{ pending_face_changes }} Pending Face Change Approval(s) &rarr;
-    </a>
-    {% endif %}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {% if ai_blocked_count or pending_ai_alerts %}
+      <a href="{{ url_for('hr.face_security_audit') }}" class="pill bad" style="font-size:0.8rem;padding:4px 10px;font-weight:700;background:rgba(239,68,68,0.18);border:1px solid #ef4444;color:#ef4444">
+        🚨 {{ ai_blocked_count or pending_ai_alerts }} Account(s) BLOCKED by AI Defense &rarr;
+      </a>
+      {% endif %}
+      {% if pending_face_changes %}
+      <a href="{{ url_for('hr.approvals') }}" class="pill bad" style="font-size:0.8rem;padding:4px 10px;font-weight:700">
+        ⚠️ {{ pending_face_changes }} Pending Face Change Approval(s) &rarr;
+      </a>
+      {% endif %}
+    </div>
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px">

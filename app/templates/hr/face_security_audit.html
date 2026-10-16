@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}AI Face Security & Buddy Punch Audit · SBG Attendance{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+
+<!-- Header & Breadcrumbs -->
+<div class="ph" style="align-items:flex-start;margin-bottom:1.5rem">
+  <div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <h2 style="margin:0">🛡️ AI Biometric Buddy Punch &amp; Spoof Defense</h2>
+      <span class="badge b-approved" style="font-size:0.75rem">● AI Active Shield</span>
+    </div>
+    <div class="muted small" style="margin-top:4px">
+      Real-time cross-punch detection &bull; Immediate account locking &bull; HR permission &amp; recovery workflow
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a class="btn sm" href="{{ url_for('hr.dashboard') }}">&larr; Back to Dashboard</a>
+    <a class="btn sm" href="{{ url_for('hr.attendance') }}">Daily Attendance</a>
+  </div>
+</div>
+
+<!-- Daily AI Database Scanner Bar -->
+<div class="card" style="padding:1.25rem;margin-bottom:1.5rem;border-radius:14px;background:linear-gradient(135deg,rgba(15,23,42,0.9),rgba(30,41,59,0.95));border:1.5px solid var(--border-default)">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+    <div>
+      <h3 style="margin:0 0 4px;font-size:1.1rem;display:flex;align-items:center;gap:8px">
+        <span>🔍 AI Daily Database Punch Auditor</span>
+      </h3>
+      <p class="muted small" style="margin:0">
+        AI analyzes today's punch photos across all employees to detect proxy/buddy punching (e.g. <b>EMP001</b> and <b>EMP002</b> punching with the same face).
+        Filters through variations in dress, eyeglasses, and background noise.
+      </p>
+    </div>
+    <form method="post" action="{{ url_for('hr.scan_daily_face_audit') }}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="date" name="date" value="{{ cur_date }}" class="input sm" style="width:auto">
+      <button type="submit" class="btn primary sm" style="font-weight:700">
+        ⚡ Run AI Daily Punch Audit Now
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- KPI Metric Cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;margin-bottom:1.5rem">
+  <div class="card" style="padding:1rem;border-radius:12px;border-left:4px solid #ef4444">
+    <span class="muted small" style="display:block;font-weight:600">🔒 Active Blocked Accounts</span>
+    <b style="font-size:1.6rem;color:#ef4444">{{ blocked_count }}</b>
+    <span class="muted small" style="display:block">Locked pending HR permission</span>
+  </div>
+  <div class="card" style="padding:1rem;border-radius:12px;border-left:4px solid #f59e0b">
+    <span class="muted small" style="display:block;font-weight:600">⚠️ Total AI Spoof Incidents</span>
+    <b style="font-size:1.6rem;color:#f59e0b">{{ total_alerts }}</b>
+    <span class="muted small" style="display:block">All-time biometric breaches flagged</span>
+  </div>
+  <div class="card" style="padding:1rem;border-radius:12px;border-left:4px solid #10b981">
+    <span class="muted small" style="display:block;font-weight:600">✅ HR Permissions Granted</span>
+    <b style="font-size:1.6rem;color:#10b981">{{ resolved_count }}</b>
+    <span class="muted small" style="display:block">Accounts verified &amp; restored</span>
+  </div>
+</div>
+
+<!-- Security Policy Explainer Banner -->
+<div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.25);border-radius:12px;padding:0.9rem 1.25rem;margin-bottom:1.5rem;font-size:0.84rem;line-height:1.5">
+  <div style="font-weight:700;color:#ef4444;display:flex;align-items:center;gap:6px;margin-bottom:4px">
+    <span>🛡️ Automated Real-Time Account Locking Rule:</span>
+  </div>
+  <span>
+    Whenever a face used for attendance matches another employee's account with <b>&ge; 70% similarity</b> (regardless of clothing or background changes),
+    the AI immediately blocks the offending employee ID within 1 second. The account cannot log in or punch until an HR Administrator explicitly grants permission below.
+  </span>
+</div>
+
+<!-- Incidents Table & Audit Feed -->
+<div class="card" style="padding:1.25rem;border-radius:14px;overflow-x:auto">
+  <h3 style="margin:0 0 1rem;font-size:1.1rem">Biometric Security &amp; Buddy Punch Audit Feed</h3>
+
+  {% if not alerts %}
+  <div style="text-align:center;padding:2.5rem 1rem;color:var(--text-muted)">
+    <div style="font-size:2.5rem;margin-bottom:8px">🎉</div>
+    <b style="font-size:1rem;color:var(--text-main)">All Biometric Punches Clean</b>
+    <p style="margin:4px 0 0;font-size:0.85rem">No buddy punches or cross-account face spoofing incidents detected.</p>
+  </div>
+  {% else %}
+  <table class="table" style="width:100%;font-size:0.86rem;border-collapse:collapse">
+    <thead>
+      <tr style="border-bottom:1.5px solid var(--border-default);text-align:left">
+        <th style="padding:10px 8px">Incident Date</th>
+        <th style="padding:10px 8px">Offending Account</th>
+        <th style="padding:10px 8px">Face Comparison</th>
+        <th style="padding:10px 8px">Conflicting Account</th>
+        <th style="padding:10px 8px">AI Similarity &amp; Invariants</th>
+        <th style="padding:10px 8px">Status</th>
+        <th style="padding:10px 8px;text-align:right">HR Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in alerts %}
+      <tr style="border-bottom:1px solid var(--border-default);vertical-align:middle">
+        <td style="padding:12px 8px;white-space:nowrap">
+          <b>{{ a.date }}</b>
+          <span class="muted small" style="display:block">{{ a.created_at }}</span>
+        </td>
+        
+        <td style="padding:12px 8px">
+          <div style="font-weight:700">{{ a.emp_name }}</div>
+          <code style="font-size:0.75rem">{{ a.emp_code }}</code>
+          {% if not a.emp_active %}
+          <span class="pill bad" style="font-size:0.68rem;padding:1px 6px;margin-left:4px">LOCKED</span>
+          {% else %}
+          <span class="pill ok" style="font-size:0.68rem;padding:1px 6px;margin-left:4px">ACTIVE</span>
+          {% endif %}
+        </td>
+
+        <td style="padding:12px 8px">
+          <div style="display:flex;align-items:center;gap:6px">
+            {% if a.selfie_path %}
+            <div style="text-align:center">
+              <img src="{{ url_for('api.selfie', name=a.selfie_path) }}" 
+                   alt="Punch Selfie" 
+                   style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1.5px solid #ef4444">
+              <span style="display:block;font-size:0.65rem;color:var(--text-muted)">Live Punch</span>
+            </div>
+            {% endif %}
+            
+            <span style="font-size:1.1rem;color:#ef4444">&harr;</span>
+            
+            {% if a.target_selfie_path %}
+            <div style="text-align:center">
+              <img src="{{ url_for('api.selfie', name=a.target_selfie_path) }}" 
+                   alt="Target Face" 
+                   style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1.5px solid #f59e0b">
+              <span style="display:block;font-size:0.65rem;color:var(--text-muted)">Registered</span>
+            </div>
+            {% else %}
+            <div style="width:48px;height:48px;border-radius:8px;background:var(--bg-canvas);display:flex;align-items:center;justify-content:center;font-size:1.2rem;border:1px dashed var(--border-default)">
+              👤
+            </div>
+            {% endif %}
+          </div>
+        </td>
+
+        <td style="padding:12px 8px">
+          {% if a.target_emp_name %}
+          <div style="font-weight:700">{{ a.target_emp_name }}</div>
+          <code style="font-size:0.75rem">{{ a.target_emp_code }}</code>
+          {% else %}
+          <span class="muted">Other Company Face</span>
+          {% endif %}
+        </td>
+
+        <td style="padding:12px 8px">
+          <div style="font-weight:700;color:{% if a.similarity >= 0.70 %}#ef4444{% else %}#f59e0b{% endif %};font-size:0.95rem">
+            ⚡ {{ (a.similarity * 100)|round(1) }}% Match
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+            <span style="font-size:0.65rem;background:rgba(59,130,246,0.12);color:#3b82f6;padding:2px 5px;border-radius:4px;border:1px solid rgba(59,130,246,0.25)">Dress-Invariant</span>
+            <span style="font-size:0.65rem;background:rgba(16,185,129,0.12);color:#10b981;padding:2px 5px;border-radius:4px;border:1px solid rgba(16,185,129,0.25)">Noise-Filtered</span>
+          </div>
+        </td>
+
+        <td style="padding:12px 8px">
+          {% if a.status == 'BLOCKED' %}
+          <span class="pill bad" style="font-weight:700;font-size:0.75rem">🔒 BLOCKED BY AI</span>
+          {% elif a.status == 'RESOLVED_UNLOCKED' %}
+          <span class="pill ok" style="font-weight:700;font-size:0.75rem">✅ UNLOCKED BY HR</span>
+          {% else %}
+          <span class="pill warn" style="font-weight:700;font-size:0.75rem">{{ a.status }}</span>
+          {% endif %}
+        </td>
+
+        <td style="padding:12px 8px;text-align:right">
+          {% if a.status == 'BLOCKED' %}
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+            <!-- Grant Permission & Unlock -->
+            <form method="post" action="{{ url_for('hr.resolve_face_security_alert', alert_id=a.id) }}" style="display:flex;gap:4px">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="unlock">
+              <input type="text" name="notes" placeholder="Permission notes..." class="input sm" style="font-size:0.75rem;padding:3px 6px;width:130px">
+              <button type="submit" class="btn success sm" style="font-size:0.75rem;padding:4px 8px;font-weight:700" onclick="return confirm('Grant HR permission and UNLOCK this employee account?')">
+                ✅ Unlock ID
+              </button>
+            </form>
+
+            <!-- Confirm Violation -->
+            <form method="post" action="{{ url_for('hr.resolve_face_security_alert', alert_id=a.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="confirm">
+              <button type="submit" class="btn danger sm" style="font-size:0.72rem;padding:2px 6px;background:none;border:none;color:#ef4444;cursor:pointer;text-decoration:underline" onclick="return confirm('Confirm violation? Account will remain permanently blocked.')">
+                Confirm Violation
+              </button>
+            </form>
+          </div>
+          {% else %}
+          <div class="muted small" style="font-size:0.75rem">
+            Decided by <b>{{ a.hr_name or 'HR Admin' }}</b><br>
+            <span style="color:var(--text-muted)">{{ a.hr_action_at or '' }}</span>
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+{% endblock %}

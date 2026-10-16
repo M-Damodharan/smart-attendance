@@ -80,6 +80,8 @@ def dashboard():
     pending_leave = db.execute("SELECT COUNT(*) FROM leaves WHERE status='Pending'").fetchone()[0]
     pending_od = db.execute("SELECT COUNT(*) FROM od_requests WHERE status='Pending'").fetchone()[0]
     pending_face_changes = db.execute("SELECT COUNT(*) FROM face_change_requests WHERE status='Pending'").fetchone()[0]
+    pending_ai_alerts = db.execute("SELECT COUNT(*) FROM ai_face_alerts WHERE status='BLOCKED'").fetchone()[0]
+    ai_blocked_count = db.execute("SELECT COUNT(*) FROM employees WHERE active=0 AND block_reason IS NOT NULL").fetchone()[0]
 
     workforce = {
         "staff": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='STAFF'").fetchone()[0],
@@ -99,7 +101,7 @@ def dashboard():
     ).fetchall()
 
     security_exceptions = db.execute(
-        "SELECT * FROM audit_log WHERE action IN ('FACE_MISMATCH_BLOCKED', 'FACE_DUPLICATE_REJECTED', 'STRANGER_FACE_BLOCKED', 'LOGIN_LOCKED', 'LOGIN_FAILED') "
+        "SELECT * FROM audit_log WHERE action IN ('FACE_MISMATCH_BLOCKED', 'FACE_DUPLICATE_REJECTED', 'STRANGER_FACE_BLOCKED', 'LOGIN_LOCKED', 'LOGIN_FAILED', 'AI_ACCOUNT_BLOCKED') "
         "ORDER BY id DESC LIMIT 6"
     ).fetchall()
 
@@ -109,6 +111,7 @@ def dashboard():
     office_unset = db.execute("SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0").fetchone()[0] > 0
     return render_template("hr/dashboard.html", office_unset=office_unset, stats=stats, by_shift=by_shift.values(), total=len(emps),
                            pending_leave=pending_leave, pending_od=pending_od, pending_face_changes=pending_face_changes,
+                           pending_ai_alerts=pending_ai_alerts, ai_blocked_count=ai_blocked_count,
                            workforce=workforce, face_stats=face_stats, upcoming_schedules=upcoming_schedules,
                            security_exceptions=security_exceptions, recent=recent, today=t)
 
@@ -828,3 +831,81 @@ def delete_employee(eid):
     db.commit()
     flash(f"{emp['emp_code']} deleted permanently.", "ok")
     return redirect(url_for("hr.employees"))
+
+
+# ------------------------------------------------------------------ AI Biometric Security & Buddy Punch Audit
+@bp.route("/face-security-audit")
+@hr_required
+def face_security_audit():
+    db = get_db()
+    alerts = db.execute("""
+        SELECT a.*, 
+               e1.emp_code as emp_code, e1.name as emp_name, e1.active as emp_active, e1.department as emp_dept,
+               e2.emp_code as target_emp_code, e2.name as target_emp_name,
+               hr.name as hr_name
+        FROM ai_face_alerts a
+        JOIN employees e1 ON e1.id=a.emp_id
+        LEFT JOIN employees e2 ON e2.id=a.target_emp_id
+        LEFT JOIN employees hr ON hr.id=a.hr_action_by
+        ORDER BY a.id DESC LIMIT 100
+    """).fetchall()
+
+    blocked_count = db.execute("SELECT COUNT(*) FROM employees WHERE active=0 AND block_reason IS NOT NULL").fetchone()[0]
+    total_alerts = db.execute("SELECT COUNT(*) FROM ai_face_alerts").fetchone()[0]
+    resolved_count = db.execute("SELECT COUNT(*) FROM ai_face_alerts WHERE status='RESOLVED_UNLOCKED'").fetchone()[0]
+
+    from .services import d2s, today
+    cur_date = request.args.get("date") or d2s(today())
+
+    return render_template(
+        "hr/face_security_audit.html",
+        alerts=alerts,
+        blocked_count=blocked_count,
+        total_alerts=total_alerts,
+        resolved_count=resolved_count,
+        cur_date=cur_date
+    )
+
+
+@bp.post("/face-security-audit/resolve/<int:alert_id>")
+@hr_required
+def resolve_face_security_alert(alert_id):
+    db = get_db()
+    action = request.form.get("action")  # "unlock" | "confirm"
+    notes = request.form.get("notes", "").strip()
+
+    from .security_shield import unlock_employee_account_by_hr
+
+    if action == "unlock":
+        ok = unlock_employee_account_by_hr(db, alert_id, g.user["id"], notes=notes or "Permission Granted & Unlocked by HR")
+        if ok:
+            flash("Employee ID has been granted permission and UNLOCKED successfully.", "ok")
+        else:
+            flash("Could not find or unlock incident.", "err")
+    else:
+        db.execute(
+            "UPDATE ai_face_alerts SET status='CONFIRMED_VIOLATION', hr_action_by=?, hr_action_at=datetime('now','localtime'), hr_notes=? WHERE id=?",
+            (g.user["id"], notes or "Violation Confirmed by HR", alert_id)
+        )
+        audit("AI_VIOLATION_CONFIRMED", "employee", None, f"Alert {alert_id} confirmed by HR {g.user['name']}")
+        db.commit()
+        flash("Violation confirmed. Account remains blocked pending management review.", "ok")
+
+    return redirect(url_for("hr.face_security_audit"))
+
+
+@bp.post("/face-security-audit/scan")
+@hr_required
+def scan_daily_face_audit():
+    db = get_db()
+    from .services import d2s, today
+    target_date = request.form.get("date") or d2s(today())
+    from .security_shield import scan_daily_punches_for_buddy_punches
+
+    violations = scan_daily_punches_for_buddy_punches(db, target_date_str=target_date)
+    if violations:
+        flash(f"AI Daily Audit for {target_date}: {len(violations)} buddy punch violation(s) detected! Accounts blocked pending HR review.", "err")
+    else:
+        flash(f"AI Daily Audit for {target_date}: 0 buddy punch violations found. All daily punch faces verified clean.", "ok")
+    return redirect(url_for("hr.face_security_audit", date=target_date))
+

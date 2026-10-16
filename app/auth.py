@@ -170,6 +170,20 @@ def login(login_type=None):
                     db.commit()
             except Exception:
                 is_pw_valid = False
+        elif not u and pw:
+            # Check if account was locked/blocked by AI security shield
+            blocked_u = db.execute(
+                "SELECT * FROM employees WHERE (UPPER(emp_code)=? OR UPPER(email)=?) AND active=0",
+                (code, code)
+            ).fetchone()
+            if blocked_u:
+                try:
+                    if check_password_hash(blocked_u["password_hash"], pw) or check_password_hash(blocked_u["password_hash"], pw.strip()):
+                        reason = blocked_u["block_reason"] or "Account locked by AI Security Shield due to buddy punch / biometric policy violation."
+                        flash(f"🚨 Access Denied (Account Blocked by AI): {reason} Please contact HR for permission to unlock your account.", "err")
+                        return render_template("login.html", active_type=login_type_post or "employee"), 403
+                except Exception:
+                    pass
 
         key = f"{code}|{ip}"
         if u and is_pw_valid:

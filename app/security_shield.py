@@ -200,3 +200,181 @@ def redact_sensitive_data(data: dict) -> dict:
         else:
             sanitized[k] = v
     return sanitized
+
+
+# -------------------------------------------------------------------------
+# AI Biometric Buddy Punch & Real-Time Face Defense Engine
+# -------------------------------------------------------------------------
+
+def block_employee_account_by_ai(db, emp_id: int, reason: str, target_emp_id: int = None,
+                                 similarity: float = 0.0, selfie_path: str = None, target_selfie_path: str = None):
+    """Immediately locks and blocks an employee ID upon detecting buddy punching,
+    duplicate face spoofing, or cross-account biometric violations.
+    Requires HR permission to unlock.
+    """
+    now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    date_str = datetime.now().strftime("%Y-%m-%d")
+
+    # 1. Block employee account
+    db.execute(
+        "UPDATE employees SET active=0, block_reason=?, blocked_at=? WHERE id=?",
+        (reason, now_ts, emp_id)
+    )
+
+    # 2. Record incident in ai_face_alerts
+    db.execute(
+        "INSERT INTO ai_face_alerts (date, emp_id, target_emp_id, similarity, selfie_path, "
+        "target_selfie_path, alert_type, status, details) VALUES (?,?,?,?,?,?, 'BUDDY_PUNCH', 'BLOCKED', ?)",
+        (date_str, emp_id, target_emp_id, round(float(similarity), 4), selfie_path, target_selfie_path, reason)
+    )
+
+    # 3. Audit log
+    db.execute(
+        "INSERT INTO audit_log (action, entity, entity_id, details) VALUES ('AI_ACCOUNT_BLOCKED', 'employee', ?, ?)",
+        (str(emp_id), f"Account locked by AI Defense Shield. Reason: {reason}")
+    )
+    db.commit()
+
+
+def unlock_employee_account_by_hr(db, alert_id: int, hr_id: int, notes: str = ""):
+    """Allows HR Administrator to review incident, grant permission, and unlock employee account."""
+    alert = db.execute("SELECT * FROM ai_face_alerts WHERE id=?", (alert_id,)).fetchone()
+    if not alert:
+        return False
+
+    now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 1. Unlock employee
+    db.execute(
+        "UPDATE employees SET active=1, block_reason=NULL, blocked_at=NULL WHERE id=?",
+        (alert["emp_id"],)
+    )
+
+    # 2. Update alert status
+    db.execute(
+        "UPDATE ai_face_alerts SET status='RESOLVED_UNLOCKED', hr_action_by=?, hr_action_at=?, hr_notes=? WHERE id=?",
+        (hr_id, now_ts, notes or "Permission Granted & Unlocked by HR", alert_id)
+    )
+
+    # 3. Log audit
+    db.execute(
+        "INSERT INTO audit_log (action, entity, entity_id, details) VALUES ('AI_ACCOUNT_UNLOCKED', 'employee', ?, ?)",
+        (str(alert["emp_id"]), f"Unlocked by HR ID {hr_id}. Notes: {notes}")
+    )
+    db.commit()
+    return True
+
+
+def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, threshold: float = 0.70) -> list:
+    """Automated AI Database Scanner:
+    Inspects all daily attendance punch photos in the database.
+    Detects if the same face was used across multiple employee IDs (EMP001 vs EMP002 buddy punch),
+    filtering through variations in dress, eyes, and background noise.
+    Flags violations and blocks offending accounts pending HR permission.
+    """
+    import os
+    from flask import current_app
+    from .services import d2s, today
+    from .face_engine import extract_face_embedding, compute_similarity, compute_multi_angle_similarity, parse_template_angles
+
+    if not target_date_str:
+        target_date_str = d2s(today())
+
+    selfie_dir = current_app.config.get("SELFIE_DIR")
+
+    rows = db.execute(
+        "SELECT a.id, a.emp_id, a.date, a.in_selfie, a.out_selfie, a.check_in, "
+        "e.emp_code, e.name, e.face_image, e.face_template "
+        "FROM attendance a "
+        "JOIN employees e ON e.id=a.emp_id "
+        "WHERE a.date=? AND (a.in_selfie IS NOT NULL OR a.out_selfie IS NOT NULL)",
+        (target_date_str,)
+    ).fetchall()
+
+    all_emps = db.execute("SELECT id, emp_code, name, face_image, face_template FROM employees WHERE face_registered=1").fetchall()
+
+    detected = []
+    punch_items = []
+
+    for r in rows:
+        s_name = r["in_selfie"] or r["out_selfie"]
+        if not s_name or not selfie_dir:
+            continue
+        s_path = os.path.join(selfie_dir, s_name)
+        if os.path.exists(s_path):
+            try:
+                emb = extract_face_embedding(s_path)
+                punch_items.append({
+                    "rec_id": r["id"],
+                    "emp_id": r["emp_id"],
+                    "emp_code": r["emp_code"],
+                    "name": r["name"],
+                    "selfie_file": s_name,
+                    "embedding": emb,
+                })
+            except Exception:
+                pass
+
+    # 1. Cross-Punch Evaluation (Did EMP001 and EMP002 use the exact same face today?)
+    n = len(punch_items)
+    for i in range(n):
+        for j in range(i + 1, n):
+            p1 = punch_items[i]
+            p2 = punch_items[j]
+            if p1["emp_id"] == p2["emp_id"]:
+                continue
+
+            sim = compute_similarity(p1["embedding"], p2["embedding"])
+            if sim >= threshold:
+                existing = db.execute(
+                    "SELECT id FROM ai_face_alerts WHERE date=? AND emp_id=? AND target_emp_id=?",
+                    (target_date_str, p2["emp_id"], p1["emp_id"])
+                ).fetchone()
+                if not existing:
+                    reason = (
+                        f"AI Daily Scan: Same face punch detected between {p1['emp_code']} ({p1['name']}) "
+                        f"and {p2['emp_code']} ({p2['name']}) on {target_date_str} (Similarity: {sim*100:.1f}%). "
+                        f"Account locked pending HR permission."
+                    )
+                    block_employee_account_by_ai(
+                        db, p2["emp_id"], reason=reason, target_emp_id=p1["emp_id"],
+                        similarity=sim, selfie_path=p2["selfie_file"], target_selfie_path=p1["selfie_file"]
+                    )
+                    detected.append({
+                        "emp1": p1,
+                        "emp2": p2,
+                        "similarity": sim,
+                        "reason": reason
+                    })
+
+    # 2. Compare today's punch selfies against all registered templates
+    for p in punch_items:
+        for other in all_emps:
+            if other["id"] == p["emp_id"] or not other["face_template"]:
+                continue
+            other_angles = parse_template_angles(other["face_template"])
+            sim = compute_multi_angle_similarity(p["embedding"], other_angles)
+            if sim >= threshold:
+                existing = db.execute(
+                    "SELECT id FROM ai_face_alerts WHERE date=? AND emp_id=? AND target_emp_id=?",
+                    (target_date_str, p["emp_id"], other["id"])
+                ).fetchone()
+                if not existing:
+                    reason = (
+                        f"AI Daily Scan: Punch face for {p['emp_code']} ({p['name']}) matches registered face of "
+                        f"{other['emp_code']} ({other['name']}) (Similarity: {sim*100:.1f}%). Buddy punch blocked."
+                    )
+                    block_employee_account_by_ai(
+                        db, p["emp_id"], reason=reason, target_emp_id=other["id"],
+                        similarity=sim, selfie_path=p["selfie_file"], target_selfie_path=other["face_image"]
+                    )
+                    detected.append({
+                        "emp1": p,
+                        "emp2": dict(other),
+                        "similarity": sim,
+                        "reason": reason
+                    })
+
+    db.commit()
+    return detected
+

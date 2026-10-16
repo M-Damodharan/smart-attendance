@@ -182,10 +182,29 @@ CREATE TABLE IF NOT EXISTS system_settings (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ai_face_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    target_emp_id INTEGER REFERENCES employees(id),
+    similarity REAL NOT NULL DEFAULT 0.0,
+    selfie_path TEXT,
+    target_selfie_path TEXT,
+    alert_type TEXT NOT NULL DEFAULT 'BUDDY_PUNCH',
+    status TEXT NOT NULL DEFAULT 'BLOCKED',
+    details TEXT,
+    hr_action_by INTEGER REFERENCES employees(id),
+    hr_action_at TEXT,
+    hr_notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
 CREATE INDEX IF NOT EXISTS idx_att_emp ON attendance(emp_id, date);
 CREATE INDEX IF NOT EXISTS idx_leave_emp ON leaves(emp_id, status);
 CREATE INDEX IF NOT EXISTS idx_od_emp ON od_requests(emp_id, od_date);
+CREATE INDEX IF NOT EXISTS idx_ai_alert_date ON ai_face_alerts(date);
+CREATE INDEX IF NOT EXISTS idx_ai_alert_emp ON ai_face_alerts(emp_id);
 """
 
 
@@ -240,6 +259,10 @@ def init_db(app):
         con.execute("ALTER TABLE employees ADD COLUMN face_registered_by INTEGER REFERENCES employees(id)")
     if "face_image" not in emp_cols:
         con.execute("ALTER TABLE employees ADD COLUMN face_image TEXT")
+    if "block_reason" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN block_reason TEXT")
+    if "blocked_at" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN blocked_at TEXT")
 
     att_cols = [c[1] for c in con.execute("PRAGMA table_info(attendance)").fetchall()]
     if "shift_id" not in att_cols:
@@ -265,9 +288,11 @@ def init_db(app):
     if con.execute("SELECT COUNT(*) FROM shifts WHERE name LIKE '%General%'").fetchone()[0] == 0:
         con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('General Shift', '09:00', '18:00', 15, 8.0, 4.0, 1.0)")
 
-    # Ensure system_settings has face recognition defaults
+    # Ensure system_settings has face recognition and AI defense defaults
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.75')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_buddy_punch_block_threshold', '0.70')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_auto_block_enabled', '1')")
 
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
         _seed_demo(con)

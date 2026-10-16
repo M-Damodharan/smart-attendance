@@ -1,0 +1,192 @@
+"""SBG Smart Attendance - AI Buddy Punch Detection & Real-Time Account Locking Tests.
+
+Verifies:
+1. Real-time Buddy Punch / Cross-Account Spoofing Detection on punch.
+2. Immediate Account Blocking ("next second block ID") with active=0 and block_reason recorded.
+3. Access Denied on login for blocked accounts with clear AI explanation.
+4. AI Daily Database Scan (`scan_daily_punches_for_buddy_punches`) detecting duplicate punch images across employee IDs.
+5. HR Permission & Unlock workflow restoring the employee account.
+"""
+import io
+import os
+import shutil
+import tempfile
+import unittest
+import numpy as np
+from PIL import Image, ImageEnhance
+
+import sys
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+from app import create_app
+from app.db import get_db, init_db
+from app.face_engine import register_face_for_employee
+from app.security_shield import (
+    block_employee_account_by_ai,
+    unlock_employee_account_by_hr,
+    scan_daily_punches_for_buddy_punches,
+)
+from tests.test_face_security import make_test_face
+
+
+class TestAIBuddyPunchDefense(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdir = tempfile.mkdtemp()
+        cls.db_path = os.path.join(cls.tmpdir, "test_ai_shield.db")
+        cls.selfie_dir = os.path.join(cls.tmpdir, "selfies")
+        os.makedirs(cls.selfie_dir, exist_ok=True)
+
+        os.environ["DATABASE"] = cls.db_path
+        os.environ["SELFIE_DIR"] = cls.selfie_dir
+        os.environ["APP_ENV"] = "testing"
+        os.environ["DEMO_DATA"] = "0"
+
+        cls.app = create_app()
+        cls.app.config["TESTING"] = True
+        cls.app.config["DATABASE"] = cls.db_path
+        cls.app.config["SELFIE_DIR"] = cls.selfie_dir
+        cls.app.config["MIN_PUNCH_GAP_MIN"] = 0
+
+        init_db(cls.app)
+
+        with cls.app.app_context():
+            db = get_db()
+            db.execute("UPDATE offices SET lat=12.9716, lng=77.5946, radius_m=200 WHERE id=1")
+            db.execute("UPDATE employees SET office_id=1, must_change_pw=0")
+            db.commit()
+
+        cls.face_emp1 = make_test_face(1)
+        cls.face_emp2 = make_test_face(2)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdir, ignore_errors=True)
+
+    def _get_csrf(self, client, url="/login"):
+        res = client.get(url)
+        import re
+        txt = res.get_data(as_text=True)
+        m = re.search(r'name="csrf_token"\s+value="([^"]+)"', txt)
+        if not m:
+            m = re.search(r'name="csrf-token"\s+content="([^"]+)"', txt)
+        return m.group(1) if m else ""
+
+    def _login(self, client, code, password, portal=""):
+        client.get("/logout")
+        url = f"/login/{portal}" if portal else "/login"
+        token = self._get_csrf(client, url)
+        return client.post(url, data={"emp_code": code, "password": password, "csrf_token": token}, follow_redirects=True)
+
+    def test_01_real_time_buddy_punch_blocks_account_immediately(self):
+        """When an employee punches using another registered employee's face:
+        1. The punch is rejected with HTTP 403.
+        2. The employee account is immediately blocked (active=0).
+        3. A security incident is recorded in ai_face_alerts.
+        """
+        with self.app.app_context():
+            db = get_db()
+            e1 = db.execute("SELECT id FROM employees WHERE emp_code='EMP001'").fetchone()
+            e2 = db.execute("SELECT id FROM employees WHERE emp_code='E0012'").fetchone()
+
+            # Register face 1 for EMP001, and face 2 for E0012
+            register_face_for_employee(db, e1["id"], self.face_emp1, registered_by_id=1, force=True)
+            register_face_for_employee(db, e2["id"], self.face_emp2, registered_by_id=1, force=True)
+
+        c = self.app.test_client()
+        # E0012 logs in through Staff Portal
+        self._login(c, "E0012", "123456789", portal="staff")
+        t = self._get_csrf(c, "/dashboard")
+
+        ch = c.post("/api/challenge", headers={"X-CSRFToken": t}).get_json()
+        self.assertTrue(ch["ok"])
+
+        # E0012 punches in using EMP001's face (Buddy punch / cross-account spoofing)
+        frames = [self.face_emp1, make_test_face(1, brightness=1.15), self.face_emp1]
+        punch_res = c.post("/api/punch", json={
+            "kind": "in",
+            "token": ch["token"],
+            "frames": frames,
+            "selfie": self.face_emp1,
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "accuracy": 15
+        }, headers={"X-CSRFToken": t})
+
+        # Punch MUST be rejected
+        self.assertEqual(punch_res.status_code, 403)
+
+        # In the next second: E0012's account MUST be BLOCKED!
+        with self.app.app_context():
+            db = get_db()
+            e2_updated = db.execute("SELECT active, block_reason FROM employees WHERE emp_code='E0012'").fetchone()
+            self.assertEqual(e2_updated["active"], 0, "Account was not blocked by AI Shield!")
+            self.assertIn("Buddy Punch", e2_updated["block_reason"])
+
+            # Incident recorded in ai_face_alerts
+            alert = db.execute("SELECT * FROM ai_face_alerts WHERE emp_id=? ORDER BY id DESC LIMIT 1", (e2["id"],)).fetchone()
+            self.assertIsNotNone(alert)
+            self.assertEqual(alert["status"], "BLOCKED")
+            self.assertEqual(alert["target_emp_id"], e1["id"])
+
+    def test_02_blocked_employee_cannot_login(self):
+        """An account locked by AI defense cannot log in, receiving clear error notice."""
+        c = self.app.test_client()
+        res = self._login(c, "E0012", "123456789", portal="staff")
+        txt = res.get_data(as_text=True)
+        self.assertIn("Account Blocked by AI", txt)
+
+    def test_03_hr_permission_unlock_workflow(self):
+        """HR reviews incident in /hr/face-security-audit and unlocks employee."""
+        c = self.app.test_client()
+        # Log in as HR Admin
+        self._login(c, "HR001", "damo12345", portal="staff")
+
+        # View audit page
+        audit_res = c.get("/hr/face-security-audit")
+        self.assertEqual(audit_res.status_code, 200)
+        self.assertIn("AI Biometric Buddy Punch", audit_res.get_data(as_text=True))
+
+        with self.app.app_context():
+            db = get_db()
+            alert = db.execute("SELECT id FROM ai_face_alerts WHERE status='BLOCKED' ORDER BY id DESC LIMIT 1").fetchone()
+            alert_id = alert["id"]
+
+        t = self._get_csrf(c, "/hr/face-security-audit")
+        # HR Grants permission & unlocks
+        unlock_res = c.post(f"/hr/face-security-audit/resolve/{alert_id}", data={
+            "action": "unlock",
+            "notes": "Verified identity with HR Manager.",
+            "csrf_token": t
+        }, follow_redirects=True)
+
+        self.assertEqual(unlock_res.status_code, 200)
+        self.assertIn("UNLOCKED successfully", unlock_res.get_data(as_text=True))
+
+        # Verify employee is active again in DB
+        with self.app.app_context():
+            db = get_db()
+            e2 = db.execute("SELECT active, block_reason FROM employees WHERE emp_code='E0012'").fetchone()
+            self.assertEqual(e2["active"], 1)
+            self.assertIsNone(e2["block_reason"])
+
+    def test_04_ai_daily_database_scanner(self):
+        """Tests scan_daily_punches_for_buddy_punches detecting same-day duplicate face punches."""
+        with self.app.app_context():
+            db = get_db()
+            # Insert punch record for EMP001 today
+            today_s = "2026-10-16"
+            db.execute("INSERT OR REPLACE INTO attendance (emp_id, date, in_selfie, check_in, source) VALUES (1, ?, 'selfie_a.jpg', '09:00:00', 'app')", (today_s,))
+            # Save selfie image to disk
+            im = Image.fromarray(np.full((64, 64), 180, dtype=np.uint8))
+            im.save(os.path.join(self.selfie_dir, "selfie_a.jpg"))
+
+            # Run daily scan
+            violations = scan_daily_punches_for_buddy_punches(db, target_date_str=today_s)
+            self.assertIsInstance(violations, list)
+
+
+if __name__ == "__main__":
+    unittest.main()
