@@ -331,14 +331,6 @@ A. LOCAL ENVIRONMENT (ON YOUR LAPTOP):
    3. Open browser: http://127.0.0.1:5000
    4. Or run the 24/7 watchdog: .\venv\Scripts\python.exe scripts\watchdog_24_7.py
 
-B. LIVE CLOUD ENVIRONMENT (ANY DEVICE, 24/7):
-   1. Open browser on any phone, tablet, or PC:
-      https://smart-attendance-u7e6.onrender.com
-   2. Or open the Android SBG Attendance Mobile App.
-   3. Sign In Credentials:
-      - HR Administrator: HR001 | Password: damo12345 (or 123456789)
-      - Employee: EMP001 | Password: 123456789
-
 ================================================================================
                     END OF SYSTEM GUIDE & WORKFLOW
 ================================================================================
