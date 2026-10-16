@@ -115,7 +115,21 @@
     try {
       // 1. Try Phone Owner Face ID Biometric Authentication (WebAuthn / Passkeys)
       let webauthnAssertion = null;
-      if (window.WebAuthnHelper && window.WebAuthnHelper.isSupported() && isWebAuthnEnrolled) {
+      if (window.WebAuthnHelper && window.WebAuthnHelper.isSupported()) {
+        if (!isWebAuthnEnrolled) {
+          promptEl.textContent = 'Setting up Phone Face ID… Please verify with Face ID.';
+          try {
+            await window.WebAuthnHelper.enrollDevice();
+            isWebAuthnEnrolled = true;
+            checkDeviceStatus();
+            promptEl.textContent = 'Phone bound! Verifying attendance punch…';
+            await sleep(400);
+          } catch (enrollErr) {
+            console.warn('Auto-enroll cancelled or failed:', enrollErr);
+            throw new Error('Phone Face ID setup cancelled: ' + (enrollErr.message || 'Please tap to bind Face ID'));
+          }
+        }
+
         promptEl.textContent = 'Authenticating Phone Face ID…';
         try {
           webauthnAssertion = await window.WebAuthnHelper.getPunchAssertion();
@@ -190,6 +204,38 @@
     busy = false;
     refresh();
   });
+
+  // Quick Bind Phone Face ID Button
+  const quickBindBtn = $('btn-quick-bind-faceid');
+  const quickBindStatus = $('quick-bind-status');
+  if (quickBindBtn) {
+    quickBindBtn.addEventListener('click', async () => {
+      quickBindBtn.disabled = true;
+      quickBindBtn.textContent = 'Authenticating Phone Face ID…';
+      if (quickBindStatus) {
+        quickBindStatus.style.display = 'block';
+        quickBindStatus.style.color = 'var(--text-muted)';
+        quickBindStatus.textContent = 'Please confirm with Face ID / Biometrics on your phone…';
+      }
+      try {
+        const res = await window.WebAuthnHelper.enrollDevice();
+        isWebAuthnEnrolled = true;
+        if (quickBindStatus) {
+          quickBindStatus.style.color = '#10b981';
+          quickBindStatus.innerHTML = '<b>✓ ' + res.message + ' You can now tap Verify &amp; Check In below.</b>';
+        }
+        quickBindBtn.style.display = 'none';
+        checkDeviceStatus();
+      } catch (err) {
+        quickBindBtn.disabled = false;
+        quickBindBtn.textContent = '📱 Retry Binding Phone Face ID';
+        if (quickBindStatus) {
+          quickBindStatus.style.color = '#ef4444';
+          quickBindStatus.textContent = 'Setup failed: ' + (err.message || 'Cancelled');
+        }
+      }
+    });
+  }
 
   locate();
   startCamera();

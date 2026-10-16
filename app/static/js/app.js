@@ -1,5 +1,11 @@
 // Shared helpers
-function csrf() { return document.querySelector('meta[name="csrf-token"]').content; }
+function csrf() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta && meta.content) return meta.content;
+  const input = document.querySelector('input[name="csrf_token"], input[name="csrf"]');
+  if (input && input.value) return input.value;
+  return '';
+}
 
 function startClock(el) {
   if (!el) return;
@@ -8,7 +14,9 @@ function startClock(el) {
 }
 
 async function postJSON(url, data) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(data) });
+  const tok = csrf();
+  const bodyObj = Object.assign({}, data || {}, { csrf_token: tok });
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': tok }, body: JSON.stringify(bodyObj) });
   let j = {}; try { j = await r.json(); } catch (e) {}
   return j;
 }

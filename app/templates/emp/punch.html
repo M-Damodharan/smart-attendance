@@ -9,19 +9,26 @@
 </section>
 {% else %}
 <section class="card punch" id="punch" data-mode="{{ mode }}">
+  <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
   <h2>{{ 'Check out' if mode=='out' else 'Check in' }}</h2>
 
   <!-- Device Not Registered Warning Banner -->
   <div id="device-unregistered-banner" style="display:none;background:rgba(245,158,11,0.12);border:1px solid #f59e0b;padding:12px 14px;border-radius:12px;margin-bottom:1rem;font-size:0.86rem;line-height:1.5">
     <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:#b45309">
-      <span>📱</span> Phone Biometric Setup Recommended
+      <span>📱</span> Phone Biometric Setup (One-Time)
     </div>
     <p style="margin:4px 0 8px;color:var(--text-muted)">
-      Bind your phone's hardware Face ID / Biometrics for instant, 100% accurate attendance punching without camera lighting errors.
+      Bind your phone's hardware Face ID for instant, 100% accurate check-in without camera lighting or glasses errors.
     </p>
-    <a href="{{ url_for('auth.onboarding_face') }}" class="btn sm primary" style="font-weight:600">
-      Bind Phone Face ID &rarr;
-    </a>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button type="button" id="btn-quick-bind-faceid" class="btn sm primary" style="font-weight:700">
+        📱 Bind This Phone's Face ID Now
+      </button>
+      <a href="{{ url_for('auth.onboarding_face') }}" class="btn sm" style="font-weight:600">
+        Full Guide &rarr;
+      </a>
+    </div>
+    <div id="quick-bind-status" style="margin-top:8px;font-size:0.82rem;display:none"></div>
   </div>
 
   <div class="steps">

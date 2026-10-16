@@ -82,6 +82,20 @@ def check_csrf():
     if current_app.config.get("TESTING") and current_app.config.get("WTF_CSRF_ENABLED") is False:
         return
     if request.method in ("POST", "PUT", "DELETE"):
+        # Safe self-healing for authenticated users:
+        sess_tok = session.get("csrf", "")
+        if not sess_tok and session.get("uid"):
+            sess_tok = csrf_token()
+
+        # Challenge generation endpoints are read-only token generators for active sessions
+        if session.get("uid") and request.path in (
+            "/api/challenge",
+            "/api/webauthn/punch/challenge",
+            "/api/webauthn/register/challenge",
+            "/api/webauthn/status",
+        ):
+            return
+
         tok = (
             request.headers.get("X-CSRFToken")
             or request.headers.get("X-CSRF-Token")
@@ -92,12 +106,6 @@ def check_csrf():
             j = request.get_json(silent=True) or {}
             if isinstance(j, dict):
                 tok = j.get("csrf_token") or j.get("csrf")
-
-        sess_tok = session.get("csrf", "")
-
-        # Safe self-healing for authenticated users:
-        if not sess_tok and session.get("uid"):
-            sess_tok = csrf_token()
 
         if not tok or not sess_tok or not secrets.compare_digest(str(tok), str(sess_tok)):
             if request.path.startswith("/api/") or request.is_json:

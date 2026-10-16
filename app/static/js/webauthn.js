@@ -30,6 +30,17 @@ window.WebAuthnHelper = (() => {
     return bytes;
   }
 
+  function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) return meta.content;
+    const input = document.querySelector('input[name="csrf_token"], input[name="csrf"]');
+    if (input && input.value) return input.value;
+    if (typeof csrf === 'function') {
+      try { return csrf(); } catch (e) {}
+    }
+    return '';
+  }
+
   function isSupported() {
     return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
   }
@@ -52,13 +63,16 @@ window.WebAuthnHelper = (() => {
       throw new Error('Biometric authentication (WebAuthn/Face ID) is not supported in this browser.');
     }
 
+    const tok = getCsrfToken();
+
     // 1. Get registration options from server
     const chalRes = await fetch('/api/webauthn/register/challenge', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
-      }
+        'X-CSRFToken': tok
+      },
+      body: JSON.stringify({ csrf_token: tok })
     });
     const chalData = await chalRes.json();
     if (!chalData.ok) {
@@ -84,14 +98,15 @@ window.WebAuthnHelper = (() => {
         clientDataJSON: bufferToBase64Url(cred.response.clientDataJSON),
         attestationObject: bufferToBase64Url(cred.response.attestationObject)
       },
-      device_name: customName || getDeviceModelName()
+      device_name: customName || getDeviceModelName(),
+      csrf_token: tok
     };
 
     const verifyRes = await fetch('/api/webauthn/register/verify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+        'X-CSRFToken': tok
       },
       body: JSON.stringify(payload)
     });
@@ -111,13 +126,16 @@ window.WebAuthnHelper = (() => {
       throw new Error('Biometric authentication is not supported in this browser.');
     }
 
+    const tok = getCsrfToken();
+
     // 1. Get punch challenge options from server
     const chalRes = await fetch('/api/webauthn/punch/challenge', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
-      }
+        'X-CSRFToken': tok
+      },
+      body: JSON.stringify({ csrf_token: tok })
     });
     const chalData = await chalRes.json();
     if (!chalData.ok) {
