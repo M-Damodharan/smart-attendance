@@ -14,7 +14,7 @@ from .auth import employee_required, login_required
 from .db import get_db
 from .face_engine import verify_face_for_employee, FACE_MATCH_THRESHOLD
 from .services import (approved_od_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
-                       get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s)
+                       get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s, parse_dt)
 from .webauthn_engine import (generate_registration_challenge, verify_registration_response,
                              generate_authentication_challenge, verify_authentication_response, get_rp_info)
 
@@ -194,8 +194,8 @@ def punch():
     target_rec = None
     if kind == "in":
         if yesterday_rec:
-            cin_dt = datetime.strptime(yesterday_rec["check_in"], "%Y-%m-%d %H:%M:%S")
-            if (t - cin_dt).total_seconds() < 18 * 3600:
+            cin_dt = parse_dt(yesterday_rec["check_in"])
+            if cin_dt and (t - cin_dt).total_seconds() < 18 * 3600:
                 return _err("You have an active night shift from yesterday. Please check out first.")
         if today_rec and today_rec["check_in"]:
             return _err("You have already checked in today.")
@@ -209,7 +209,8 @@ def punch():
         else:
             return _err("You have not checked in.")
 
-        gap = (t - datetime.strptime(target_rec["check_in"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 60
+        cin_dt = parse_dt(target_rec["check_in"])
+        gap = (t - cin_dt).total_seconds() / 60 if cin_dt else 999
         if gap < current_app.config["MIN_PUNCH_GAP_MIN"]:
             return _err("Please wait a minute before checking out.")
 

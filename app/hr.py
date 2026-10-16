@@ -700,8 +700,14 @@ def settings():
                     db.execute("UPDATE shifts SET name=?, start_time=?, end_time=?, grace_min=?, full_hours=?, half_hours=?, "
                                "ot_min_hours=?, active=? WHERE id=?", (*vals, sid))
                 else:
-                    sid = db.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, "
-                                     "ot_min_hours, active) VALUES (?,?,?,?,?,?,?,?)", vals).lastrowid
+                    existing_s = db.execute("SELECT id FROM shifts WHERE name=?", (f["name"].strip(),)).fetchone()
+                    if existing_s:
+                        sid = existing_s["id"]
+                        db.execute("UPDATE shifts SET name=?, start_time=?, end_time=?, grace_min=?, full_hours=?, half_hours=?, "
+                                   "ot_min_hours=?, active=? WHERE id=?", (*vals, sid))
+                    else:
+                        sid = db.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, "
+                                         "ot_min_hours, active) VALUES (?,?,?,?,?,?,?,?)", vals).lastrowid
                 audit("SHIFT_SAVE", "shift", sid, " | ".join(map(str, vals)))
             elif act == "category":
                 cid = f.get("id", type=int)

@@ -312,6 +312,30 @@ def init_db(app):
     if con.execute("SELECT COUNT(*) FROM shifts WHERE name LIKE '%General%'").fetchone()[0] == 0:
         con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('General Shift', '09:00', '18:00', 15, 8.0, 4.0, 1.0)")
 
+    # Deduplicate shifts: merge any duplicate Shift 2 rows so only one Shift 2 exists
+    s2_rows = con.execute("SELECT id FROM shifts WHERE name LIKE '%Shift 2%' ORDER BY id").fetchall()
+    if len(s2_rows) > 1:
+        keep_s2 = s2_rows[0][0]
+        for dup in s2_rows[1:]:
+            dup_id = dup[0]
+            con.execute("UPDATE employees SET shift_id=? WHERE shift_id=?", (keep_s2, dup_id))
+            con.execute("UPDATE attendance SET shift_id=? WHERE shift_id=?", (keep_s2, dup_id))
+            con.execute("UPDATE weekly_shift_schedules SET shift_id=? WHERE shift_id=?", (keep_s2, dup_id))
+            con.execute("DELETE FROM shifts WHERE id=?", (dup_id,))
+
+    # Generic deduplication: keep earliest ID for any duplicate shift names
+    dup_names = con.execute("SELECT name FROM shifts GROUP BY name HAVING COUNT(*) > 1").fetchall()
+    for row in dup_names:
+        name = row[0]
+        ids = [r[0] for r in con.execute("SELECT id FROM shifts WHERE name=? ORDER BY id", (name,)).fetchall()]
+        if len(ids) > 1:
+            primary_id = ids[0]
+            for extra_id in ids[1:]:
+                con.execute("UPDATE employees SET shift_id=? WHERE shift_id=?", (primary_id, extra_id))
+                con.execute("UPDATE attendance SET shift_id=? WHERE shift_id=?", (primary_id, extra_id))
+                con.execute("UPDATE weekly_shift_schedules SET shift_id=? WHERE shift_id=?", (primary_id, extra_id))
+                con.execute("DELETE FROM shifts WHERE id=?", (extra_id,))
+
     # Ensure system_settings has face recognition and AI defense defaults
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.75')")
