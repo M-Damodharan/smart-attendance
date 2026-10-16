@@ -305,19 +305,32 @@ def onboarding_face():
 
     db = get_db()
     if request.method == "POST":
-        img_data = request.form.get("face_camera_data")
-        if not img_data and "face_file" in request.files:
+        face_center = request.form.get("face_camera_center") or request.form.get("face_camera_data")
+        face_left = request.form.get("face_camera_left")
+        face_right = request.form.get("face_camera_right")
+
+        if not face_center and "face_file" in request.files:
             f = request.files["face_file"]
             if f and f.filename:
-                img_data = f.read()
+                face_center = f.read()
 
-        if not img_data:
-            flash("Please capture or upload your face photo to complete onboarding.", "err")
+        if not face_center:
+            flash("Please complete the 360° face scan or upload a selfie photo to complete onboarding.", "err")
             return render_template("emp/onboarding_face.html")
 
-        ok, msg, other_emp = register_face_for_employee(db, g.user["id"], img_data, registered_by_id=g.user["id"])
+        # Bundle into 360 multi-angle dictionary if left/right angles were captured
+        if face_center and face_left and face_right:
+            img_input = {
+                "center": face_center,
+                "left": face_left,
+                "right": face_right
+            }
+        else:
+            img_input = face_center
+
+        ok, msg, other_emp = register_face_for_employee(db, g.user["id"], img_input, registered_by_id=g.user["id"])
         if ok:
-            flash("Biometric Face ID successfully verified and linked to your account! You may now punch attendance.", "ok")
+            flash("Biometric 360° Face ID successfully registered and verified! Your punches are now strongly protected.", "ok")
             return redirect(url_for("emp.punch"))
         else:
             flash(msg, "err")

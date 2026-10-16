@@ -238,7 +238,15 @@ def punch():
              selfie_name, 1 if geo["inside"] else 0, late, face_verified, round(face_sim, 4)))
         audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late} od={geo['od']} face_ok={face_verified}")
         db.commit()
-        return jsonify(ok=True, message=f"Checked in for {shift['name']}" + (" — marked late" if late else ""), time=f"{t:%I:%M %p}", shift=shift["name"], late=bool(late))
+        return jsonify(
+            ok=True,
+            message=f"Checked in for {shift['name']}" + (" — marked late" if late else ""),
+            time=f"{t:%I:%M %p}",
+            shift=shift["name"],
+            late=bool(late),
+            face_verified=bool(face_verified),
+            face_similarity=round(face_sim * 100, 1)
+        )
 
     shift_target = determine_shift_from_punch(target_rec["check_in"], db)
     upd = finalize_attendance({"check_in": target_rec["check_in"], "check_out": t.strftime("%Y-%m-%d %H:%M:%S")}, shift_target, cat)
@@ -260,6 +268,8 @@ def punch():
         duration=dur_str,
         status=upd["status"],
         ot_hours=upd["ot_hours"],
+        face_verified=bool(face_verified),
+        face_similarity=round(face_sim * 100, 1)
     )
 
 

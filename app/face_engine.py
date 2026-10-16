@@ -177,27 +177,75 @@ def compute_similarity(v1, v2) -> float:
 
 
 def parse_template(template_str):
-    """Safely deserializes face template JSON from SQLite."""
+    """Safely deserializes face template JSON from SQLite, returning primary vector."""
     if not template_str:
         return None
     try:
         data = json.loads(template_str)
         if isinstance(data, dict):
-            return data.get("vector")
+            if "vector" in data and isinstance(data["vector"], list):
+                return data["vector"]
+            if "angles" in data and isinstance(data["angles"], dict):
+                return data["angles"].get("center") or next(iter(data["angles"].values()), None)
         if isinstance(data, list):
+            if data and isinstance(data[0], list):
+                return data[0]
             return data
     except Exception:
         pass
     return None
 
 
+def parse_template_angles(template_str) -> list:
+    """Safely deserializes all angle vectors (Center, Left, Right) from face template."""
+    if not template_str:
+        return []
+    try:
+        data = json.loads(template_str)
+        if isinstance(data, dict):
+            if "angles" in data and isinstance(data["angles"], dict):
+                vecs = []
+                for k in ("center", "left", "right"):
+                    v = data["angles"].get(k)
+                    if v and isinstance(v, list):
+                        vecs.append(v)
+                if vecs:
+                    return vecs
+            if "vectors" in data and isinstance(data["vectors"], list):
+                return [v for v in data["vectors"] if isinstance(v, list)]
+            if "vector" in data and isinstance(data["vector"], list):
+                return [data["vector"]]
+        if isinstance(data, list):
+            if data and isinstance(data[0], list):
+                return data
+            return [data]
+    except Exception:
+        pass
+    return []
+
+
+def compute_multi_angle_similarity(live_embedding, template_angles: list) -> float:
+    """Computes similarity of live face against all registered angles (Center, Left, Right).
+    Returns the maximum similarity achieved across any angle.
+    """
+    if not live_embedding or not template_angles:
+        return 0.0
+    highest = 0.0
+    for vec in template_angles:
+        sim = compute_similarity(live_embedding, vec)
+        if sim > highest:
+            highest = sim
+    return highest
+
+
 # -----------------------------------------------------------------------------
 # Core Security Functions
 # -----------------------------------------------------------------------------
 
-def check_duplicate_face(db, new_embedding, exclude_emp_id=None, threshold=FACE_MATCH_THRESHOLD):
+def check_duplicate_face(db, new_embeddings, exclude_emp_id=None, threshold=FACE_MATCH_THRESHOLD):
     """Verifies that a face is NOT already registered under another Employee ID.
     Enforces 'One Face, One Account'.
+    `new_embeddings` can be a single vector, list of vectors, or dict of angle vectors.
     Returns: (is_duplicate: bool, matching_employee: dict | None, similarity: float)
     """
     query = "SELECT id, emp_code, name, role, face_template, face_image FROM employees WHERE face_registered=1"
@@ -210,15 +258,27 @@ def check_duplicate_face(db, new_embedding, exclude_emp_id=None, threshold=FACE_
     highest_sim = 0.0
     best_match = None
 
+    # Normalize new_embeddings to a list of vectors
+    if isinstance(new_embeddings, dict):
+        new_vecs = [v for v in new_embeddings.values() if isinstance(v, list)]
+    elif isinstance(new_embeddings, list):
+        if new_embeddings and isinstance(new_embeddings[0], list):
+            new_vecs = new_embeddings
+        else:
+            new_vecs = [new_embeddings]
+    else:
+        new_vecs = []
+
     for r in rows:
-        tpl = parse_template(r["face_template"])
-        if not tpl:
+        stored_angles = parse_template_angles(r["face_template"])
+        if not stored_angles:
             continue
-        sim = compute_similarity(new_embedding, tpl)
-        if sim > highest_sim:
-            highest_sim = sim
-            if sim >= threshold:
-                best_match = dict(r)
+        for nv in new_vecs:
+            sim = compute_multi_angle_similarity(nv, stored_angles)
+            if sim > highest_sim:
+                highest_sim = sim
+                if sim >= threshold:
+                    best_match = dict(r)
 
     if best_match and highest_sim >= threshold:
         return True, best_match, highest_sim
@@ -290,8 +350,8 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
             "error": "Face not registered for your account. Please contact HR to register your face."
         }
 
-    user_template = parse_template(user["face_template"])
-    if not user_template:
+    user_angles = parse_template_angles(user["face_template"])
+    if not user_angles:
         return {
             "verified": False,
             "status": "NOT_REGISTERED",
@@ -299,8 +359,8 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
             "error": "Face template corrupted. Please contact HR to re-register your face."
         }
 
-    # 3. Check similarity against the logged-in user's own registered template
-    sim = compute_similarity(live_embedding, user_template)
+    # 3. Check similarity against the logged-in user's multi-angle template (Center, Left, Right)
+    sim = compute_multi_angle_similarity(live_embedding, user_angles)
     if sim >= threshold:
         return {
             "verified": True,
@@ -326,21 +386,42 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
 
 
 def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int = None, force: bool = False):
-    """Registers a face for an employee with duplicate-face detection.
+    """Registers a face for an employee with duplicate-face detection and 360 multi-angle support.
+    `img_input` can be:
+      - A single image (data URL, file path, bytes, or PIL Image)
+      - A dictionary of angles: {"center": img, "left": img, "right": img}
     Returns: (success: bool, message: str, duplicate_info: dict | None)
     """
     user = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not user:
         return False, "Employee not found.", None
 
-    try:
-        embedding = extract_face_embedding(img_input)
-    except Exception as e:
-        return False, f"Could not process face image: {e}", None
+    embeddings = {}
+    primary_img = None
+
+    if isinstance(img_input, dict):
+        for angle in ("center", "left", "right"):
+            if angle in img_input and img_input[angle]:
+                try:
+                    embeddings[angle] = extract_face_embedding(img_input[angle])
+                    if angle == "center" or primary_img is None:
+                        primary_img = img_input[angle]
+                except Exception as e:
+                    return False, f"Could not process {angle} face angle: {e}", None
+        if not embeddings:
+            return False, "No valid face angles provided.", None
+        primary_embedding = embeddings.get("center") or next(iter(embeddings.values()))
+    else:
+        try:
+            primary_embedding = extract_face_embedding(img_input)
+            embeddings["center"] = primary_embedding
+            primary_img = img_input
+        except Exception as e:
+            return False, f"Could not process face image: {e}", None
 
     # Check for duplicate face across all other accounts
     if not force:
-        is_dup, other_emp, sim = check_duplicate_face(db, embedding, exclude_emp_id=emp_id)
+        is_dup, other_emp, sim = check_duplicate_face(db, embeddings, exclude_emp_id=emp_id)
         if is_dup:
             audit(
                 "FACE_DUPLICATE_REGISTRATION_BLOCKED",
@@ -358,17 +439,18 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
     now_ts = now()
     face_filename = f"face_{user['emp_code']}_{now_ts.strftime('%Y%m%d_%H%M%S')}.jpg"
     selfie_dir = current_app.config.get("SELFIE_DIR")
-    if selfie_dir:
+    if selfie_dir and primary_img:
         os.makedirs(selfie_dir, exist_ok=True)
-        im = _load_image(img_input)
+        im = _load_image(primary_img)
         im.thumbnail((640, 640))
         im.save(os.path.join(selfie_dir, face_filename), "JPEG", quality=85)
 
     template_payload = json.dumps({
-        "vector": embedding,
+        "vector": primary_embedding,
+        "angles": embeddings,
         "registered_at": now_ts.isoformat(),
         "registered_by": registered_by_id,
-        "algorithm": "DoG-SpatialProjection-v1"
+        "algorithm": "MultiAngle-360-DoG-SpatialProjection-v2"
     })
 
     db.execute(
@@ -376,7 +458,7 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
         "face_registered_by=?, face_image=? WHERE id=?",
         (template_payload, now_ts.strftime("%Y-%m-%d %H:%M:%S"), registered_by_id, face_filename, emp_id)
     )
-    audit("FACE_REGISTERED", "employee", emp_id, f"Face registered for {user['emp_code']} by actor_id={registered_by_id}")
+    audit("FACE_REGISTERED", "employee", emp_id, f"Multi-angle 360 face registered for {user['emp_code']} by actor_id={registered_by_id} (angles={list(embeddings.keys())})")
     db.commit()
     return True, f"Face successfully registered for {user['name']} ({user['emp_code']}).", None
 

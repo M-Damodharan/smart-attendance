@@ -104,6 +104,9 @@
       const durStr = res.duration || res.duration_text || (res.hours !== undefined ? res.hours + ' h' : '');
       const otStr = res.overtime_text || (res.ot_hours ? res.ot_hours + ' h' : '');
       let details = '';
+      if (res.face_verified && res.face_similarity) {
+        details += `<br><span style="color:#10b981">🛡️ Face ID Verified: <strong>${res.face_similarity}% match</strong></span>`;
+      }
       if (durStr) details += `<br>Worked: <strong>${durStr}</strong>`;
       if (otStr && otStr !== '0m' && otStr !== '0 h') details += ` · Overtime: <strong>${otStr}</strong>`;
       if (res.status) details += ` · Status: <strong>${res.status}</strong>`;
