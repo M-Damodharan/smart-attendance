@@ -235,12 +235,15 @@ def register_face(eid):
 
 
 @bp.post("/employees/<int:eid>/reset-face")
+@bp.post("/employees/<int:eid>/reset-device")
 @hr_required
 def reset_face(eid):
     db = get_db()
     emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() or abort(404)
     reset_face_for_employee(db, eid, reset_by_id=g.user["id"])
-    flash(f"Face registration reset for {emp['name']} ({emp['emp_code']}). HR can now register a new face.", "ok")
+    from .webauthn_engine import reset_device_for_employee
+    reset_device_for_employee(db, eid, reset_by_id=g.user["id"])
+    flash(f"Biometric Phone Face ID reset for {emp['name']} ({emp['emp_code']}). Employee can now register their new phone.", "ok")
     return redirect(url_for("hr.employee_form", eid=eid))
 
 
@@ -482,9 +485,11 @@ def decide(kind, rid):
                    (decision, g.user["id"], now().strftime(DT_FMT), remarks, rid))
         if kind == "face" and decision == "Approved":
             reset_face_for_employee(db, row["emp_id"], reset_by_id=g.user["id"])
-            audit("FACE_CHANGE_APPROVED", "employee", row["emp_id"], f"HR {g.user['emp_code']} approved face reset: {remarks}")
+            from .webauthn_engine import reset_device_for_employee
+            reset_device_for_employee(db, row["emp_id"], reset_by_id=g.user["id"])
+            audit("FACE_CHANGE_APPROVED", "employee", row["emp_id"], f"HR {g.user['emp_code']} approved phone face reset: {remarks}")
         elif kind == "face" and decision == "Rejected":
-            audit("FACE_CHANGE_REJECTED", "employee", row["emp_id"], f"HR {g.user['emp_code']} rejected face change: {remarks}")
+            audit("FACE_CHANGE_REJECTED", "employee", row["emp_id"], f"HR {g.user['emp_code']} rejected phone face change: {remarks}")
         else:
             audit(f"{kind.upper()}_{decision.upper()}", kind, rid, remarks)
         db.commit()

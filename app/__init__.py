@@ -6,9 +6,11 @@ from flask import Flask, g, render_template, request, session
 from config import Config
 
 
-def create_app():
+def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(Config)
+    if test_config:
+        app.config.update(test_config)
     if not app.config.get("SECRET_KEY") or app.config["SECRET_KEY"] in ("", "change-this-secret-in-production"):
         import secrets
         app.config["SECRET_KEY"] = secrets.token_hex(32)

@@ -7,7 +7,7 @@ import random
 import secrets
 import time
 
-from flask import Blueprint, abort, current_app, g, jsonify, request, send_from_directory
+from flask import Blueprint, abort, current_app, g, jsonify, request, send_from_directory, session
 from PIL import Image, ImageChops, ImageStat
 
 from .auth import employee_required, login_required
@@ -15,6 +15,8 @@ from .db import get_db
 from .face_engine import verify_face_for_employee, FACE_MATCH_THRESHOLD
 from .services import (approved_od_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
                        get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s)
+from .webauthn_engine import (generate_registration_challenge, verify_registration_response,
+                             generate_authentication_challenge, verify_authentication_response, get_rp_info)
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -121,6 +123,55 @@ def geo_check():
     return jsonify(res)
 
 
+@bp.post("/webauthn/register/challenge")
+@employee_required
+def webauthn_register_challenge():
+    rp_id, origin = get_rp_info(request)
+    options = generate_registration_challenge(g.user, "Sri Balaji Gears Attendance", rp_id)
+    session["webauthn_reg_challenge"] = options["challenge"]
+    return jsonify(ok=True, options=options)
+
+
+@bp.post("/webauthn/register/verify")
+@employee_required
+def webauthn_register_verify():
+    payload = request.get_json(silent=True) or {}
+    stored_ch = session.get("webauthn_reg_challenge")
+    if not stored_ch:
+        return _err("Registration challenge expired. Please retry.")
+    rp_id, origin = get_rp_info(request)
+    device_name = payload.get("device_name") or request.headers.get("User-Agent", "Mobile Phone")[:60]
+    ok, msg, cred_id = verify_registration_response(get_db(), g.user, payload, stored_ch, rp_id, device_name)
+    if not ok:
+        return _err(msg, 400)
+    session.pop("webauthn_reg_challenge", None)
+    return jsonify(ok=True, message=msg, credential_id=cred_id)
+
+
+@bp.post("/webauthn/punch/challenge")
+@employee_required
+def webauthn_punch_challenge():
+    rp_id, origin = get_rp_info(request)
+    ok, err_msg, options = generate_authentication_challenge(get_db(), g.user, rp_id)
+    if not ok:
+        return _err(err_msg, 400)
+    session["webauthn_punch_challenge"] = options["challenge"]
+    return jsonify(ok=True, options=options)
+
+
+@bp.get("/webauthn/status")
+@employee_required
+def webauthn_status():
+    db = get_db()
+    cred_count = db.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE emp_id=?", (g.user["id"],)).fetchone()[0]
+    return jsonify(
+        ok=True,
+        device_registered=bool(g.user.get("device_registered") or cred_count > 0),
+        device_name=g.user.get("device_name") or "Mobile Phone Face ID",
+        device_registered_at=g.user.get("device_registered_at")
+    )
+
+
 @bp.post("/punch")
 @employee_required
 def punch():
@@ -162,28 +213,7 @@ def punch():
         if gap < current_app.config["MIN_PUNCH_GAP_MIN"]:
             return _err("Please wait a minute before checking out.")
 
-    # 1) liveness challenge: must be ours, unused, fresh
-    ch = db.execute("SELECT * FROM challenges WHERE token=? AND emp_id=?", (d.get("token"), user["id"])).fetchone()
-    if not ch or ch["used"] or time.time() - ch["created_at"] > current_app.config["CHALLENGE_TTL_S"]:
-        return _err("Liveness check expired. Please try again.")
-    db.execute("UPDATE challenges SET used=1 WHERE token=?", (ch["token"],))
-    db.commit()
-
-    # 2) frames + selfie
-    try:
-        frames = [_decode_image(f, 400_000) for f in (d.get("frames") or [])[:5]]
-        selfie = _decode_image(d.get("selfie"))
-    except Exception:
-        return _err("Could not read the camera images. Please retry.")
-    if len(frames) < 3:
-        return _err("Liveness frames missing. Please retry.")
-    score = motion_score(frames)
-    if current_app.config["REQUIRE_LIVENESS_MOTION"] and score < current_app.config["MIN_MOTION_SCORE"]:
-        audit("LIVENESS_FAIL", "attendance", user["id"], f"kind={kind} motion={score:.2f}")
-        db.commit()
-        return _err("Liveness check failed. Face the camera and follow the prompts.")
-
-    # 3) geofence (server-side, never trusts the client's verdict)
+    # Geofence validation (server-side, never trusts client coordinates)
     geo = evaluate_geo(user, d.get("lat"), d.get("lng"), d.get("accuracy"))
     if not geo["ok"]:
         return _err(geo["error"])
@@ -192,59 +222,92 @@ def punch():
         db.commit()
         return _err(f"You are {geo['distance']} m from {geo['office']} (allowed {geo['radius']} m).")
 
-    # 4) One Face, One Account Biometric Face Verification
-    thresh_row = db.execute("SELECT value FROM system_settings WHERE key='face_match_threshold'").fetchone()
-    face_thresh = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else FACE_MATCH_THRESHOLD
+    # Decode snapshot selfie (captured for visual attendance audit)
+    try:
+        selfie = _decode_image(d.get("selfie"))
+    except Exception:
+        return _err("Could not read attendance camera photo. Please retry.")
 
-    req_match_row = db.execute("SELECT value FROM system_settings WHERE key='require_face_match'").fetchone()
-    require_face_match = (req_match_row["value"] == "1") if req_match_row else True
-
+    webauthn_assertion = d.get("webauthn_assertion")
+    auth_method = "webauthn_face_id" if webauthn_assertion else "camera_face_id"
+    device_cred_id = None
     face_verified = 0
     face_sim = 0.0
 
-    face_res = verify_face_for_employee(db, user["id"], selfie, threshold=face_thresh)
-    if face_res["verified"]:
+    if webauthn_assertion:
+        # Hardware Biometric Face ID Verification via WebAuthn / Passkeys
+        stored_ch = session.get("webauthn_punch_challenge")
+        if not stored_ch:
+            return _err("Biometric session expired. Please tap to verify again.", 400)
+        rp_id, origin = get_rp_info(request)
+        ok, msg, cred_info = verify_authentication_response(db, user, webauthn_assertion, stored_ch, rp_id)
+        if not ok:
+            return _err(msg, 403)
+        session.pop("webauthn_punch_challenge", None)
         face_verified = 1
-        face_sim = face_res.get("similarity", 1.0)
+        face_sim = 1.0
+        device_cred_id = webauthn_assertion.get("id") or (cred_info.get("credential_id") if cred_info else None)
     else:
-        # Cross-account breach detection: Live face matches another registered employee (Buddy Punch / Spoof)
-        if face_res["status"] == "BOUND_TO_OTHER_ACCOUNT":
-            other_emp = face_res.get("other_emp")
-            other_sim = face_res.get("other_similarity", 0.0)
-            try:
-                from .security_shield import block_employee_account_by_ai
-                selfie_name = _save_selfie(selfie, user, kind)
-                other_name = other_emp.get("name") if other_emp else "another employee"
-                other_code = other_emp.get("emp_code") if other_emp else "other"
-                block_msg = (
-                    f"AI Buddy Punch Violation: Live face matches registered employee {other_name} ({other_code}) "
-                    f"with {other_sim*100:.1f}% similarity. Account locked pending HR permission."
-                )
-                block_employee_account_by_ai(
-                    db, user["id"], reason=block_msg,
-                    target_emp_id=other_emp["id"] if other_emp else None,
-                    similarity=other_sim,
-                    selfie_path=selfie_name,
-                    target_selfie_path=other_emp.get("face_image") if other_emp else None
-                )
-            except Exception as block_err:
-                current_app.logger.error(f"Could not record AI auto-block: {block_err}")
+        # Legacy/Fallback Liveness & Face Verification
+        ch = db.execute("SELECT * FROM challenges WHERE token=? AND emp_id=?", (d.get("token"), user["id"])).fetchone()
+        if not ch or ch["used"] or time.time() - ch["created_at"] > current_app.config["CHALLENGE_TTL_S"]:
+            return _err("Liveness check expired. Please try again.")
+        db.execute("UPDATE challenges SET used=1 WHERE token=?", (ch["token"],))
+        db.commit()
 
-            return _err("Face does not match this employee account. Please log in with your registered account.", 403)
+        try:
+            frames = [_decode_image(f, 400_000) for f in (d.get("frames") or [])[:5]]
+        except Exception:
+            return _err("Could not read the camera images. Please retry.")
+        if len(frames) < 3:
+            return _err("Liveness frames missing. Please retry.")
+        score = motion_score(frames)
+        if current_app.config["REQUIRE_LIVENESS_MOTION"] and score < current_app.config["MIN_MOTION_SCORE"]:
+            audit("LIVENESS_FAIL", "attendance", user["id"], f"kind={kind} motion={score:.2f}")
+            db.commit()
+            return _err("Liveness check failed. Face the camera and follow the prompts.")
 
-        # Registered face mismatch
-        if face_res["status"] == "FACE_MISMATCH":
-            return _err("Face verification failed. Live face does not match the registered face for this employee.", 403)
+        thresh_row = db.execute("SELECT value FROM system_settings WHERE key='face_match_threshold'").fetchone()
+        face_thresh = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else FACE_MATCH_THRESHOLD
+        req_match_row = db.execute("SELECT value FROM system_settings WHERE key='require_face_match'").fetchone()
+        require_face_match = (req_match_row["value"] == "1") if req_match_row else True
 
-        # Unregistered employee
-        if face_res["status"] == "NOT_REGISTERED":
-            if require_face_match and not current_app.config.get("TESTING", False):
-                return _err("Face not registered for your account. Please contact HR to register your face.", 403)
-            face_verified = 0
-            face_sim = 0.0
-        elif face_res["status"] == "EXTRACT_FAILED":
-            if require_face_match and not current_app.config.get("TESTING", False):
-                return _err("Face verification could not detect a valid face in selfie.", 403)
+        face_res = verify_face_for_employee(db, user["id"], selfie, threshold=face_thresh)
+        if face_res["verified"]:
+            face_verified = 1
+            face_sim = face_res.get("similarity", 1.0)
+        else:
+            if face_res["status"] == "BOUND_TO_OTHER_ACCOUNT":
+                other_emp = face_res.get("other_emp")
+                other_sim = face_res.get("other_similarity", 0.0)
+                try:
+                    from .security_shield import block_employee_account_by_ai
+                    selfie_name = _save_selfie(selfie, user, kind)
+                    other_name = other_emp.get("name") if other_emp else "another employee"
+                    other_code = other_emp.get("emp_code") if other_emp else "other"
+                    block_msg = (
+                        f"AI Buddy Punch Violation: Live face matches registered employee {other_name} ({other_code}) "
+                        f"with {other_sim*100:.1f}% similarity. Account locked pending HR permission."
+                    )
+                    block_employee_account_by_ai(
+                        db, user["id"], reason=block_msg,
+                        target_emp_id=other_emp["id"] if other_emp else None,
+                        similarity=other_sim,
+                        selfie_path=selfie_name,
+                        target_selfie_path=other_emp.get("face_image") if other_emp else None
+                    )
+                except Exception as block_err:
+                    current_app.logger.error(f"Could not record AI auto-block: {block_err}")
+                return _err("Face does not match this employee account. Please log in with your registered account.", 403)
+
+            if face_res["status"] == "FACE_MISMATCH":
+                return _err("Face verification failed. Live face does not match the registered face for this employee.", 403)
+            if face_res["status"] == "NOT_REGISTERED":
+                if require_face_match and not current_app.config.get("TESTING", False):
+                    return _err("Face not registered for your account. Please contact HR to register your face.", 403)
+            elif face_res["status"] == "EXTRACT_FAILED":
+                if require_face_match and not current_app.config.get("TESTING", False):
+                    return _err("Face verification could not detect a valid face in selfie.", 403)
 
     selfie_name = _save_selfie(selfie, user, kind)
     shift = determine_shift_from_punch(t, db)
@@ -253,11 +316,11 @@ def punch():
     if kind == "in":
         late = 1 if finalize_attendance({"check_in": t.strftime("%Y-%m-%d %H:%M:%S"), "check_out": None}, shift, cat)["late"] else 0
         db.execute(
-            "INSERT INTO attendance (emp_id, date, shift_id, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late, face_verified, face_similarity) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO attendance (emp_id, date, shift_id, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late, face_verified, face_similarity, auth_method, device_credential_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (user["id"], today_s, shift["id"], t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"],
-             selfie_name, 1 if geo["inside"] else 0, late, face_verified, round(face_sim, 4)))
-        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late} od={geo['od']} face_ok={face_verified}")
+             selfie_name, 1 if geo["inside"] else 0, late, face_verified, round(face_sim, 4), auth_method, device_cred_id))
+        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late} od={geo['od']} method={auth_method}")
         db.commit()
         return jsonify(
             ok=True,
@@ -266,7 +329,8 @@ def punch():
             shift=shift["name"],
             late=bool(late),
             face_verified=bool(face_verified),
-            face_similarity=round(face_sim * 100, 1)
+            face_similarity=round(face_sim * 100, 1),
+            auth_method=auth_method
         )
 
     shift_target = determine_shift_from_punch(target_rec["check_in"], db)
@@ -274,11 +338,11 @@ def punch():
     dur_str = format_duration(upd["work_hours"])
     db.execute(
         "UPDATE attendance SET shift_id=?, check_out=?, out_lat=?, out_lng=?, out_dist=?, out_selfie=?, out_geo_ok=?, "
-        "work_hours=?, ot_hours=?, status=?, late=?, face_verified=?, face_similarity=? WHERE id=?",
+        "work_hours=?, ot_hours=?, status=?, late=?, face_verified=?, face_similarity=?, auth_method=?, device_credential_id=? WHERE id=?",
         (shift_target["id"], t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"], selfie_name,
          1 if geo["inside"] else 0, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"],
-         face_verified, round(face_sim, 4), target_rec["id"]))
-    audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift_target['name']} hours={upd['work_hours']} status={upd['status']} face_ok={face_verified}")
+         face_verified, round(face_sim, 4), auth_method, device_cred_id, target_rec["id"]))
+    audit("CHECK_OUT", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift_target['name']} hours={upd['work_hours']} status={upd['status']} method={auth_method}")
     db.commit()
     return jsonify(
         ok=True,
@@ -290,7 +354,8 @@ def punch():
         status=upd["status"],
         ot_hours=upd["ot_hours"],
         face_verified=bool(face_verified),
-        face_similarity=round(face_sim * 100, 1)
+        face_similarity=round(face_sim * 100, 1),
+        auth_method=auth_method
     )
 
 

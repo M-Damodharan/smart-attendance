@@ -375,6 +375,30 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                         "reason": reason
                     })
 
+    # 3. Check for Duplicate WebAuthn Device usage across different employee IDs today
+    dev_rows = db.execute(
+        "SELECT a.emp_id, a.device_credential_id, e.emp_code, e.name "
+        "FROM attendance a JOIN employees e ON e.id=a.emp_id "
+        "WHERE a.date=? AND a.device_credential_id IS NOT NULL",
+        (target_date_str,)
+    ).fetchall()
+    seen_devs = {}
+    for dr in dev_rows:
+        cid = dr["device_credential_id"]
+        if cid in seen_devs and seen_devs[cid]["emp_id"] != dr["emp_id"]:
+            first = seen_devs[cid]
+            reason = (
+                f"AI Multi-Account Violation: Same Phone Biometric Face ID credential was used by both "
+                f"{first['emp_code']} ({first['name']}) and {dr['emp_code']} ({dr['name']}) on {target_date_str}. "
+                f"Buddy punching strictly blocked."
+            )
+            block_employee_account_by_ai(
+                db, dr["emp_id"], reason=reason, target_emp_id=first["emp_id"], similarity=1.0
+            )
+            detected.append({"emp1": dict(first), "emp2": dict(dr), "similarity": 1.0, "reason": reason})
+        else:
+            seen_devs[cid] = dr
+
     db.commit()
     return detected
 

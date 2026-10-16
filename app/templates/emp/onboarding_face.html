@@ -9,9 +9,32 @@
         🛡️
       </div>
       <div>
-        <h2 style="margin:0;font-size:1.35rem;font-weight:700">360° Biometric Face ID Registration</h2>
-        <span style="font-size:0.8rem;color:var(--brand-accent,#0d9488);font-weight:700;letter-spacing:0.05em">STRONG BIOMETRIC BINDING &bull; ONE FACE, ONE ACCOUNT</span>
+        <h2 style="margin:0;font-size:1.35rem;font-weight:700">Phone Biometric Face ID Registration</h2>
+        <span style="font-size:0.8rem;color:var(--brand-accent,#0d9488);font-weight:700;letter-spacing:0.05em">ONE PHONE, ONE EMPLOYEE &bull; SECURE ENCLAVE BIOMETRICS</span>
       </div>
+    </div>
+
+    <!-- Phone Biometric Face ID (Passkeys / WebAuthn) Instant Enrollment Box -->
+    <div id="phoneFaceIdEnrollBox" style="background:linear-gradient(135deg,rgba(13,148,136,0.12),rgba(37,99,235,0.12));border:2px solid var(--brand-accent,#0d9488);border-radius:16px;padding:1.25rem;margin-bottom:1.5rem">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:1.75rem">📱</span>
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;font-weight:700">Native Phone Face ID Binding (Recommended)</h3>
+          <span style="font-size:0.75rem;color:var(--brand-accent,#0d9488);font-weight:700">APPLE FACE ID &bull; ANDROID BIOMETRIC &bull; INSTANT CHECK-IN</span>
+        </div>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 12px;line-height:1.45">
+        Register this phone's hardware Face ID to your employee account. Your face data stays protected inside your phone's secure hardware chip, eliminating lighting and glasses recognition issues.
+      </p>
+      <button type="button" id="btnEnrollPhoneFaceId" class="btn primary big block" style="font-weight:700">
+        📱 Bind This Phone's Face ID Now
+      </button>
+      <div id="enrollStatus" style="margin-top:8px;font-size:0.82rem;display:none"></div>
+    </div>
+
+    <div style="text-align:center;position:relative;margin:1.5rem 0 1rem;font-size:0.78rem;color:var(--text-muted);font-weight:600">
+      <span style="background:var(--bg-card,#fff);padding:0 10px;position:relative;z-index:1">OR COMPLETE CAMERA SCAN BELOW</span>
+      <hr style="position:absolute;top:50%;left:0;right:0;margin:0;border:none;border-top:1px solid var(--border-default);z-index:0">
     </div>
 
     <!-- 3-Step Head Scan Progress Indicators -->
@@ -106,6 +129,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/webauthn.js') }}"></script>
 <script>
 (function() {
   const video = document.getElementById('webcam');
@@ -274,6 +298,36 @@
       camStatus.textContent = 'File selected: ' + fileInput.files[0].name;
     }
   });
+
+  // Phone Face ID (Passkeys/WebAuthn) Button Handler
+  const btnEnrollPhoneFaceId = document.getElementById('btnEnrollPhoneFaceId');
+  const enrollStatus = document.getElementById('enrollStatus');
+  if (btnEnrollPhoneFaceId && window.WebAuthnHelper) {
+    if (!window.WebAuthnHelper.isSupported()) {
+      const box = document.getElementById('phoneFaceIdEnrollBox');
+      if (box) box.style.display = 'none';
+    } else {
+      btnEnrollPhoneFaceId.addEventListener('click', async () => {
+        btnEnrollPhoneFaceId.disabled = true;
+        btnEnrollPhoneFaceId.textContent = 'Authenticating Phone Face ID…';
+        enrollStatus.style.display = 'block';
+        enrollStatus.style.color = 'var(--text-muted)';
+        enrollStatus.textContent = 'Please confirm with your Face ID / Biometrics on your phone…';
+
+        try {
+          const res = await window.WebAuthnHelper.enrollDevice();
+          enrollStatus.style.color = '#10b981';
+          enrollStatus.innerHTML = '<b>✓ ' + res.message + ' Redirecting to punch…</b>';
+          setTimeout(() => location.href = '/punch', 1200);
+        } catch (err) {
+          btnEnrollPhoneFaceId.disabled = false;
+          btnEnrollPhoneFaceId.textContent = '📱 Retry Binding Phone Face ID';
+          enrollStatus.style.color = '#ef4444';
+          enrollStatus.textContent = 'Registration failed: ' + (err.message || 'Cancelled');
+        }
+      });
+    }
+  }
 
   setPhase(0);
   startCam();

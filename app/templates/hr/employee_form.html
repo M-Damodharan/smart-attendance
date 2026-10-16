@@ -63,23 +63,25 @@
     </div>
   </div>
 
-  {% if emp['face_registered'] %}
+  {% if emp['face_registered'] or emp['device_registered'] %}
   <div style="display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap; background:var(--bg-surface); padding:1rem; border-radius:8px; border:1px solid var(--border-default);">
     {% if emp['face_image'] %}
     <img src="{{ url_for('api.selfie', name=emp['face_image']) }}" alt="Registered Face" style="width:100px; height:100px; border-radius:10px; object-fit:cover; border:2px solid var(--brand-accent); box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+    {% else %}
+    <div style="width:72px; height:72px; border-radius:12px; background:rgba(13,148,136,0.12); display:flex; align-items:center; justify-content:center; font-size:2rem;">📱</div>
     {% endif %}
     <div style="flex:1; min-width:220px;">
-      <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">Registered Face Template</div>
+      <div style="font-weight:600; color:var(--text-main); font-size:0.95rem;">📱 Phone Biometric Face ID</div>
       <div class="muted small" style="margin-top:4px;">
-        Registered on: <b>{{ emp['face_registered_at'] or 'Active' }}</b><br>
-        Algorithm: <b>DoG Multi-scale Spatial Projections</b><br>
-        Security status: <b>Exclusive to Employee {{ emp['emp_code'] }}</b>
+        Device: <b>{{ emp['device_name'] or 'Mobile Phone Face ID' }}</b><br>
+        Registered on: <b>{{ emp['device_registered_at'] or emp['face_registered_at'] or 'Active' }}</b><br>
+        Security: <b>Hardware Secure Enclave &bull; One Device, One Account Policy</b>
       </div>
     </div>
     <div>
-      <form method="post" action="{{ url_for('hr.reset_face', eid=emp['id']) }}" onsubmit="return confirm('Are you sure you want to RESET this employee\'s face registration? This is recommended if their appearance changes or they need a fresh verification.')">
+      <form method="post" action="{{ url_for('hr.reset_face', eid=emp['id']) }}" onsubmit="return confirm('Are you sure you want to RESET this employee\'s Phone Face ID & device registration? They will be able to bind their new phone on next login.')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn danger sm" style="padding:8px 14px;">🔄 Reset Face Registration</button>
+        <button class="btn danger sm" style="padding:8px 14px;">🔄 Reset Phone Face ID &amp; Device</button>
       </form>
     </div>
   </div>

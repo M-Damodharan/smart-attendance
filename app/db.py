@@ -199,12 +199,26 @@ CREATE TABLE IF NOT EXISTS ai_face_alerts (
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    credential_id TEXT NOT NULL UNIQUE,
+    public_key TEXT NOT NULL,
+    sign_count INTEGER NOT NULL DEFAULT 0,
+    transports TEXT,
+    device_name TEXT,
+    aaguid TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
 CREATE INDEX IF NOT EXISTS idx_att_emp ON attendance(emp_id, date);
 CREATE INDEX IF NOT EXISTS idx_leave_emp ON leaves(emp_id, status);
 CREATE INDEX IF NOT EXISTS idx_od_emp ON od_requests(emp_id, od_date);
 CREATE INDEX IF NOT EXISTS idx_ai_alert_date ON ai_face_alerts(date);
 CREATE INDEX IF NOT EXISTS idx_ai_alert_emp ON ai_face_alerts(emp_id);
+CREATE INDEX IF NOT EXISTS idx_webauthn_emp ON webauthn_credentials(emp_id);
+CREATE INDEX IF NOT EXISTS idx_webauthn_cred ON webauthn_credentials(credential_id);
 """
 
 
@@ -263,6 +277,12 @@ def init_db(app):
         con.execute("ALTER TABLE employees ADD COLUMN block_reason TEXT")
     if "blocked_at" not in emp_cols:
         con.execute("ALTER TABLE employees ADD COLUMN blocked_at TEXT")
+    if "device_registered" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN device_registered INTEGER NOT NULL DEFAULT 0")
+    if "device_name" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN device_name TEXT")
+    if "device_registered_at" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN device_registered_at TEXT")
 
     att_cols = [c[1] for c in con.execute("PRAGMA table_info(attendance)").fetchall()]
     if "shift_id" not in att_cols:
@@ -271,6 +291,10 @@ def init_db(app):
         con.execute("ALTER TABLE attendance ADD COLUMN face_verified INTEGER NOT NULL DEFAULT 0")
     if "face_similarity" not in att_cols:
         con.execute("ALTER TABLE attendance ADD COLUMN face_similarity REAL NOT NULL DEFAULT 0.0")
+    if "auth_method" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN auth_method TEXT DEFAULT 'webauthn_face_id'")
+    if "device_credential_id" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN device_credential_id TEXT")
 
     _seed_categories(con)
 
