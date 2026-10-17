@@ -27,9 +27,14 @@
       {% for a in active_face_alerts %}
       <div style="border:1px solid var(--border-default,#334155);background:var(--bg-canvas,#0f172a);border-radius:12px;padding:14px;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-          <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span class="pill bad" style="font-size:0.7rem;font-weight:800;padding:2px 8px;">🔒 ACCOUNT LOCKED</span>
-            <span class="muted small" style="margin-left:6px;">{{ a.date }} · {{ a.created_at }}</span>
+            {% if a.emp_dept and a.target_emp_dept and a.emp_dept == a.target_emp_dept %}
+            <span style="font-size:0.7rem;font-weight:700;background:rgba(239,68,68,0.18);color:#ef4444;padding:2px 8px;border-radius:6px;border:1px solid #ef4444;">🏢 Same Department: {{ a.emp_dept }}</span>
+            {% else %}
+            <span style="font-size:0.7rem;font-weight:700;background:rgba(147,51,234,0.18);color:#c084fc;padding:2px 8px;border-radius:6px;border:1px solid #a855f7;">🌐 Cross-Department: {{ a.emp_dept or 'General' }} ↔ {{ a.target_emp_dept or 'General' }}</span>
+            {% endif %}
+            <span class="muted small">{{ a.date }} · {{ a.created_at }}</span>
           </div>
           <div style="font-weight:800;color:#ef4444;font-size:0.9rem;">
             ⚡ {{ (a.similarity * 100)|round(1) }}% Face Match
@@ -46,6 +51,7 @@
             {% endif %}
             <b style="font-size:0.86rem;display:block;margin-top:4px;">{{ a.emp_name }}</b>
             <code style="font-size:0.75rem;color:var(--text-muted)">{{ a.emp_code }}</code>
+            <span class="muted small" style="display:block;font-size:0.72rem;margin-top:2px;">Dept: <b>{{ a.emp_dept or 'General' }}</b></span>
           </div>
 
           <div style="text-align:center;font-size:1.4rem;color:#ef4444;font-weight:900;">
@@ -61,6 +67,7 @@
             {% endif %}
             <b style="font-size:0.86rem;display:block;margin-top:4px;">{{ a.target_emp_name or 'Other Employee' }}</b>
             <code style="font-size:0.75rem;color:var(--text-muted)">{{ a.target_emp_code or 'ID' }}</code>
+            <span class="muted small" style="display:block;font-size:0.72rem;margin-top:2px;">Dept: <b>{{ a.target_emp_dept or 'General' }}</b></span>
           </div>
         </div>
 

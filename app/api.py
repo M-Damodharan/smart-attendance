@@ -247,39 +247,46 @@ def punch():
         other = cross_check.get("other_emp") or {}
         other_name = other.get("name", "another employee")
         other_code = other.get("emp_code", "another account")
+        other_dept = other.get("department", "Company")
+        user_dept = user.get("department", "Company")
         sim_val = cross_check.get("similarity", 0.0)
         selfie_name = _save_selfie(selfie, user, kind)
+        target_emp_id = other.get("emp_id") or other.get("id")
+
+        is_same_dept = bool(user_dept and other_dept and user_dept.strip().lower() == other_dept.strip().lower())
+        dept_str = f"Same Department ({user_dept})" if is_same_dept else f"All-Department Scan ({user_dept} ↔ {other_dept})"
+
         if cross_check.get("type") == "REGISTERED_FACE_MATCH":
-            client_err = "Face does not match this employee account. Please log in with your registered account."
+            client_err = f"Face does not match this employee account [{dept_str}]. Please log in with your registered account."
             reason_msg = (
-                f"AI Buddy Punch Violation: Live face matches registered employee {other_name} ({other_code}) "
+                f"AI Buddy Punch Violation [{dept_str}]: Live face matches registered employee {other_name} ({other_code} · {other_dept}) "
                 f"with {sim_val*100:.1f}% similarity. Account locked pending HR permission."
             )
         else:
             client_err = (
-                f"AI Buddy Punch Blocked: Live face matches employee {other_name} ({other_code}) "
-                f"who already checked in today (Similarity: {sim_val*100:.1f}%). "
-                f"Account locked pending HR permission."
+                f"AI Buddy Punch Blocked [{dept_str}]: Live face matches employee {other_name} ({other_code} · {other_dept}) "
+                f"(Similarity: {sim_val*100:.1f}%). Account locked pending HR permission."
             )
             reason_msg = client_err
+
         block_employee_account_by_ai(
             db, user["id"], reason=reason_msg,
-            target_emp_id=other.get("id"),
+            target_emp_id=target_emp_id,
             similarity=sim_val,
             selfie_path=selfie_name,
             target_selfie_path=cross_check.get("other_selfie")
         )
         audit("AI_BUDDY_PUNCH_BLOCKED", "attendance", user["id"],
-              f"Blocked punch under {user['emp_code']} - live face matches {other_code} ({sim_val*100:.1f}%)")
+              f"Blocked punch under {user['emp_code']} ({user_dept}) - live face matches {other_code} ({other_dept}, {sim_val*100:.1f}%)")
         audit("FACE_ACCOUNT_MISMATCH", "employee", user["id"],
-              f"SPOOF_ATTEMPT: Live face belongs to {other_name} ({other_code}, sim={sim_val:.2f}) but punch attempted under account {user['name']} ({user['emp_code']})")
+              f"SPOOF_ATTEMPT: Live face belongs to {other_name} ({other_code}, {other_dept}, sim={sim_val:.2f}) but punch attempted under account {user['name']} ({user['emp_code']}, {user_dept})")
         db.commit()
         return jsonify({
             "ok": False,
             "error": client_err,
             "shield_status": "BLOCKED",
             "similarity": round(sim_val * 100, 1),
-            "conflicting_account": f"{other_name} ({other_code})"
+            "conflicting_account": f"{other_name} ({other_code} · {other_dept})"
         }), 403
 
     webauthn_assertion = d.get("webauthn_assertion")

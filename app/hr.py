@@ -113,7 +113,7 @@ def dashboard():
     active_face_alerts = db.execute("""
         SELECT a.*, 
                e1.emp_code as emp_code, e1.name as emp_name, e1.department as emp_dept,
-               e2.emp_code as target_emp_code, e2.name as target_emp_name
+               e2.emp_code as target_emp_code, e2.name as target_emp_name, e2.department as target_emp_dept
         FROM ai_face_alerts a
         JOIN employees e1 ON e1.id=a.emp_id
         LEFT JOIN employees e2 ON e2.id=a.target_emp_id
@@ -878,7 +878,7 @@ def face_security_audit():
     alerts = db.execute("""
         SELECT a.*, 
                e1.emp_code as emp_code, e1.name as emp_name, e1.active as emp_active, e1.department as emp_dept,
-               e2.emp_code as target_emp_code, e2.name as target_emp_name,
+               e2.emp_code as target_emp_code, e2.name as target_emp_name, e2.department as target_emp_dept,
                hr.name as hr_name
         FROM ai_face_alerts a
         JOIN employees e1 ON e1.id=a.emp_id
