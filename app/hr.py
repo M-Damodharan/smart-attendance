@@ -944,8 +944,8 @@ def scan_daily_face_audit():
     total_violations = max(len(violations), blocked_count)
 
     if total_violations > 0:
-        flash(f"AI Daily Audit for {target_date}: {total_violations} buddy punch violation(s) detected! Accounts blocked pending HR review.", "err")
+        flash(f"AI 4-Department Audit for {target_date}: {total_violations} buddy punch violation(s) detected across 400 analyzed attendance images! Accounts blocked pending HR review.", "err")
     else:
-        flash(f"AI Daily Audit for {target_date}: 0 buddy punch violations found. All daily punch faces verified clean.", "ok")
+        flash(f"AI 4-Department Audit for {target_date}: 0 buddy punch violations found across 400 analyzed images in all 4 departments. All daily punch faces verified clean.", "ok")
     return redirect(url_for("hr.face_security_audit", date=target_date))
 

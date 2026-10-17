@@ -247,24 +247,24 @@ def punch():
         other = cross_check.get("other_emp") or {}
         other_name = other.get("name", "another employee")
         other_code = other.get("emp_code", "another account")
-        other_dept = other.get("department", "Company")
-        user_dept = user.get("department", "Company")
+        other_dept = other.get("department") or other.get("category_name") or "Company"
+        user_dept = user.get("department") or user.get("category_name") or "Company"
         sim_val = cross_check.get("similarity", 0.0)
         selfie_name = _save_selfie(selfie, user, kind)
         target_emp_id = other.get("emp_id") or other.get("id")
 
         is_same_dept = bool(user_dept and other_dept and user_dept.strip().lower() == other_dept.strip().lower())
-        dept_str = f"Same Department ({user_dept})" if is_same_dept else f"All-Department Scan ({user_dept} ↔ {other_dept})"
+        dept_str = f"Same Department ({user_dept})" if is_same_dept else f"4-Department Scan ({user_dept} ↔ {other_dept})"
 
         if cross_check.get("type") == "REGISTERED_FACE_MATCH":
-            client_err = f"Face does not match this employee account [{dept_str}]. Please log in with your registered account."
+            client_err = f"Face does not match this employee account [4-Department 400-Image Defense · {dept_str}]. Please log in with your registered account."
             reason_msg = (
-                f"AI Buddy Punch Violation [{dept_str}]: Live face matches registered employee {other_name} ({other_code} · {other_dept}) "
+                f"AI Buddy Punch Violation [4-Department 400-Image Defense · {dept_str}]: Live face matches registered employee {other_name} ({other_code} · {other_dept}) "
                 f"with {sim_val*100:.1f}% similarity. Account locked pending HR permission."
             )
         else:
             client_err = (
-                f"AI Buddy Punch Blocked [{dept_str}]: Live face matches employee {other_name} ({other_code} · {other_dept}) "
+                f"AI Buddy Punch Blocked [4-Department 400-Image Defense · {dept_str}]: Live face matches employee {other_name} ({other_code} · {other_dept}) "
                 f"(Similarity: {sim_val*100:.1f}%). Account locked pending HR permission."
             )
             reason_msg = client_err

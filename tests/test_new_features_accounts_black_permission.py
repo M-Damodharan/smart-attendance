@@ -382,3 +382,82 @@ class TestNewFeaturesAccountsBlackPermission(unittest.TestCase):
         self.assertIn("Duplicate Face Detected on 2 Different IDs", dash_html)
         self.assertIn("S197", dash_html)
 
+    def test_11_four_department_400_image_face_analysis_and_blocking(self):
+        """AI Biometric Defense:
+        1. Analyzes up to 400 stored images across all 4 departments / categories:
+           - Staff
+           - Employees
+           - Contract Labour
+           - Accounts & Finance
+        2. If another face matches across the 400 photos in ANY department, punch is blocked and account is locked.
+        3. HR audit scan endpoint flash message reflects the 400 analyzed images across all 4 departments.
+        """
+        c = self.app.test_client()
+
+        with self.app.app_context():
+            db = get_db()
+
+            # Ensure all 4 categories exist and map test employees
+            cat_staff = db.execute("SELECT id FROM employee_categories WHERE code='STAFF'").fetchone()["id"]
+            cat_emp = db.execute("SELECT id FROM employee_categories WHERE code='EMPLOYEES'").fetchone()["id"]
+            cat_contract = db.execute("SELECT id FROM employee_categories WHERE code='CONTRACT'").fetchone()["id"]
+            cat_acc = db.execute("SELECT id FROM employee_categories WHERE code='ACCOUNTS_FINANCE'").fetchone()["id"]
+
+            db.execute("UPDATE employees SET category_id=? WHERE emp_code='E0012'", (cat_staff,))
+            db.execute("UPDATE employees SET category_id=? WHERE emp_code='EMP001'", (cat_emp,))
+            db.execute("UPDATE employees SET category_id=? WHERE emp_code='CL001'", (cat_contract,))
+            db.execute("UPDATE employees SET category_id=? WHERE emp_code='S197'", (cat_acc,))
+            db.commit()
+
+            # Save a stored selfie for CL001 (Contract Labour) on a previous date
+            from app.api import _save_selfie, _decode_image
+            face_cl = make_test_face(2, brightness=1.0)
+            emp_cl = db.execute("SELECT * FROM employees WHERE emp_code='CL001'").fetchone()
+            cl_selfie_name = _save_selfie(_decode_image(face_cl), emp_cl, "in")
+
+            db.execute(
+                "INSERT OR REPLACE INTO attendance (emp_id, date, in_selfie, check_in, status, source) "
+                "VALUES (?, '2026-10-15', ?, '08:30:00', 'P', 'app')",
+                (emp_cl["id"], cl_selfie_name)
+            )
+            # Re-activate EMP001
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='EMP001'")
+            db.commit()
+
+        # Step 2: Employee EMP001 (Employees department) attempts to punch with the EXACT SAME Face 2 as CL001
+        self._login(c, "EMP001", "123456789", portal="employee")
+        t = self._get_csrf(c, "/punch")
+        ch = c.post("/api/challenge", headers={"X-CSRFToken": t}).get_json()
+        face_e1 = make_test_face(2, brightness=1.02)
+        frames_e1 = [make_test_face(2, brightness=0.98), face_e1, face_e1]
+
+        res = c.post("/api/punch", json={
+            "kind": "in", "token": ch["token"], "frames": frames_e1, "selfie": face_e1,
+            "lat": 12.9716, "lng": 77.5946, "accuracy": 15
+        }, headers={"X-CSRFToken": t})
+
+        # Punch MUST be blocked by 4-Department 400-Image AI Defense
+        d = res.get_json()
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(d["ok"])
+        self.assertEqual(d["shield_status"], "BLOCKED")
+        self.assertIn("4-Department 400-Image Defense", d["error"])
+
+        # Employee account is immediately locked
+        with self.app.app_context():
+            db = get_db()
+            e1_row = db.execute("SELECT active, block_reason FROM employees WHERE emp_code='EMP001'").fetchone()
+            self.assertEqual(e1_row["active"], 0)
+            self.assertIn("Buddy Punch", e1_row["block_reason"])
+
+        # Step 3: Test HR 4-Department Scan endpoint POST /hr/face-security-audit/scan
+        self._login(c, "HR001", "123456789", portal="")
+        scan_t = self._get_csrf(c, "/hr/face-security-audit")
+        scan_res = c.post("/hr/face-security-audit/scan", data={
+            "date": "2026-10-15"
+        }, headers={"X-CSRFToken": scan_t}, follow_redirects=True)
+        scan_html = scan_res.get_data(as_text=True)
+        self.assertIn("AI 4-Department Audit", scan_html)
+        self.assertIn("400 analyzed", scan_html)
+
+

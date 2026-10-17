@@ -315,14 +315,15 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
     threshold = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else 0.62
 
     # 3. Check against ALL punch photos stored across the database for ANY OTHER employee
-    # Scans today's punches as well as all stored attendance images for other IDs
+    # Scans up to 400 attendance images across all 4 departments / categories for other IDs
     att_rows = db.execute(
         "SELECT a.id, a.emp_id, a.date, a.in_selfie, a.out_selfie, a.check_in, a.device_credential_id, "
-        "e.emp_code, e.name, e.department, e.face_image "
+        "e.emp_code, e.name, e.department, e.face_image, c.name as category_name "
         "FROM attendance a "
         "JOIN employees e ON e.id=a.emp_id "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id "
         "WHERE a.emp_id != ? AND (a.in_selfie IS NOT NULL OR a.out_selfie IS NOT NULL) "
-        "ORDER BY a.id DESC LIMIT 150",
+        "ORDER BY a.id DESC LIMIT 400",
         (emp_id,)
     ).fetchall()
 
@@ -340,6 +341,7 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
                     is_today = (r["date"] == date_str)
                     v_type = "TODAY_PUNCH_DUPLICATE" if is_today else "STORED_PUNCH_DUPLICATE"
                     date_label = "today" if is_today else f"on {r['date']}"
+                    dept_str = r["department"] or r["category_name"] or "General"
                     return {
                         "violation": True,
                         "type": v_type,
@@ -347,7 +349,7 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
                         "other_emp": dict(r),
                         "other_selfie": s_file,
                         "message": (
-                            f"AI Buddy Punch Blocked: Live face matches employee {r['name']} ({r['emp_code']}) "
+                            f"AI Buddy Punch Blocked [4-Department 400-Image Defense]: Live face matches employee {r['name']} ({r['emp_code']} · {dept_str}) "
                             f"attendance photo from {date_label} (Similarity: {sim*100:.1f}%)."
                         )
                     }
@@ -368,8 +370,10 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
     # Use strict threshold (0.78) for synthetic/registered cross-account templates
     reg_threshold = max(threshold, 0.78)
     reg_rows = db.execute(
-        "SELECT id, emp_code, name, department, face_template, face_image "
-        "FROM employees WHERE id != ? AND (face_registered=1 OR face_image IS NOT NULL OR face_template IS NOT NULL)",
+        "SELECT e.id, e.emp_code, e.name, e.department, e.face_template, e.face_image, c.name as category_name "
+        "FROM employees e "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id "
+        "WHERE e.id != ? AND (e.face_registered=1 OR e.face_image IS NOT NULL OR e.face_template IS NOT NULL)",
         (emp_id,)
     ).fetchall()
 
@@ -391,6 +395,7 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
                     pass
 
         if sim >= reg_threshold:
+            dept_str = r["department"] or r["category_name"] or "General"
             return {
                 "violation": True,
                 "type": "REGISTERED_FACE_MATCH",
@@ -398,7 +403,7 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
                 "other_emp": dict(r),
                 "other_selfie": r["face_image"],
                 "message": (
-                    f"AI Biometric Policy Violation: Live face matches registered face of employee {r['name']} ({r['emp_code']}) "
+                    f"AI Biometric Policy Violation [4-Department 400-Image Defense]: Live face matches registered face of employee {r['name']} ({r['emp_code']} · {dept_str}) "
                     f"(Similarity: {sim*100:.1f}%)."
                 )
             }
@@ -468,9 +473,10 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
     # 1. Fetch all punches for the target date across ALL departments
     rows = db.execute(
         "SELECT a.id, a.emp_id, a.date, a.in_selfie, a.out_selfie, a.check_in, "
-        "e.emp_code, e.name, e.department, e.face_image, e.face_template "
+        "e.emp_code, e.name, e.department, e.face_image, e.face_template, c.name as category_name "
         "FROM attendance a "
         "JOIN employees e ON e.id=a.emp_id "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id "
         "WHERE a.date=? AND (a.in_selfie IS NOT NULL OR a.out_selfie IS NOT NULL)",
         (target_date_str,)
     ).fetchall()
@@ -491,7 +497,8 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                         "emp_id": r["emp_id"],
                         "emp_code": r["emp_code"],
                         "name": r["name"],
-                        "department": r["department"] or "General",
+                        "department": r["department"] or r["category_name"] or "General",
+                        "category_name": r["category_name"] or "",
                         "selfie_file": s_name,
                         "candidates": candidates,
                     })
@@ -504,7 +511,8 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                             "emp_id": r["emp_id"],
                             "emp_code": r["emp_code"],
                             "name": r["name"],
-                            "department": r["department"] or "General",
+                            "department": r["department"] or r["category_name"] or "General",
+                            "category_name": r["category_name"] or "",
                             "selfie_file": s_name,
                             "candidates": candidates,
                         })
@@ -512,14 +520,15 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                     except Exception:
                         pass
 
-    # 2. Fetch all other stored historical punches from attendance across ALL departments (different dates)
+    # 2. Fetch all other stored historical punches from attendance across ALL 4 departments (up to 400 images)
     hist_rows = db.execute(
         "SELECT a.id, a.emp_id, a.date, a.in_selfie, a.out_selfie, "
-        "e.emp_code, e.name, e.department, e.face_image "
+        "e.emp_code, e.name, e.department, e.face_image, c.name as category_name "
         "FROM attendance a "
         "JOIN employees e ON e.id=a.emp_id "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id "
         "WHERE a.date != ? AND (a.in_selfie IS NOT NULL OR a.out_selfie IS NOT NULL) "
-        "ORDER BY a.id DESC LIMIT 100",
+        "ORDER BY a.id DESC LIMIT 400",
         (target_date_str,)
     ).fetchall()
 
@@ -535,7 +544,8 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                         "emp_id": hr["emp_id"],
                         "emp_code": hr["emp_code"],
                         "name": hr["name"],
-                        "department": hr["department"] or "General",
+                        "department": hr["department"] or hr["category_name"] or "General",
+                        "category_name": hr["category_name"] or "",
                         "date": hr["date"],
                         "selfie_file": s_name,
                         "candidates": cands
@@ -543,10 +553,12 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                 except Exception:
                     pass
 
-    # 3. Fetch all other registered employee templates and photos across ALL departments
+    # 3. Fetch all other registered employee templates and photos across ALL 4 departments
     all_emps = db.execute(
-        "SELECT id, emp_code, name, department, face_image, face_template FROM employees "
-        "WHERE (face_registered=1 OR face_image IS NOT NULL OR face_template IS NOT NULL)"
+        "SELECT e.id, e.emp_code, e.name, e.department, e.face_image, e.face_template, c.name as category_name "
+        "FROM employees e "
+        "LEFT JOIN employee_categories c ON c.id=e.category_id "
+        "WHERE (e.face_registered=1 OR e.face_image IS NOT NULL OR e.face_template IS NOT NULL)"
     ).fetchall()
 
     # Evaluation A: Cross-Punch Evaluation within target_date (Same face on 2 IDs today)
@@ -560,12 +572,12 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
 
             sim = compute_multi_angle_similarity(p1["candidates"], p2["candidates"])
             if sim >= threshold:
-                d1 = p1.get("department") or "General"
-                d2 = p2.get("department") or "General"
+                d1 = p1.get("department") or p1.get("category_name") or "General"
+                d2 = p2.get("department") or p2.get("category_name") or "General"
                 is_same = bool(d1.strip().lower() == d2.strip().lower())
-                dept_tag = f"Same Department: {d1}" if is_same else f"All-Department Scan: {d1} ↔ {d2}"
+                dept_tag = f"Same Department: {d1}" if is_same else f"4-Department Scan: {d1} ↔ {d2}"
                 reason = (
-                    f"AI Daily Scan [{dept_tag}]: Same face punch detected between {p1['emp_code']} ({p1['name']} · {d1}) "
+                    f"AI Daily Scan [400-Image 4-Department Audit · {dept_tag}]: Same face punch detected between {p1['emp_code']} ({p1['name']} · {d1}) "
                     f"and {p2['emp_code']} ({p2['name']} · {d2}) on {target_date_str} (Similarity: {sim*100:.1f}%). "
                     f"Account locked pending HR permission."
                 )
@@ -580,19 +592,19 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                     "reason": reason
                 })
 
-    # Evaluation B: Target date punches vs ALL historical stored punches across ALL departments
+    # Evaluation B: Target date punches vs ALL historical stored punches across ALL 4 departments (up to 400 images)
     for p in punch_items:
         for hp in hist_items:
             if hp["emp_id"] == p["emp_id"]:
                 continue
             sim = compute_multi_angle_similarity(p["candidates"], hp["candidates"])
             if sim >= threshold:
-                d1 = p.get("department") or "General"
-                d2 = hp.get("department") or "General"
+                d1 = p.get("department") or p.get("category_name") or "General"
+                d2 = hp.get("department") or hp.get("category_name") or "General"
                 is_same = bool(d1.strip().lower() == d2.strip().lower())
-                dept_tag = f"Same Department: {d1}" if is_same else f"All-Department Scan: {d1} ↔ {d2}"
+                dept_tag = f"Same Department: {d1}" if is_same else f"4-Department Scan: {d1} ↔ {d2}"
                 reason = (
-                    f"AI Daily Scan [{dept_tag}]: Punch face for {p['emp_code']} ({p['name']} · {d1}) matches stored punch "
+                    f"AI Daily Scan [400-Image 4-Department Audit · {dept_tag}]: Punch face for {p['emp_code']} ({p['name']} · {d1}) matches stored punch "
                     f"of employee {hp['emp_code']} ({hp['name']} · {d2}) from {hp['date']} (Similarity: {sim*100:.1f}%). "
                     f"Buddy punch blocked."
                 )
@@ -607,7 +619,7 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                     "reason": reason
                 })
 
-    # Evaluation C: Target date punches vs registered employee templates / face images across ALL departments
+    # Evaluation C: Target date punches vs registered employee templates / face images across ALL 4 departments
     for p in punch_items:
         for other in all_emps:
             if other["id"] == p["emp_id"]:
@@ -627,12 +639,12 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
                         pass
 
             if sim >= threshold:
-                d1 = p.get("department") or "General"
-                d2 = other["department"] or "General"
+                d1 = p.get("department") or p.get("category_name") or "General"
+                d2 = other.get("department") or other.get("category_name") or "General"
                 is_same = bool(d1.strip().lower() == d2.strip().lower())
-                dept_tag = f"Same Department: {d1}" if is_same else f"All-Department Scan: {d1} ↔ {d2}"
+                dept_tag = f"Same Department: {d1}" if is_same else f"4-Department Scan: {d1} ↔ {d2}"
                 reason = (
-                    f"AI Daily Scan [{dept_tag}]: Punch face for {p['emp_code']} ({p['name']} · {d1}) matches registered face of "
+                    f"AI Daily Scan [400-Image 4-Department Audit · {dept_tag}]: Punch face for {p['emp_code']} ({p['name']} · {d1}) matches registered face of "
                     f"{other['emp_code']} ({other['name']} · {d2}) (Similarity: {sim*100:.1f}%). Buddy punch blocked."
                 )
                 block_employee_account_by_ai(

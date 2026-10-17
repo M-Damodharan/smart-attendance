@@ -25,18 +25,18 @@
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
     <div>
       <h3 style="margin:0 0 4px;font-size:1.1rem;display:flex;align-items:center;gap:8px">
-        <span>🔍 AI Daily Database Punch Auditor</span>
+        <span>🔍 AI Daily Database Punch Auditor (400 Images Across All 4 Departments)</span>
       </h3>
       <p class="muted small" style="margin:0">
-        AI analyzes today's punch photos across all employees to detect proxy/buddy punching (e.g. <b>EMP001</b> and <b>EMP002</b> punching with the same face).
-        Filters through variations in dress, eyeglasses, and background noise.
+        AI analyzes up to <b>400 stored attendance photos</b> across all 4 departments (Staff, Employees, Contract Labour, Accounts &amp; Finance) to detect proxy/buddy punching (e.g. <b>EMP001</b> and <b>EMP002</b> punching with the same face).
+        Filters through variations in dress, eyeglasses, and background noise. Matches in the same or any other department trigger immediate account blocking.
       </p>
     </div>
     <form method="post" action="{{ url_for('hr.scan_daily_face_audit') }}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="date" name="date" value="{{ cur_date }}" class="input sm" style="width:auto">
       <button type="submit" class="btn primary sm" style="font-weight:700">
-        ⚡ Run AI Daily Punch Audit Now
+        ⚡ Run AI 4-Department Audit (400 Images)
       </button>
     </form>
   </div>
@@ -67,7 +67,7 @@
     <span>🛡️ Automated Real-Time Account Locking Rule:</span>
   </div>
   <span>
-    Whenever a face used for attendance matches another employee's account with <b>&ge; 70% similarity</b> (regardless of clothing or background changes),
+    Whenever a face used for attendance matches another employee's account across the <b>400 stored photos in all 4 departments</b> with <b>&ge; 62% similarity</b>,
     the AI immediately blocks the offending employee ID within 1 second. The account cannot log in or punch until an HR Administrator explicitly grants permission below.
   </span>
 </div>
