@@ -94,13 +94,13 @@
     refresh();
   }
 
-  function isCanvasBlackOrTooDark(canvas, minBrightness = 20) {
+  function isCanvasBlackOrTooDark(canvas, minBrightness = 16) {
     try {
       const ctx = canvas.getContext('2d');
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imgData.data;
       let sum = 0, samples = 0;
-      for (let i = 0; i < d.length; i += 32) {
+      for (let i = 0; i < d.length; i += 16) {
         sum += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
         samples++;
       }
@@ -130,7 +130,37 @@
     const loc = geo ? { lat: geo.lat, lng: geo.lng, accuracy: geo.accuracy } : {};
 
     try {
-      // 1. Try Phone Owner Face ID Biometric Authentication (WebAuthn / Passkeys)
+      // 1. Ensure live camera video stream is active and awake
+      if (video && video.paused) {
+        try { await video.play(); } catch(e){}
+      }
+
+      // 2. CRITICAL FOR iOS (iPhone Safari/Chrome) & ANDROID:
+      // Capture live attendance selfie snapshot FIRST before triggering native Phone Face ID.
+      // On Apple iOS and Android, the OS WebKit/browser pauses or suspends video streaming
+      // while system Passkey / Face ID dialogs are open on screen.
+      // Capturing the selfie photo now guarantees a bright, crystal-clear face photo
+      // while the user is actively looking directly at the camera oval.
+      promptEl.textContent = 'Scanning face…';
+      await sleep(100);
+      let selfieObj = grab(480, 360, 0.85);
+
+      // If camera frame was momentarily settling or auto-exposing, retry once after 120ms
+      if (selfieObj.isDark) {
+        if (video && video.paused) {
+          try { await video.play(); } catch(e){}
+        }
+        await sleep(120);
+        selfieObj = grab(480, 360, 0.85);
+      }
+
+      if (selfieObj.isDark) {
+        promptEl.textContent = '⚠️ Camera screen is black or dark! No face detected.';
+        throw new Error('Camera screen is black or too dark. No face detected! Please ensure camera lens is uncovered and lighting is adequate.');
+      }
+      const selfie = selfieObj.dataUrl;
+
+      // 3. Try Phone Owner Face ID Biometric Authentication (WebAuthn / Passkeys)
       let webauthnAssertion = null;
       if (window.WebAuthnHelper && window.WebAuthnHelper.isSupported()) {
         if (!isWebAuthnEnrolled) {
@@ -150,21 +180,20 @@
         promptEl.textContent = 'Authenticating Phone Face ID…';
         try {
           webauthnAssertion = await window.WebAuthnHelper.getPunchAssertion();
-          promptEl.textContent = 'Face ID verified! Capturing attendance photo…';
-          await sleep(300);
+          promptEl.textContent = 'Face ID verified! Processing attendance…';
+          // Resume video stream if iOS or Android suspended it during the system dialog
+          if (video && video.paused) {
+            try { await video.play(); } catch(e){}
+          }
+          await sleep(250);
         } catch (authErr) {
           console.warn('WebAuthn assertion failed or cancelled:', authErr);
+          if (video && video.paused) {
+            try { await video.play(); } catch(e){}
+          }
           throw new Error('Phone Face ID Biometric verification failed: ' + (authErr.message || 'Cancelled by user'));
         }
       }
-
-      // 2. Capture high-quality live snapshot photo for attendance audit
-      const selfieObj = grab(480, 360, 0.82);
-      if (selfieObj.isDark) {
-        promptEl.textContent = '⚠️ Camera screen is black or dark! No face detected.';
-        throw new Error('Camera screen is black or too dark. No face detected! Please ensure camera lens is uncovered and lighting is adequate.');
-      }
-      const selfie = selfieObj.dataUrl;
 
       let payload = { kind, selfie, ...loc };
 
@@ -176,7 +205,7 @@
         promptEl.textContent = 'Running liveness check…';
         const ch = await postJSON('/api/challenge', {});
         if (!ch.ok) throw new Error('Could not start liveness check.');
-        const frames = [grab(160, 120, 0.6).dataUrl];
+        const frames = [selfie];
         await sleep(400);
         for (const p of ch.prompts) {
           promptEl.textContent = p.text;

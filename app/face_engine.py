@@ -62,8 +62,8 @@ def check_selfie_image_quality(img_input):
         std_val = float(stat.stddev[0])
 
         # Pitch black or covered lens detection (black screen)
-        # Pitch black is 0.0 - 5.0. Dark covered camera in low light is < 22.0.
-        if mean_val < 22.0:
+        # Pitch black is 0.0 - 5.0. Dark covered camera in low light is < 16.0.
+        if mean_val < 16.0:
             return False, f"Camera screen is black or too dark (brightness: {mean_val:.1f}/255). No face detected. Please ensure your camera lens is uncovered and you have sufficient lighting.", mean_val
 
         # Blank screen or uniform canvas detection (lack of texture/variance)
