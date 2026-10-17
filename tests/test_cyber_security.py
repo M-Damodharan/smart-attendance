@@ -10,8 +10,13 @@ Verifies that:
 import os
 import re
 import shutil
+import sys
 import tempfile
 import unittest
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from app import create_app
 from app.db import get_db, init_db
@@ -97,6 +102,11 @@ class TestCyberSecurityShield(unittest.TestCase):
             ).fetchone()
             self.assertIsNotNone(log)
             self.assertIn("AI_SHIELD", log["details"])
+            from app.services import now, parse_dt
+            self.assertIsNotNone(log["ts"])
+            log_dt = parse_dt(log["ts"])
+            self.assertIsNotNone(log_dt)
+            self.assertLess(abs((now() - log_dt).total_seconds()), 10, "CYBER_ATTACK_BLOCKED must be logged with current IST time")
 
     # =========================================================================
     # 2. WAF (Web Application Firewall) Input Filtering Tests

@@ -107,9 +107,10 @@ def audit(action, entity=None, entity_id=None, details=None, actor=None):
             ip = request.headers.get("X-Forwarded-For", request.remote_addr) if request else None
         except Exception:
             pass
+    now_ts = now().strftime(DT_FMT)
     db.execute(
-        "INSERT INTO audit_log (actor_id, actor_name, action, entity, entity_id, details, ip) VALUES (?,?,?,?,?,?,?)",
-        (uid, name, action, entity, str(entity_id) if entity_id is not None else None, details, ip),
+        "INSERT INTO audit_log (ts, actor_id, actor_name, action, entity, entity_id, details, ip) VALUES (?,?,?,?,?,?,?,?)",
+        (now_ts, uid, name, action, entity, str(entity_id) if entity_id is not None else None, details, ip),
     )
 
 

@@ -109,6 +109,34 @@ class TestNewFeaturesAccountsBlackPermission(unittest.TestCase):
         self.assertIn("Dashboard", html)
         self.assertNotIn("Access Denied", html)
 
+    def test_02b_all_four_categories_and_hr_login_pass(self):
+        """All 4 category logins (Staff, Employee, Contract, Accounts) & HR admin login cleanly."""
+        c = self.app.test_client()
+
+        # 1. Staff Login
+        res_staff = self._login(c, "E0012", "123456789", portal="staff")
+        self.assertIn("Dashboard", res_staff.get_data(as_text=True))
+        self.assertNotIn("Access Denied", res_staff.get_data(as_text=True))
+
+        # 2. Employee Login
+        res_emp = self._login(c, "EMP001", "123456789", portal="employee")
+        self.assertIn("Dashboard", res_emp.get_data(as_text=True))
+        self.assertNotIn("Access Denied", res_emp.get_data(as_text=True))
+
+        # 3. Contract Employee Login
+        res_contract = self._login(c, "CL001", "123456789", portal="contract")
+        self.assertIn("Dashboard", res_contract.get_data(as_text=True))
+        self.assertNotIn("Access Denied", res_contract.get_data(as_text=True))
+
+        # 4. Accounts & Finance Login
+        res_acc = self._login(c, "S197", "123456789", portal="accounts")
+        self.assertIn("Dashboard", res_acc.get_data(as_text=True))
+        self.assertNotIn("Access Denied", res_acc.get_data(as_text=True))
+
+        # 5. HR Admin Login
+        res_hr = self._login(c, "HR001", "123456789", portal="")
+        self.assertIn("HR Dashboard", res_hr.get_data(as_text=True))
+
     def test_03_accounts_employee_wrong_tab_shows_friendly_guidance(self):
         """If Accounts employee tries to log in via Staff tab, friendly redirection guidance is shown."""
         res = self._login(self.client, "S197", "123456789", portal="staff")
@@ -257,3 +285,38 @@ class TestNewFeaturesAccountsBlackPermission(unittest.TestCase):
         dash_html = dash_res.get_data(as_text=True)
         self.assertIn("Late Come Permission Approved for Today", dash_html)
         self.assertIn("4.0h", dash_html)
+
+    # 5. Cyber AI and Audit Timestamps Are Exactly IST
+    def test_09_cyber_ai_and_audit_timestamps_are_ist(self):
+        """Cyber defense threat blocks, AI account blocks, and audit records must log in Indian Standard Time (IST)."""
+        from app.security_shield import log_security_event, block_employee_account_by_ai
+        from app.services import audit, parse_dt, now
+
+        with self.app.app_context():
+            db = get_db()
+            t_before = now()
+
+            # 1. Cyber attack blocked logging
+            log_security_event(threat_type="SQL_INJECTION", payload="' UNION SELECT * FROM employees --", source="AI_SHIELD")
+            cyber_log = db.execute("SELECT * FROM audit_log WHERE action='CYBER_ATTACK_BLOCKED' ORDER BY id DESC LIMIT 1").fetchone()
+            self.assertIsNotNone(cyber_log)
+            log_dt = parse_dt(cyber_log["ts"])
+            self.assertIsNotNone(log_dt)
+            # Must match current IST time within 10 seconds
+            self.assertLess(abs((now() - log_dt).total_seconds()), 10)
+
+            # 2. General audit logging
+            audit("TEST_IST_ACTION", "test_entity", 1, "Testing IST timestamp")
+            gen_log = db.execute("SELECT * FROM audit_log WHERE action='TEST_IST_ACTION' ORDER BY id DESC LIMIT 1").fetchone()
+            self.assertIsNotNone(gen_log)
+            gen_dt = parse_dt(gen_log["ts"])
+            self.assertLess(abs((now() - gen_dt).total_seconds()), 10)
+
+            # 3. AI account blocked and alert timestamp
+            emp = db.execute("SELECT id FROM employees WHERE emp_code='CL001'").fetchone()
+            block_employee_account_by_ai(db, emp["id"], reason="Duplicate face detected on 2 IDs", similarity=0.88)
+            alert = db.execute("SELECT * FROM ai_face_alerts WHERE emp_id=? ORDER BY id DESC LIMIT 1", (emp["id"],)).fetchone()
+            self.assertIsNotNone(alert)
+            alert_dt = parse_dt(alert["created_at"])
+            self.assertIsNotNone(alert_dt)
+            self.assertLess(abs((now() - alert_dt).total_seconds()), 10)

@@ -916,10 +916,10 @@ def resolve_face_security_alert(alert_id):
             flash("Employee ID has been granted permission and UNLOCKED successfully.", "ok")
         else:
             flash("Could not find or unlock incident.", "err")
-    else:
+        now_ts = now().strftime(DT_FMT)
         db.execute(
-            "UPDATE ai_face_alerts SET status='CONFIRMED_VIOLATION', hr_action_by=?, hr_action_at=datetime('now','localtime'), hr_notes=? WHERE id=?",
-            (g.user["id"], notes or "Violation Confirmed by HR", alert_id)
+            "UPDATE ai_face_alerts SET status='CONFIRMED_VIOLATION', hr_action_by=?, hr_action_at=?, hr_notes=? WHERE id=?",
+            (g.user["id"], now_ts, notes or "Violation Confirmed by HR", alert_id)
         )
         audit("AI_VIOLATION_CONFIRMED", "employee", None, f"Alert {alert_id} confirmed by HR {g.user['name']}")
         db.commit()

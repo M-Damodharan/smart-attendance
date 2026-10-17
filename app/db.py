@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS employee_categories (
     early_full_day_cutoff TEXT NOT NULL DEFAULT '16:00',
     full_day_time TEXT NOT NULL DEFAULT '20:00',
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE TABLE IF NOT EXISTS weekly_shift_schedules (
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS weekly_shift_schedules (
     start_date TEXT NOT NULL,
     end_date TEXT NOT NULL,
     notes TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE TABLE IF NOT EXISTS employees (
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS employees (
     face_registered_by INTEGER REFERENCES employees(id),
     face_image TEXT,
     joined_on TEXT NOT NULL DEFAULT (date('now')),
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE TABLE IF NOT EXISTS attendance (
@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS leaves (
     decided_by INTEGER REFERENCES employees(id),
     decided_at TEXT,
     hr_remarks TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE TABLE IF NOT EXISTS od_requests (
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS od_requests (
     decided_by INTEGER REFERENCES employees(id),
     decided_at TEXT,
     hr_remarks TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE TABLE IF NOT EXISTS permission_requests (
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS permission_requests (
     decided_by INTEGER REFERENCES employees(id),
     decided_at TEXT,
     hr_remarks TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE TABLE IF NOT EXISTS face_change_requests (
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS face_change_requests (
     emp_id INTEGER NOT NULL REFERENCES employees(id),
     reason TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'Pending',   -- Pending / Approved / Rejected / Completed
-    requested_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    requested_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
     decided_by INTEGER REFERENCES employees(id),
     decided_at TEXT,
     hr_remarks TEXT
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS holidays (
 
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    ts TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
     actor_id INTEGER,
     actor_name TEXT,
     action TEXT NOT NULL,
@@ -212,7 +212,7 @@ CREATE TABLE IF NOT EXISTS ai_face_alerts (
     hr_action_by INTEGER REFERENCES employees(id),
     hr_action_at TEXT,
     hr_notes TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
     transports TEXT,
     device_name TEXT,
     aaguid TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
@@ -330,7 +330,7 @@ def init_db(app):
         decided_by INTEGER REFERENCES employees(id),
         decided_at TEXT,
         hr_remarks TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
     )
     """)
     con.execute("CREATE INDEX IF NOT EXISTS idx_perm_emp ON permission_requests(emp_id, perm_date)")

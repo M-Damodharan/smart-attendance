@@ -7,6 +7,7 @@ import html
 import re
 from flask import abort, g, has_request_context, jsonify, request, session
 from .db import get_db
+from .services import d2s, now, today, DT_FMT
 
 
 # -------------------------------------------------------------------------
@@ -121,11 +122,12 @@ def log_security_event(threat_type: str, payload: str, source: str = "WAF", acto
 
         clean_payload = (payload or "")[:250].replace("\n", " ")
         details = f"[{source}] Threat Type: {threat_type} | Snippet: {clean_payload}"
+        now_ts = now().strftime(DT_FMT)
 
         db.execute(
-            "INSERT INTO audit_log (actor_id, actor_name, action, entity, entity_id, details, ip) "
-            "VALUES (?, ?, 'CYBER_ATTACK_BLOCKED', 'security_shield', ?, ?, ?)",
-            (actor_id, actor_name, threat_type, details, ip),
+            "INSERT INTO audit_log (ts, actor_id, actor_name, action, entity, entity_id, details, ip) "
+            "VALUES (?, ?, ?, 'CYBER_ATTACK_BLOCKED', 'security_shield', ?, ?, ?)",
+            (now_ts, actor_id, actor_name, threat_type, details, ip),
         )
         db.commit()
     except Exception:
@@ -212,8 +214,8 @@ def block_employee_account_by_ai(db, emp_id: int, reason: str, target_emp_id: in
     duplicate face spoofing, or cross-account biometric violations.
     Requires HR permission to unlock.
     """
-    now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    now_ts = now().strftime(DT_FMT)
+    date_str = d2s(today())
 
     # 1. Block employee account
     db.execute(
@@ -230,20 +232,20 @@ def block_employee_account_by_ai(db, emp_id: int, reason: str, target_emp_id: in
     if not existing:
         db.execute(
             "INSERT INTO ai_face_alerts (date, emp_id, target_emp_id, similarity, selfie_path, "
-            "target_selfie_path, alert_type, status, details) VALUES (?,?,?,?,?,?, 'BUDDY_PUNCH', 'BLOCKED', ?)",
-            (date_str, emp_id, target_emp_id, round(float(similarity), 4), selfie_path, target_selfie_path, reason)
+            "target_selfie_path, alert_type, status, details, created_at) VALUES (?,?,?,?,?,?, 'BUDDY_PUNCH', 'BLOCKED', ?, ?)",
+            (date_str, emp_id, target_emp_id, round(float(similarity), 4), selfie_path, target_selfie_path, reason, now_ts)
         )
     else:
         db.execute(
             "UPDATE ai_face_alerts SET similarity=MAX(similarity, ?), selfie_path=COALESCE(?, selfie_path), "
-            "target_selfie_path=COALESCE(?, target_selfie_path), details=? WHERE id=?",
-            (round(float(similarity), 4), selfie_path, target_selfie_path, reason, existing["id"])
+            "target_selfie_path=COALESCE(?, target_selfie_path), details=?, created_at=? WHERE id=?",
+            (round(float(similarity), 4), selfie_path, target_selfie_path, reason, now_ts, existing["id"])
         )
 
     # 3. Audit log
     db.execute(
-        "INSERT INTO audit_log (action, entity, entity_id, details) VALUES ('AI_ACCOUNT_BLOCKED', 'employee', ?, ?)",
-        (str(emp_id), f"Account locked by AI Defense Shield. Reason: {reason}")
+        "INSERT INTO audit_log (ts, action, entity, entity_id, details) VALUES (?, 'AI_ACCOUNT_BLOCKED', 'employee', ?, ?)",
+        (now_ts, str(emp_id), f"Account locked by AI Defense Shield. Reason: {reason}")
     )
     db.commit()
 
@@ -369,7 +371,7 @@ def unlock_employee_account_by_hr(db, alert_id: int, hr_id: int, notes: str = ""
     if not alert:
         return False
 
-    now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_ts = now().strftime(DT_FMT)
 
     # 1. Unlock employee
     db.execute(
@@ -385,8 +387,8 @@ def unlock_employee_account_by_hr(db, alert_id: int, hr_id: int, notes: str = ""
 
     # 3. Log audit
     db.execute(
-        "INSERT INTO audit_log (action, entity, entity_id, details) VALUES ('AI_ACCOUNT_UNLOCKED', 'employee', ?, ?)",
-        (str(alert["emp_id"]), f"Unlocked by HR ID {hr_id}. Notes: {notes}")
+        "INSERT INTO audit_log (ts, action, entity, entity_id, details) VALUES (?, 'AI_ACCOUNT_UNLOCKED', 'employee', ?, ?)",
+        (now_ts, str(alert["emp_id"]), f"Unlocked by HR ID {hr_id}. Notes: {notes}")
     )
     db.commit()
     return True

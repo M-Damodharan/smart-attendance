@@ -13,7 +13,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from .services import STATUS_LABELS, daterange, d2s, parse_dt, format_duration, get_employee_category
+from .services import STATUS_LABELS, daterange, d2s, now, parse_dt, format_duration, get_employee_category
 
 FILL = {
     "P": "C8E6C9", "OT": "D1C4E9", "HD": "FFE0B2", "A": "FFCDD2", "L": "BBDEFB", "HL": "BBDEFB",
@@ -75,7 +75,7 @@ def build_employee_attendance_doc(emp, start, end, db):
 
     ws.merge_cells("A2:J2")
     sub_cell = ws["A2"]
-    sub_cell.value = f"Attendance Register Period: {month_title} (Day 1 to Day {len(days)}) | Generated on: {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
+    sub_cell.value = f"Attendance Register Period: {month_title} (Day 1 to Day {len(days)}) | Generated on: {now().strftime('%d %b %Y, %I:%M %p')}"
     sub_cell.font = Font(italic=True, size=10, color="FFFFFF")
     sub_cell.fill = PatternFill("solid", fgColor="1B5E20")
     sub_cell.alignment = Alignment(horizontal="center", vertical="center")
