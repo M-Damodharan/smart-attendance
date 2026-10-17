@@ -320,3 +320,65 @@ class TestNewFeaturesAccountsBlackPermission(unittest.TestCase):
             alert_dt = parse_dt(alert["created_at"])
             self.assertIsNotNone(alert_dt)
             self.assertLess(abs((now() - alert_dt).total_seconds()), 10)
+
+    def test_10_buddy_punch_cross_id_detection_and_hr_audit_scan(self):
+        """Cross-ID Buddy Punch Defense:
+        If ID 1 (E0012) punches, and ID 2 (S197) attempts to punch with the same face:
+        1. ID 2 punch is immediately BLOCKED by AI.
+        2. ID 2 account is locked.
+        3. HR Daily Audit scan detects the violation and reports it (never says 0 violations clean).
+        4. HR Dashboard renders the AI security modal alert.
+        """
+        from app.security_shield import scan_daily_punches_for_buddy_punches
+        c = self.app.test_client()
+
+        # Step 1: E0012 punches in successfully with Face 1
+        self._login(c, "E0012", "123456789", portal="staff")
+        t1 = self._get_csrf(c, "/punch")
+        ch1 = c.post("/api/challenge", headers={"X-CSRFToken": t1}).get_json()
+        face1 = make_test_face(1, brightness=1.0)
+        frames1 = [make_test_face(1, brightness=0.95), make_test_face(1, brightness=1.05), face1]
+        res1 = c.post("/api/punch", json={
+            "kind": "in", "token": ch1["token"], "frames": frames1, "selfie": face1,
+            "lat": 12.9716, "lng": 77.5946, "accuracy": 15
+        }, headers={"X-CSRFToken": t1})
+        self.assertTrue(res1.get_json()["ok"])
+
+        # Step 2: S197 (Accounts) logs in and attempts to punch with the EXACT SAME Face 1
+        self._login(c, "S197", "123456789", portal="accounts")
+        t2 = self._get_csrf(c, "/punch")
+        ch2 = c.post("/api/challenge", headers={"X-CSRFToken": t2}).get_json()
+        res2 = c.post("/api/punch", json={
+            "kind": "in", "token": ch2["token"], "frames": frames1, "selfie": face1,
+            "lat": 12.9716, "lng": 77.5946, "accuracy": 15
+        }, headers={"X-CSRFToken": t2})
+
+        # Must be blocked by AI Defense
+        d2 = res2.get_json()
+        self.assertEqual(res2.status_code, 403)
+        self.assertFalse(d2.get("ok"))
+        self.assertEqual(d2.get("shield_status"), "BLOCKED")
+        self.assertIn("Buddy Punch", d2.get("error"))
+
+        with self.app.app_context():
+            db = get_db()
+            today_s = d2s(today())
+
+            # Verify S197 account is locked
+            emp2 = db.execute("SELECT active, block_reason FROM employees WHERE emp_code='S197'").fetchone()
+            self.assertEqual(emp2["active"], 0)
+            self.assertIn("Buddy Punch", emp2["block_reason"])
+
+            # Step 3: Run HR Daily Punch Audit Scan
+            violations = scan_daily_punches_for_buddy_punches(db, target_date_str=today_s)
+            blocked_count = db.execute("SELECT COUNT(*) FROM ai_face_alerts WHERE date=? AND status='BLOCKED'", (today_s,)).fetchone()[0]
+            total_violations = max(len(violations), blocked_count)
+            self.assertGreater(total_violations, 0)
+
+        # Step 4: HR Dashboard renders the AI security modal alert
+        self._login(c, "HR001", "123456789", portal="")
+        dash_html = c.get("/hr/dashboard").get_data(as_text=True)
+        self.assertIn("aiSecurityModal", dash_html)
+        self.assertIn("Duplicate Face Detected on 2 Different IDs", dash_html)
+        self.assertIn("S197", dash_html)
+

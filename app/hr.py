@@ -937,8 +937,14 @@ def scan_daily_face_audit():
     from .security_shield import scan_daily_punches_for_buddy_punches
 
     violations = scan_daily_punches_for_buddy_punches(db, target_date_str=target_date)
-    if violations:
-        flash(f"AI Daily Audit for {target_date}: {len(violations)} buddy punch violation(s) detected! Accounts blocked pending HR review.", "err")
+    blocked_count = db.execute(
+        "SELECT COUNT(*) FROM ai_face_alerts WHERE date=? AND status='BLOCKED'",
+        (target_date,)
+    ).fetchone()[0]
+    total_violations = max(len(violations), blocked_count)
+
+    if total_violations > 0:
+        flash(f"AI Daily Audit for {target_date}: {total_violations} buddy punch violation(s) detected! Accounts blocked pending HR review.", "err")
     else:
         flash(f"AI Daily Audit for {target_date}: 0 buddy punch violations found. All daily punch faces verified clean.", "ok")
     return redirect(url_for("hr.face_security_audit", date=target_date))

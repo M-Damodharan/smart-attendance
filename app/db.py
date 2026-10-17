@@ -470,6 +470,8 @@ def _seed_base(con):
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '50')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.75')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_buddy_punch_block_threshold', '0.62')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_auto_block_enabled', '1')")
 
 
 def _seed_demo(con):
