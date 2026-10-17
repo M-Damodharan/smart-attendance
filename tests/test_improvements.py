@@ -117,16 +117,16 @@ class TestAttendanceImprovements(unittest.TestCase):
         self.assertEqual(status, "P", f"Expected 'P' for clock out after 16:00, got {status}")
 
     def test_03_attendance_rules_half_day(self):
-        """Clock out between 14:00 and 16:00 counts as Half Day (HD)."""
-        shift = {"start_time": "08:00", "end_time": "20:00", "grace_min": 15, "half_hours": 4.0, "full_hours": 8.0}
-        category = {"work_hours": 10.0, "overtime_hours": 0.0, "half_day_min_hours": 4.0,
-                    "half_day_time": "14:00", "early_full_day_cutoff": "16:00"}
+        """Working between 2.0 and 6.0 hours counts as Half Day (HD)."""
+        shift = {"start_time": "08:00", "end_time": "20:00", "grace_min": 15, "half_hours": 2.0, "full_hours": 6.0}
+        category = {"work_hours": 10.0, "overtime_hours": 0.0, "half_day_min_hours": 2.0,
+                    "half_day_time": "12:00", "early_full_day_cutoff": "14:00"}
         
-        # Clock in 08:00, clock out 14:30 -> Half Day (HD)
+        # Clock in 08:00, clock out 12:30 (4.5 hours, 2 <= hours < 6) -> Half Day (HD)
         cin = parse_dt("2026-10-15 08:00:00")
-        cout = parse_dt("2026-10-15 14:30:00")
+        cout = parse_dt("2026-10-15 12:30:00")
         status, ot = compute_attendance_status(cin, cout, shift, category)
-        self.assertEqual(status, "HD", f"Expected 'HD' for clock out at 14:30, got {status}")
+        self.assertEqual(status, "HD", f"Expected 'HD' for 4.5h work, got {status}")
 
     def test_04_attendance_rules_insufficient_hours_absent(self):
         """Punch out before 14:00 or with < 4 hours counts as Absent (A)."""

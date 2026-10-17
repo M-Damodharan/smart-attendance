@@ -13,7 +13,7 @@ from PIL import Image, ImageChops, ImageStat
 from .auth import employee_required, login_required
 from .db import get_db
 from .face_engine import verify_face_for_employee, FACE_MATCH_THRESHOLD
-from .services import (approved_od_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
+from .services import (approved_od_for, approved_permission_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
                        get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s, parse_dt)
 from .webauthn_engine import (generate_registration_challenge, verify_registration_response,
                              generate_authentication_challenge, verify_authentication_response, get_rp_info)
@@ -229,6 +229,15 @@ def punch():
     except Exception:
         return _err("Could not read attendance camera photo. Please retry.")
 
+    # Mandatory Face Presence & Lighting Inspection:
+    # Reject pitch black camera frames, covered lenses, or dark screens. Black screen = NO FACE!
+    from .face_engine import check_selfie_image_quality
+    is_quality_ok, quality_err, b_mean = check_selfie_image_quality(selfie)
+    if not is_quality_ok:
+        audit("BLACK_CAMERA_REJECTED", "attendance", user["id"], f"kind={kind} brightness={b_mean:.1f} err={quality_err}")
+        db.commit()
+        return _err(quality_err, 400)
+
     # REAL-TIME AI BIOMETRIC BUDDY PUNCH DEFENSE:
     # Compares live selfie against today's punches by other employees and registered templates.
     # If the same face is used across 2 or more IDs, immediately blocks the account and rejects punch.
@@ -359,17 +368,26 @@ def punch():
     cat = get_employee_category(user["id"])
 
     if kind == "in":
-        late = 1 if finalize_attendance({"check_in": t.strftime("%Y-%m-%d %H:%M:%S"), "check_out": None}, shift, cat)["late"] else 0
+        is_late_punch = 1 if finalize_attendance({"check_in": t.strftime("%Y-%m-%d %H:%M:%S"), "check_out": None}, shift, cat)["late"] else 0
+        perm = approved_permission_for(user["id"], today_s)
+        if is_late_punch and perm:
+            late = 0
+            perm_note = f" (Late waived: approved {perm['perm_type']} permission for {perm['duration_hours']}h - {perm['reason']})"
+        else:
+            late = is_late_punch
+            perm_note = ""
+
         db.execute(
-            "INSERT INTO attendance (emp_id, date, shift_id, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late, face_verified, face_similarity, auth_method, device_credential_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO attendance (emp_id, date, shift_id, check_in, in_lat, in_lng, in_dist, in_selfie, in_geo_ok, late, face_verified, face_similarity, auth_method, device_credential_id, remarks) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (user["id"], today_s, shift["id"], t.strftime("%Y-%m-%d %H:%M:%S"), geo["lat"], geo["lng"], geo["distance"],
-             selfie_name, 1 if geo["inside"] else 0, late, face_verified, round(face_sim, 4), auth_method, device_cred_id))
-        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late} od={geo['od']} method={auth_method}")
+             selfie_name, 1 if geo["inside"] else 0, late, face_verified, round(face_sim, 4), auth_method, device_cred_id,
+             f"Permission: {perm['reason']}" if (is_late_punch and perm) else None))
+        audit("CHECK_IN", "attendance", user["id"], f"{t:%H:%M:%S} shift={shift['name']} dist={geo['distance']}m late={late}{perm_note} od={geo['od']} method={auth_method}")
         db.commit()
         return jsonify(
             ok=True,
-            message=f"Checked in for {shift['name']}" + (" — marked late" if late else ""),
+            message=f"Checked in for {shift['name']}" + (" — marked late" if late else perm_note),
             time=f"{t:%I:%M %p}",
             shift=shift["name"],
             late=bool(late),

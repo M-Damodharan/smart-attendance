@@ -25,8 +25,8 @@
     </div>
     <p class="login-subtitle">Secure biometric &amp; GPS verified attendance system</p>
 
-    <!-- 3-Tier Login Architecture Selector -->
-    <div class="login-type-tabs">
+    <!-- 4-Category Login Architecture Selector -->
+    <div class="login-type-tabs four-tabs">
       <a href="{{ url_for('auth.login', login_type='staff') }}"
          class="login-tab-btn {% if active_type == 'staff' %}active{% endif %}">
         💼 <span>Staff</span>
@@ -39,13 +39,19 @@
          class="login-tab-btn {% if active_type == 'contract' %}active{% endif %}">
         👷 <span>Contract</span>
       </a>
+      <a href="{{ url_for('auth.login', login_type='accounts') }}"
+         class="login-tab-btn {% if active_type in ('accounts', 'finance', 'accounts_finance') %}active{% endif %}">
+        💳 <span>Accounts</span>
+      </a>
     </div>
 
-    <div class="login-portal-badge {% if active_type == 'staff' %}badge-staff{% elif active_type == 'contract' %}badge-contract{% else %}badge-employee{% endif %}">
+    <div class="login-portal-badge {% if active_type == 'staff' %}badge-staff{% elif active_type == 'contract' %}badge-contract{% elif active_type in ('accounts', 'finance', 'accounts_finance') %}badge-accounts{% else %}badge-employee{% endif %}">
       {% if active_type == 'staff' %}
         💼 Staff Portal &bull; Office, HR &amp; Administrative Staff
       {% elif active_type == 'contract' %}
         👷 Contract Labour Portal &bull; Third-Party &amp; Contract Workforce
+      {% elif active_type in ('accounts', 'finance', 'accounts_finance') %}
+        💳 Accounts &amp; Finance Portal &bull; Accounting, Billing &amp; Finance Team
       {% else %}
         ⚙️ Employee Portal &bull; Regular Production &amp; Technical Staff
       {% endif %}

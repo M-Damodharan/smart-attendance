@@ -805,6 +805,24 @@ body.login-page .wrap {
   border: 1px solid rgba(217, 119, 6, 0.25);
 }
 
+.login-portal-badge.badge-accounts {
+  background: rgba(14, 165, 233, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.28);
+}
+
+.login-type-tabs.four-tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+@media (max-width: 440px) {
+  .login-type-tabs.four-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+}
+
 .form-group {
   margin-bottom: 1rem;
 }

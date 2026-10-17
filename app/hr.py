@@ -478,14 +478,17 @@ def approvals():
     face_changes = db.execute(
         f"SELECT f.*, e.name, e.emp_code FROM face_change_requests f JOIN employees e ON e.id=f.emp_id "
         f"WHERE f.status {cond} ORDER BY f.id DESC LIMIT 100").fetchall()
-    return render_template("hr/approvals.html", leaves=leaves, ods=ods, face_changes=face_changes, tab=tab)
+    permissions = db.execute(
+        f"SELECT p.*, e.name, e.emp_code FROM permission_requests p JOIN employees e ON e.id=p.emp_id "
+        f"WHERE p.status {cond} ORDER BY p.id DESC LIMIT 100").fetchall()
+    return render_template("hr/approvals.html", leaves=leaves, ods=ods, face_changes=face_changes, permissions=permissions, tab=tab)
 
 
 @bp.post("/approvals/<kind>/<int:rid>")
 @hr_required
 def decide(kind, rid):
     db = get_db()
-    table = {"leave": "leaves", "od": "od_requests", "face": "face_change_requests"}.get(kind) or abort(404)
+    table = {"leave": "leaves", "od": "od_requests", "face": "face_change_requests", "permission": "permission_requests"}.get(kind) or abort(404)
     decision = request.form.get("decision")
     if decision not in ("Approved", "Rejected"):
         abort(400)
@@ -506,7 +509,7 @@ def decide(kind, rid):
         else:
             audit(f"{kind.upper()}_{decision.upper()}", kind, rid, remarks)
         db.commit()
-        label = "Face change" if kind == "face" else kind.title()
+        label = "Face change" if kind == "face" else ("Late Come Permission" if kind == "permission" else kind.title())
         flash(f"{label} request {decision.lower()}.", "ok")
     return redirect(url_for("hr.approvals", tab=request.args.get("tab", "pending")))
 

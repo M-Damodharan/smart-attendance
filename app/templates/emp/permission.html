@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Late Come / Permission Request · SBG{% endblock %}
+{% block content %}
+<section class="card">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.5rem">
+    <span style="font-size:1.5rem">⏱️</span>
+    <div>
+      <h3 style="margin:0">Apply for Permission (Late Coming / Bank Work)</h3>
+      <p class="muted small" style="margin:2px 0 0">Need to arrive late or leave early for bank work or personal emergencies? Submit a permission request for up to 4 hours. Once HR approves, your late arrival penalty is waived.</p>
+    </div>
+  </div>
+
+  <form method="post" class="stack" style="margin-top:1rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="apply">
+
+    <div class="two">
+      <label>Date
+        <input type="date" name="perm_date" value="{{ today }}" required>
+      </label>
+      <label>Permission Type
+        <select name="perm_type" required>
+          <option value="Late Coming (Morning Bank/Personal Work)" selected>Late Coming (Morning Work)</option>
+          <option value="Early Leaving (Evening Work)">Early Leaving (Evening Work)</option>
+          <option value="Bank Work Permission">Bank Work Permission</option>
+          <option value="Official / Medical Permission">Official / Medical Permission</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="two">
+      <label>Duration (Hours)
+        <select name="duration_hours" required>
+          <option value="1.0">1 Hour Permission</option>
+          <option value="2.0" selected>2 Hours Permission (Standard)</option>
+          <option value="3.0">3 Hours Permission</option>
+          <option value="4.0">4 Hours Permission (Bank / Official Work)</option>
+        </select>
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <label>From Time
+          <input type="time" name="from_time" value="08:00">
+        </label>
+        <label>To Time
+          <input type="time" name="to_time" value="12:00">
+        </label>
+      </div>
+    </div>
+
+    <label>Reason / Details
+      <textarea name="reason" rows="2" maxlength="500" required placeholder="e.g. Bank work for loan documentation, personal emergency, doctor visit..."></textarea>
+    </label>
+
+    <button class="btn primary" style="font-weight:700">Submit Permission to HR</button>
+  </form>
+</section>
+
+<section class="card">
+  <h3>My Permission Requests</h3>
+  {% if not rows %}<p class="muted">No permission requests yet.</p>{% endif %}
+  <ul class="rows tall">
+  {% for r in rows %}
+    <li>
+      <span>
+        <b>{{ r['perm_date']|dmy }}</b> &bull; <strong>{{ r['perm_type'] }} ({{ '%g'|format(r['duration_hours']) }}h)</strong><br>
+        <span class="muted small">
+          {% if r['from_time'] %}{{ r['from_time'] }}{% if r['to_time'] %}–{{ r['to_time'] }}{% endif %} &bull; {% endif %}
+          Reason: {{ r['reason'] }}
+          {% if r['hr_remarks'] %} &bull; <b style="color:var(--brand-accent)">HR: {{ r['hr_remarks'] }}</b>{% endif %}
+        </span>
+      </span>
+      <span class="r">
+        {{ badge(r['status']) }}
+        {% if r['status']=='Pending' %}
+        <form method="post" class="inline" onsubmit="return confirm('Cancel this permission request?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="cancel">
+          <input type="hidden" name="id" value="{{ r['id'] }}">
+          <button class="link danger">Cancel</button>
+        </form>
+        {% endif %}
+      </span>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

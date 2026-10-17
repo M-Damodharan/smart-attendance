@@ -208,15 +208,15 @@ class TestAIBuddyPunchDefense(unittest.TestCase):
                     "VALUES ('CL001', 'Ramesh Kumar', 'employee', 1, 3, 1, 'scrypt:...', 0)"
                 )
                 db.commit()
-            # Reset attendance for today for clean test
-            today_s = "2026-10-16"
+            from app.services import d2s, today
+            today_s = d2s(today())
             db.execute("DELETE FROM attendance WHERE date=?", (today_s,))
             # Put Employee 1 attendance check-in photo in today's records
-            selfie_fn = "EMP001_20261016_in_090000.jpg"
+            selfie_fn = f"EMP001_{today_s.replace('-', '')}_in_090000.jpg"
             db.execute(
                 "INSERT INTO attendance (emp_id, date, in_selfie, check_in, source, face_verified) "
-                "VALUES (?, ?, ?, '2026-10-16 09:00:00', 'app', 1)",
-                (e1["id"], today_s, selfie_fn)
+                "VALUES (?, ?, ?, ?, 'app', 1)",
+                (e1["id"], today_s, selfie_fn, f"{today_s} 09:00:00")
             )
             db.commit()
 

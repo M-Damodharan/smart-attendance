@@ -31,6 +31,13 @@
     <div id="quick-bind-status" style="margin-top:8px;font-size:0.82rem;display:none"></div>
   </div>
 
+  {% if perm_today %}
+  <div style="background:rgba(16,185,129,0.1);border:1px solid #10b981;padding:10px 14px;border-radius:12px;margin-bottom:1rem;font-size:0.86rem;line-height:1.4">
+    <b style="color:#059669">⏳ Late Come Permission Active Today ({{ perm_today['duration_hours'] }}h)</b>
+    <div class="muted small" style="margin-top:2px">Late penalty is waived for this punch per HR approval ({{ perm_today['reason'] }}).</div>
+  </div>
+  {% endif %}
+
   <div class="steps">
     <div class="step" id="st-faceid">
       <i></i>

@@ -187,11 +187,11 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
     """Calculate attendance status and overtime hours based on configured attendance policy,
     employee category working hours, and shift rules.
     Rules:
-    - Half Day: 8:00 AM to 2:00 PM (14:00).
-    - Full Day: 8:00 AM to 8:00 PM (20:00).
-    - If employee clocks out after 4:00 PM (16:00), count day as Full Day Present ('P').
+    - 2.0 to 6.0 hours worked: Half Day ('HD').
+    - 6.0 to 9.0+ hours worked: Full Day Present ('P') or 'OT' if exceeding category work hours.
+    - If employee clocks out after 4:00 PM (16:00) with >= 2.0 hours, counts as Full Day Present ('P').
     - Overtime: calculated for hours worked beyond regular category working hours.
-    - Category hours: Staff 10h, Employees 12h, Contract Employees 10h regular + 2h OT.
+    - Less than 2.0 hours: Absent ('A') (incomplete work duration).
     """
     if not cin or not cout:
         return "A", 0.0
@@ -199,61 +199,49 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
     seconds = max((cout - cin).total_seconds(), 0)
     hours = seconds / 3600.0
 
-    min_half_hours = float(category["half_day_min_hours"] if category and "half_day_min_hours" in category.keys() else (shift["half_hours"] if shift else 4.0))
+    min_half_hours = float(category["half_day_min_hours"] if category and "half_day_min_hours" in category.keys() else 2.0)
     cat_work_hours = float(category["work_hours"] if category and "work_hours" in category.keys() else (shift["full_hours"] if shift else 8.0))
     cutoff_full_str = category["early_full_day_cutoff"] if category and "early_full_day_cutoff" in category.keys() else "16:00"
-    half_time_str = category["half_day_time"] if category and "half_day_time" in category.keys() else "14:00"
 
     cutoff_h, cutoff_m = map(int, cutoff_full_str.split(":"))
-    half_h, half_m = map(int, half_time_str.split(":"))
-
     out_time = cout.time()
     cutoff_full_time = datetime.min.time().replace(hour=cutoff_h, minute=cutoff_m)
-    half_day_time = datetime.min.time().replace(hour=half_h, minute=half_m)
 
     # Overtime hours: any time worked beyond required regular category work hours
     ot_hours = round(max(hours - cat_work_hours, 0.0), 2)
 
     is_after_4pm = out_time >= cutoff_full_time
-    is_after_2pm = out_time >= half_day_time
-
     shift_start_h = int(shift["start_time"].split(":")[0]) if shift else 8
     is_day_shift = shift_start_h < 14
 
-    if is_day_shift:
-        # Rule: Clock out after 4:00 PM counts as Full Day Present (requiring at least reasonable work period, e.g. >= min_half_hours)
-        if (is_after_4pm and hours >= min_half_hours) or hours >= cat_work_hours:
-            if ot_hours > 0:
-                return "OT", ot_hours
-            return "P", ot_hours
-        elif is_after_2pm and hours >= (min_half_hours * 0.75):
-            return "HD", 0.0
-        elif hours >= min_half_hours:
-            return "HD", 0.0
-        else:
-            return "A", 0.0
-    else:
-        # Night shifts or non-daytime shifts
-        if hours >= cat_work_hours:
-            if ot_hours > 0:
-                return "OT", ot_hours
-            return "P", ot_hours
-        elif hours >= min_half_hours:
-            return "HD", 0.0
-        else:
-            return "A", 0.0
+    # Rule: 6 to 9+ hours (or after 4 PM with >= 2.0h) -> Full Day Present (P or OT)
+    if hours >= 6.0 or (is_day_shift and is_after_4pm and hours >= min_half_hours) or hours >= cat_work_hours:
+        if ot_hours > 0:
+            return "OT", ot_hours
+        return "P", ot_hours
+
+    # Rule: 2 to 6 hours -> Half Day (HD)
+    if hours >= 2.0 or hours >= min_half_hours:
+        return "HD", 0.0
+
+    # Rule: Under 2 hours -> Absent (A)
+    return "A", 0.0
 
 
 def compute_status(hours: float, shift):
-    """Legacy helper for backwards compatibility."""
+    """Calculates attendance status based on standard company rules:
+    - 2.0 to 6.0 hours: Half Day ('HD')
+    - 6.0+ hours: Full Day ('P')
+    - Overtime: beyond full hours + ot_min_hours
+    - < 2.0 hours: Absent ('A')
+    """
     full = shift["full_hours"] if shift else 8.0
-    half = shift["half_hours"] if shift else 4.0
     ot_min = shift["ot_min_hours"] if shift else 1.0
-    if hours >= full + ot_min:
-        return "OT", round(hours - full, 2)
-    if hours >= full:
+    if hours >= max(full, 6.0) + ot_min:
+        return "OT", round(hours - max(full, 6.0), 2)
+    if hours >= 6.0 or hours >= full:
         return "P", 0.0
-    if hours >= half:
+    if hours >= 2.0:
         return "HD", 0.0
     return "A", 0.0
 
@@ -311,6 +299,15 @@ def leave_balance(emp_id: int, year: int):
 def approved_od_for(emp_id: int, d: date):
     return get_db().execute(
         "SELECT * FROM od_requests WHERE emp_id=? AND od_date=? AND status='Approved'", (emp_id, d2s(d))
+    ).fetchone()
+
+
+def approved_permission_for(emp_id: int, d):
+    """Returns approved permission request for employee on target date, or None."""
+    d_str = d2s(d) if isinstance(d, (date, datetime)) else str(d)[:10]
+    return get_db().execute(
+        "SELECT * FROM permission_requests WHERE emp_id=? AND perm_date=? AND status='Approved'",
+        (emp_id, d_str)
     ).fetchone()
 
 

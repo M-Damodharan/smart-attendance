@@ -47,4 +47,21 @@
   </div>
   {% else %}<p class="muted">No face change requests.</p>{% endfor %}
 </section>
+
+<section class="card">
+  <h3>Late Come / Permission Requests</h3>
+  {% for r in permissions %}
+  <div class="req">
+    <div>
+      <b>{{ r['name'] }}</b> <span class="muted small">{{ r['emp_code'] }}</span> &bull; <strong>{{ r['perm_type'] }} ({{ '%g'|format(r['duration_hours']) }}h)</strong> &bull; <b>{{ r['perm_date']|dmy }}</b><br>
+      <span class="muted small">
+        {% if r['from_time'] %}{{ r['from_time'] }}{% if r['to_time'] %}–{{ r['to_time'] }}{% endif %} &bull; {% endif %}
+        Reason: <strong>{{ r['reason'] }}</strong>
+        {% if r['hr_remarks'] %}<br>HR Remarks: {{ r['hr_remarks'] }}{% endif %}
+      </span>
+    </div>
+    {% if r['status']=='Pending' %}{{ actions('permission', r['id']) }}{% else %}{{ badge(r['status']) }}{% endif %}
+  </div>
+  {% else %}<p class="muted">No permission requests.</p>{% endfor %}
+</section>
 {% endblock %}

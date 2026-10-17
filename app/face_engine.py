@@ -19,7 +19,7 @@ try:
 except ImportError:
     np = None
 
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps, ImageFilter, ImageStat
 from flask import current_app
 
 from .services import audit, now
@@ -44,6 +44,35 @@ def _load_image(img_input):
     if isinstance(img_input, (bytes, bytearray)):
         return Image.open(io.BytesIO(img_input))
     raise ValueError("Unsupported or invalid image input format.")
+
+
+def check_selfie_image_quality(img_input):
+    """Detects whether an attendance camera snapshot is pitch black, extremely dark,
+    blank, or covered (meaning NO human face is present).
+    Returns: (is_valid: bool, reason: str, mean_brightness: float)
+    """
+    try:
+        im = _load_image(img_input)
+        if im.size[0] < 4 or im.size[1] < 4:
+            return False, "Liveness / Camera check failed: Camera image is corrupt or empty.", 0.0
+
+        gray = im.convert("L")
+        stat = ImageStat.Stat(gray)
+        mean_val = float(stat.mean[0])
+        std_val = float(stat.stddev[0])
+
+        # Pitch black or covered lens detection (black screen)
+        # Pitch black is 0.0 - 5.0. Dark covered camera in low light is < 22.0.
+        if mean_val < 22.0:
+            return False, f"Camera screen is black or too dark (brightness: {mean_val:.1f}/255). No face detected. Please ensure your camera lens is uncovered and you have sufficient lighting.", mean_val
+
+        # Blank screen or uniform canvas detection (lack of texture/variance)
+        if std_val < 6.0:
+            return False, "Liveness check failed: Camera screen is blank or uniform. No human facial features visible.", mean_val
+
+        return True, "OK", mean_val
+    except Exception as e:
+        return False, f"Could not analyze camera image: {str(e)}", 0.0
 
 
 def smart_crop_face(im, scale=1.0, dy_pct=0.0, dx_pct=0.0):
@@ -80,6 +109,10 @@ def extract_face_embedding(img_input, scale=1.0, dy_pct=0.0, dx_pct=0.0) -> list
     variations, followed by multi-scale block spatial projections and discrete cosine basis.
     Returns: list of floats (unit L2-normalized).
     """
+    is_ok, quality_err, _ = check_selfie_image_quality(img_input)
+    if not is_ok:
+        raise ValueError(f"Face extraction failed: {quality_err}")
+
     im = _load_image(img_input)
 
     # Convert to grayscale
@@ -379,7 +412,18 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
       - similarity: float
       - error: str (user-friendly error message if verification fails)
     """
-    # 1. Extract live embedding
+    # 1. Inspect camera image quality (detect pitch black screen, covered lens, or blank canvas)
+    if not isinstance(live_input, (list, tuple)) and not (np is not None and isinstance(live_input, np.ndarray)):
+        is_ok, quality_err, _ = check_selfie_image_quality(live_input)
+        if not is_ok:
+            return {
+                "verified": False,
+                "status": "BLACK_FRAME",
+                "similarity": 0.0,
+                "error": quality_err
+            }
+
+    # Extract live embedding
     if isinstance(live_input, (list, tuple)) or (np is not None and isinstance(live_input, np.ndarray)):
         live_embedding = list(live_input)
         live_candidates = [live_embedding]

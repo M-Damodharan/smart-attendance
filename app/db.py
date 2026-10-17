@@ -133,6 +133,22 @@ CREATE TABLE IF NOT EXISTS od_requests (
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS permission_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    perm_date TEXT NOT NULL,
+    perm_type TEXT NOT NULL DEFAULT 'Late Coming', -- Late Coming / Early Leaving / Official / Bank Work
+    duration_hours REAL NOT NULL DEFAULT 2.0,       -- 1, 2, 3, 4 hours
+    from_time TEXT,
+    to_time TEXT,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Pending',        -- Pending / Approved / Rejected / Cancelled
+    decided_by INTEGER REFERENCES employees(id),
+    decided_at TEXT,
+    hr_remarks TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS face_change_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     emp_id INTEGER NOT NULL REFERENCES employees(id),
@@ -215,6 +231,7 @@ CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
 CREATE INDEX IF NOT EXISTS idx_att_emp ON attendance(emp_id, date);
 CREATE INDEX IF NOT EXISTS idx_leave_emp ON leaves(emp_id, status);
 CREATE INDEX IF NOT EXISTS idx_od_emp ON od_requests(emp_id, od_date);
+CREATE INDEX IF NOT EXISTS idx_perm_emp ON permission_requests(emp_id, perm_date);
 CREATE INDEX IF NOT EXISTS idx_ai_alert_date ON ai_face_alerts(date);
 CREATE INDEX IF NOT EXISTS idx_ai_alert_emp ON ai_face_alerts(emp_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_emp ON webauthn_credentials(emp_id);
@@ -240,9 +257,11 @@ def close_db(_exc=None):
 def _seed_categories(con):
     """Seed standard employee categories if not present."""
     default_cats = [
-        ("Staff", "STAFF", 10.0, 0.0, 4.0, "14:00", "16:00", "20:00"),
-        ("Employees", "EMPLOYEES", 12.0, 0.0, 4.0, "14:00", "16:00", "20:00"),
-        ("Contract Employees", "CONTRACT", 10.0, 2.0, 4.0, "14:00", "16:00", "20:00"),
+        ("Staff", "STAFF", 10.0, 0.0, 2.0, "14:00", "16:00", "20:00"),
+        ("Employees", "EMPLOYEES", 12.0, 0.0, 2.0, "14:00", "16:00", "20:00"),
+        ("Contract Employees", "CONTRACT", 10.0, 2.0, 2.0, "14:00", "16:00", "20:00"),
+        ("Accounts & Finance", "ACCOUNTS_FINANCE", 10.0, 0.0, 2.0, "14:00", "16:00", "18:00"),
+        ("Late Come Permission", "LATE_PERMISSION", 10.0, 0.0, 2.0, "14:00", "16:00", "20:00"),
     ]
     for name, code, work_h, ot_h, half_h, half_t, cutoff_full, full_t in default_cats:
         con.execute(
@@ -296,7 +315,43 @@ def init_db(app):
     if "device_credential_id" not in att_cols:
         con.execute("ALTER TABLE attendance ADD COLUMN device_credential_id TEXT")
 
+    # Create permission_requests table if missing in existing database
+    con.execute("""
+    CREATE TABLE IF NOT EXISTS permission_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        emp_id INTEGER NOT NULL REFERENCES employees(id),
+        perm_date TEXT NOT NULL,
+        perm_type TEXT NOT NULL DEFAULT 'Late Coming',
+        duration_hours REAL NOT NULL DEFAULT 2.0,
+        from_time TEXT,
+        to_time TEXT,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Pending',
+        decided_by INTEGER REFERENCES employees(id),
+        decided_at TEXT,
+        hr_remarks TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    )
+    """)
+    con.execute("CREATE INDEX IF NOT EXISTS idx_perm_emp ON permission_requests(emp_id, perm_date)")
+
     _seed_categories(con)
+
+    # Ensure Accounts & Finance and Late Come Permission exist
+    con.execute("INSERT OR IGNORE INTO employee_categories (name, code, work_hours, overtime_hours, half_day_min_hours, half_day_time, early_full_day_cutoff, full_day_time) "
+                "VALUES ('Accounts & Finance', 'ACCOUNTS_FINANCE', 10.0, 0.0, 2.0, '14:00', '16:00', '18:00')")
+    con.execute("INSERT OR IGNORE INTO employee_categories (name, code, work_hours, overtime_hours, half_day_min_hours, half_day_time, early_full_day_cutoff, full_day_time) "
+                "VALUES ('Late Come Permission', 'LATE_PERMISSION', 10.0, 0.0, 2.0, '14:00', '16:00', '20:00')")
+    con.execute("UPDATE employee_categories SET code='ACCOUNTS_FINANCE' WHERE name LIKE '%Accounts%' AND (code IS NULL OR code='' OR code='ACCOUNTS')")
+    con.execute("UPDATE employee_categories SET half_day_min_hours=2.0 WHERE half_day_min_hours > 2.0")
+
+    # Ensure Permission leave type exists
+    con.execute("INSERT OR IGNORE INTO leave_types (code, name, annual_quota) VALUES ('PERM', 'Permission (Late Come / Early Go)', 24)")
+
+    # Ensure Accounts & Finance shift exists
+    if con.execute("SELECT COUNT(*) FROM shifts WHERE name LIKE '%Accounts%'").fetchone()[0] == 0:
+        con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours, active) "
+                    "VALUES ('Accounts & Finance (09:00-18:00)', '09:00', '18:00', 15, 8.0, 4.0, 1.0, 1)")
 
     # Assign default category_id for legacy employee records
     staff_id = con.execute("SELECT id FROM employee_categories WHERE code='STAFF'").fetchone()[0]
@@ -380,6 +435,16 @@ def init_db(app):
             "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
             (contract_cat_id, emp_pw))
         print("[setup] Baseline contract labour employee CL001 created with active login.")
+    accounts_cat_row = con.execute("SELECT id FROM employee_categories WHERE code='ACCOUNTS_FINANCE'").fetchone()
+    if accounts_cat_row:
+        acc_id = accounts_cat_row[0]
+        if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='S197'").fetchone()[0] == 0:
+            con.execute(
+                "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+                "VALUES ('S197', 'Accounts Executive', 'accounts@sribalajigears.com', 'Accounts & Finance', 'Accountant', 'employee', "
+                "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+                (acc_id, emp_pw))
+            print("[setup] Baseline accounts employee S197 created with active login.")
     con.commit()
     con.close()
 

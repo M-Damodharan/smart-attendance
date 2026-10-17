@@ -42,13 +42,16 @@ def dashboard():
         recent.append((d, r2["days"][d], r2["recs"].get(d)))
     pend_l = db.execute("SELECT COUNT(*) FROM leaves WHERE emp_id=? AND status='Pending'", (u["id"],)).fetchone()[0]
     pend_o = db.execute("SELECT COUNT(*) FROM od_requests WHERE emp_id=? AND status='Pending'", (u["id"],)).fetchone()[0]
+    pend_p = db.execute("SELECT COUNT(*) FROM permission_requests WHERE emp_id=? AND status='Pending'", (u["id"],)).fetchone()[0]
     holiday = db.execute("SELECT * FROM holidays WHERE date>=? ORDER BY date LIMIT 1", (d2s(t),)).fetchone()
     od_today = db.execute("SELECT * FROM od_requests WHERE emp_id=? AND od_date=? AND status='Approved'",
                           (u["id"], d2s(t))).fetchone()
+    perm_today = db.execute("SELECT * FROM permission_requests WHERE emp_id=? AND perm_date=? AND status='Approved'",
+                            (u["id"], d2s(t))).fetchone()
     category = get_employee_category(u["id"])
     face_req = db.execute("SELECT * FROM face_change_requests WHERE emp_id=? ORDER BY id DESC LIMIT 1", (u["id"],)).fetchone()
     return render_template("emp/dashboard.html", rec=rec, shift=_shift(u), category=category, summary=reg["summary"], recent=recent,
-                           pend=pend_l + pend_o, holiday=holiday, od_today=od_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"))
+                           pend=pend_l + pend_o + pend_p, holiday=holiday, od_today=od_today, perm_today=perm_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"))
 
 
 @bp.route("/punch")
@@ -76,7 +79,9 @@ def punch():
         rec = None
         mode = "in"
     category = get_employee_category(u["id"])
-    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=_shift(u), category=category)
+    perm_today = db.execute("SELECT * FROM permission_requests WHERE emp_id=? AND perm_date=? AND status='Approved'",
+                            (u["id"], d2s(t))).fetchone()
+    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=_shift(u), category=category, perm_today=perm_today)
 
 
 @bp.route("/history")
@@ -268,4 +273,57 @@ def face_change():
     # Can re-register if approved and face_registered is 0 (cleared upon approval)
     can_reregister = bool(latest and latest["status"] == "Approved" and not u.get("face_registered"))
     return render_template("emp/face_change.html", rows=rows, latest=latest, can_reregister=can_reregister)
+
+
+@bp.route("/permission", methods=["GET", "POST"])
+@employee_required
+def permission():
+    db, u, t = get_db(), g.user, today()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "cancel":
+            pid = request.form.get("id", type=int)
+            row = db.execute("SELECT * FROM permission_requests WHERE id=? AND emp_id=?", (pid, u["id"])).fetchone()
+            if row and row["status"] == "Pending":
+                db.execute("UPDATE permission_requests SET status='Cancelled' WHERE id=?", (pid,))
+                audit("PERMISSION_CANCEL", "permission", pid, f"Employee {u['emp_code']} cancelled permission")
+                db.commit()
+                flash("Permission request cancelled.", "ok")
+            return redirect(url_for("emp.permission"))
+
+        try:
+            d = s2d(request.form["perm_date"])
+        except Exception:
+            flash("Please choose a valid date.", "err")
+            return redirect(url_for("emp.permission"))
+
+        perm_type = request.form.get("perm_type", "Late Coming").strip()[:50]
+        try:
+            duration = float(request.form.get("duration_hours", 2.0))
+        except (ValueError, TypeError):
+            duration = 2.0
+        reason = request.form.get("reason", "").strip()[:500]
+        from_time = request.form.get("from_time") or None
+        to_time = request.form.get("to_time") or None
+
+        if not reason:
+            flash("Please enter the reason for permission (e.g. Bank work, personal emergency).", "err")
+        elif d < t - timedelta(days=7):
+            flash("Permission cannot be applied for dates older than 7 days.", "err")
+        elif db.execute("SELECT 1 FROM permission_requests WHERE emp_id=? AND perm_date=? AND status IN ('Pending','Approved')",
+                        (u["id"], d2s(d))).fetchone():
+            flash("You already have a permission request for that date.", "err")
+        else:
+            cur = db.execute(
+                "INSERT INTO permission_requests (emp_id, perm_date, perm_type, duration_hours, from_time, to_time, reason) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (u["id"], d2s(d), perm_type, duration, from_time, to_time, reason)
+            )
+            audit("PERMISSION_APPLY", "permission", cur.lastrowid, f"{d} {perm_type} {duration}h: {reason}")
+            db.commit()
+            flash(f"Late Come Permission request ({duration:g} hrs for '{reason}') sent to HR for approval.", "ok")
+        return redirect(url_for("emp.permission"))
+
+    rows = db.execute("SELECT * FROM permission_requests WHERE emp_id=? ORDER BY id DESC LIMIT 30", (u["id"],)).fetchall()
+    return render_template("emp/permission.html", rows=rows, today=t)
 

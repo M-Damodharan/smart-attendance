@@ -94,11 +94,28 @@
     refresh();
   }
 
+  function isCanvasBlackOrTooDark(canvas, minBrightness = 20) {
+    try {
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imgData.data;
+      let sum = 0, samples = 0;
+      for (let i = 0; i < d.length; i += 32) {
+        sum += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+        samples++;
+      }
+      const avg = samples > 0 ? (sum / samples) : 0;
+      return avg < minBrightness;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function grab(w, h, q) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const ctx = c.getContext('2d');
     ctx.drawImage(video, 0, 0, w, h);
-    return c.toDataURL('image/jpeg', q);
+    return { dataUrl: c.toDataURL('image/jpeg', q), isDark: isCanvasBlackOrTooDark(c) };
   }
 
   async function countdown(sec) {
@@ -142,7 +159,12 @@
       }
 
       // 2. Capture high-quality live snapshot photo for attendance audit
-      const selfie = grab(480, 360, 0.82);
+      const selfieObj = grab(480, 360, 0.82);
+      if (selfieObj.isDark) {
+        promptEl.textContent = '⚠️ Camera screen is black or dark! No face detected.';
+        throw new Error('Camera screen is black or too dark. No face detected! Please ensure camera lens is uncovered and lighting is adequate.');
+      }
+      const selfie = selfieObj.dataUrl;
 
       let payload = { kind, selfie, ...loc };
 
@@ -154,12 +176,12 @@
         promptEl.textContent = 'Running liveness check…';
         const ch = await postJSON('/api/challenge', {});
         if (!ch.ok) throw new Error('Could not start liveness check.');
-        const frames = [grab(160, 120, 0.6)];
+        const frames = [grab(160, 120, 0.6).dataUrl];
         await sleep(400);
         for (const p of ch.prompts) {
           promptEl.textContent = p.text;
           await countdown(2);
-          frames.push(grab(160, 120, 0.6));
+          frames.push(grab(160, 120, 0.6).dataUrl);
         }
         promptEl.textContent = 'Hold still…';
         await sleep(400);
