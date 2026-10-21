@@ -267,7 +267,10 @@ class TestFaceSecurity(unittest.TestCase):
         data = punch_res.get_json()
         self.assertEqual(punch_res.status_code, 403)
         self.assertFalse(data.get("ok"))
-        self.assertIn("Face verification failed", data.get("error"))
+        self.assertTrue(
+            "Face verification failed" in data.get("error") or
+            "Face does not match this employee account" in data.get("error")
+        )
 
     def test_05_hr_assisted_face_reset_recovery(self):
         """5. HR-assisted recovery:

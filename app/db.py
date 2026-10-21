@@ -391,11 +391,12 @@ def init_db(app):
                 con.execute("UPDATE weekly_shift_schedules SET shift_id=? WHERE shift_id=?", (primary_id, extra_id))
                 con.execute("DELETE FROM shifts WHERE id=?", (extra_id,))
 
-    # Ensure system_settings has face recognition and AI defense defaults
+    # Ensure system_settings has face recognition and AI defense defaults (calibrated for real-world phone cameras)
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.75')")
-    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_buddy_punch_block_threshold', '0.70')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_buddy_punch_block_threshold', '0.60')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_auto_block_enabled', '1')")
+    con.execute("UPDATE system_settings SET value='0.60' WHERE key='ai_buddy_punch_block_threshold'")
 
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
         _seed_demo(con)

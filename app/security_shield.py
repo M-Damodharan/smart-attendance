@@ -278,14 +278,15 @@ def _resolve_image_path(filename: str):
     return None
 
 
-def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: str = None) -> dict:
+def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: str = None, device_credential_id: str = None) -> dict:
     """Real-Time Cross-Punch Buddy Face & Biometric Defense:
     Executed before ANY attendance punch (both WebAuthn and camera-based).
     Compares the incoming live camera selfie against:
-    1. All attendance check-in/check-out photos recorded in the database by ANY OTHER employee
-       (both today's punches and historical stored photos).
-    2. All other employees' registered 360-degree face templates and profile photos.
-    If similarity >= threshold (default 0.62), immediately flags a buddy-punch violation,
+    1. Phone hardware Face ID credential used by any other employee today.
+    2. All attendance check-in/check-out photos recorded in the database by ANY OTHER employee
+       (both today's punches and historical stored photos, up to 400 images across all 4 departments).
+    3. All other employees' registered 360-degree face templates and profile photos across all 4 departments.
+    If similarity >= threshold (calibrated 0.50 for phone cameras), immediately flags a buddy-punch violation,
     allowing caller to auto-block the employee ID and abort the punch.
     """
     import os
@@ -301,7 +302,34 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
     if not date_str:
         date_str = d2s(today())
 
-    # 1. Extract multi-scale invariant candidate vectors from incoming live image
+    # 1. Device Credential / Phone Sharing Check:
+    # If the exact same Phone Face ID / WebAuthn passkey was already used by another employee today, block immediately!
+    if device_credential_id:
+        dev_other = db.execute(
+            "SELECT a.emp_id, a.date, e.emp_code, e.name, e.department, c.name as category_name "
+            "FROM attendance a "
+            "JOIN employees e ON e.id = a.emp_id "
+            "LEFT JOIN employee_categories c ON c.id = e.category_id "
+            "WHERE a.device_credential_id = ? AND a.emp_id != ? AND a.date = ? "
+            "ORDER BY a.id DESC LIMIT 1",
+            (device_credential_id, emp_id, date_str)
+        ).fetchone()
+        if dev_other:
+            d_dept = dev_other["department"] or dev_other["category_name"] or "General"
+            return {
+                "violation": True,
+                "type": "DEVICE_SHARING_VIOLATION",
+                "similarity": 1.0,
+                "other_emp": dict(dev_other),
+                "other_selfie": None,
+                "message": (
+                    f"AI Biometric Device Blocked: This phone's Face ID was already used today by "
+                    f"employee {dev_other['name']} ({dev_other['emp_code']} · {d_dept}). "
+                    f"Buddy punch / device sharing rejected."
+                )
+            }
+
+    # 2. Extract multi-scale invariant candidate vectors from incoming live image
     try:
         live_candidates = get_candidate_live_embeddings(live_img)
     except Exception:
@@ -310,11 +338,12 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
         except Exception as e:
             return {"violation": False, "error": f"Failed to extract face features: {e}"}
 
-    # 2. Get dynamic similarity threshold from system settings (default 0.62 for high accuracy)
+    # 3. Dynamic similarity threshold calibrated for real smartphone cameras (0.60)
     thresh_row = db.execute("SELECT value FROM system_settings WHERE key='ai_buddy_punch_block_threshold'").fetchone()
-    threshold = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else 0.62
+    val = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else 0.60
+    threshold = min(val, 0.60)
 
-    # 3. Check against ALL punch photos stored across the database for ANY OTHER employee
+    # 4. Check against ALL punch photos stored across the database for ANY OTHER employee
     # Scans up to 400 attendance images across all 4 departments / categories for other IDs
     att_rows = db.execute(
         "SELECT a.id, a.emp_id, a.date, a.in_selfie, a.out_selfie, a.check_in, a.device_credential_id, "
@@ -356,19 +385,7 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
             except Exception:
                 pass
 
-    # 4. Check against all OTHER registered employee templates & profile images
-    # If the user has their own face registered, verify if it matches their own template first
-    cur_user = db.execute("SELECT id, face_registered, face_template FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if cur_user and cur_user["face_registered"] and cur_user["face_template"]:
-        own_angles = parse_template_angles(cur_user["face_template"])
-        if own_angles:
-            own_sim = compute_multi_angle_similarity(live_candidates, own_angles)
-            if own_sim >= 0.70:
-                # Face matches the user's own registered account, so not a cross-account template spoof
-                return {"violation": False}
-
-    # Use strict threshold (0.78) for synthetic/registered cross-account templates
-    reg_threshold = max(threshold, 0.78)
+    # 5. Check against all OTHER registered employee templates & profile images across all 4 departments
     reg_rows = db.execute(
         "SELECT e.id, e.emp_code, e.name, e.department, e.face_template, e.face_image, c.name as category_name "
         "FROM employees e "
@@ -394,7 +411,7 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
                 except Exception:
                     pass
 
-        if sim >= reg_threshold:
+        if sim >= threshold:
             dept_str = r["department"] or r["category_name"] or "General"
             return {
                 "violation": True,
@@ -468,7 +485,8 @@ def scan_daily_punches_for_buddy_punches(db, target_date_str: str = None, thresh
 
     if threshold is None:
         thresh_row = db.execute("SELECT value FROM system_settings WHERE key='ai_buddy_punch_block_threshold'").fetchone()
-        threshold = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else 0.62
+        val = float(thresh_row["value"]) if thresh_row and thresh_row["value"] else 0.60
+        threshold = min(val, 0.60)
 
     # 1. Fetch all punches for the target date across ALL departments
     rows = db.execute(

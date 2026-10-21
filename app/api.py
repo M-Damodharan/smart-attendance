@@ -242,7 +242,9 @@ def punch():
     # Compares live selfie against today's punches by other employees and registered templates.
     # If the same face is used across 2 or more IDs, immediately blocks the account and rejects punch.
     from .security_shield import check_cross_punch_buddy_face_realtime, block_employee_account_by_ai
-    cross_check = check_cross_punch_buddy_face_realtime(db, selfie, user["id"], today_s)
+    webauthn_assertion_data = d.get("webauthn_assertion")
+    device_cred_check = webauthn_assertion_data.get("id") if (isinstance(webauthn_assertion_data, dict) and webauthn_assertion_data.get("id")) else None
+    cross_check = check_cross_punch_buddy_face_realtime(db, selfie, user["id"], today_s, device_credential_id=device_cred_check)
     if cross_check.get("violation"):
         other = cross_check.get("other_emp") or {}
         other_name = other.get("name", "another employee")

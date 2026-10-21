@@ -94,7 +94,7 @@
     refresh();
   }
 
-  function isCanvasBlackOrTooDark(canvas, minBrightness = 16) {
+  function isCanvasBlackOrTooDark(canvas, minBrightness = 8) {
     try {
       const ctx = canvas.getContext('2d');
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -114,8 +114,10 @@
   function grab(w, h, q) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const ctx = c.getContext('2d');
-    ctx.drawImage(video, 0, 0, w, h);
-    return { dataUrl: c.toDataURL('image/jpeg', q), isDark: isCanvasBlackOrTooDark(c) };
+    if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+      ctx.drawImage(video, 0, 0, w, h);
+    }
+    return { dataUrl: c.toDataURL('image/jpeg', q), isDark: isCanvasBlackOrTooDark(c, 8) };
   }
 
   async function countdown(sec) {
