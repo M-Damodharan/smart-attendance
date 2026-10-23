@@ -330,3 +330,85 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
         self._login(c, "HR001", "123456789")
         hr_res = c.get(f"/api/selfie/{face_img_name}")
         self.assertEqual(hr_res.status_code, 200)
+
+    def test_09_face_not_clear_dark_rejected_with_flag(self):
+        """9. Dark/unclear face is rejected with face_not_clear flag and punch is not taken."""
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
+            db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
+            db.commit()
+
+        self._login(c, "E0012", "123456789")
+        ch_res = c.get("/api/android-biometric/challenge")
+        ch_data = ch_res.get_json()
+
+        # Dark selfie (< 15 brightness)
+        dark_buf = io.BytesIO()
+        Image.new("RGB", (128, 128), (5, 5, 5)).save(dark_buf, "JPEG")
+        dark_b64 = "data:image/jpeg;base64," + base64.b64encode(dark_buf.getvalue()).decode()
+
+        res = c.post("/api/punch", json={
+            "kind": "in",
+            "selfie": dark_b64,
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "accuracy": 10,
+            "android_biometric_assertion": {
+                "id": "android_hw_device_001_test",
+                "type": "android_biometric",
+                "signature": "sig_test_hardware_signature",
+                "challenge": ch_data["challenge"]
+            }
+        })
+        data = res.get_json()
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(data["ok"])
+        self.assertTrue(data.get("face_not_clear"))
+        self.assertIn("face not clear", data["error"].lower())
+
+        # Verify no attendance record was created
+        with self.app.app_context():
+            db = get_db()
+            att = db.execute("SELECT id FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')").fetchone()
+            self.assertIsNone(att)
+
+    def test_10_clear_face_punch_accepted(self):
+        """10. Clear and bright face photo is accepted and attendance is recorded."""
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
+            db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
+            db.commit()
+
+        self._login(c, "E0012", "123456789")
+        ch_res = c.get("/api/android-biometric/challenge")
+        ch_data = ch_res.get_json()
+
+        clear_selfie = make_test_face(1, brightness=1.0)
+        res = c.post("/api/punch", json={
+            "kind": "in",
+            "selfie": clear_selfie,
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "accuracy": 10,
+            "android_biometric_assertion": {
+                "id": "android_hw_device_001_test",
+                "type": "android_biometric",
+                "signature": "sig_test_hardware_signature",
+                "challenge": ch_data["challenge"]
+            }
+        })
+        data = res.get_json()
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["auth_method"], "android_biometric")
+
+        # Verify attendance record was successfully created
+        with self.app.app_context():
+            db = get_db()
+            att = db.execute("SELECT id, check_in FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')").fetchone()
+            self.assertIsNotNone(att)
+            self.assertIsNotNone(att["check_in"])

@@ -94,21 +94,84 @@
     refresh();
   }
 
-  function isCanvasBlackOrTooDark(canvas, minBrightness = 8) {
+  // Face Quality & Clarity Inspection (Darkness, Blur, Blank Screen)
+  function analyzeCanvasClarity(canvas) {
     try {
       const ctx = canvas.getContext('2d');
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const w = canvas.width, h = canvas.height;
+      const imgData = ctx.getImageData(0, 0, w, h);
       const d = imgData.data;
-      let sum = 0, samples = 0;
+
+      let sum = 0, sumSq = 0, count = 0;
       for (let i = 0; i < d.length; i += 16) {
-        sum += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
-        samples++;
+        const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        sum += lum;
+        sumSq += lum * lum;
+        count++;
       }
-      const avg = samples > 0 ? (sum / samples) : 0;
-      return avg < minBrightness;
+      const mean = count > 0 ? (sum / count) : 0;
+      const variance = count > 0 ? (sumSq / count - mean * mean) : 0;
+      const stdDev = Math.sqrt(Math.max(0, variance));
+
+      // Calculate edge gradient sharpness
+      let edgeSum = 0, edgeCount = 0;
+      const stride = w * 4;
+      for (let y = 1; y < h - 1; y += 4) {
+        for (let x = 1; x < w - 1; x += 4) {
+          const idx = (y * w + x) * 4;
+          const center = 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+          const right = 0.299 * d[idx + 4] + 0.587 * d[idx + 5] + 0.114 * d[idx + 6];
+          const down = 0.299 * d[idx + stride] + 0.587 * d[idx + stride + 1] + 0.114 * d[idx + stride + 2];
+          edgeSum += Math.abs(center - right) + Math.abs(center - down);
+          edgeCount++;
+        }
+      }
+      const sharpness = edgeCount > 0 ? (edgeSum / edgeCount) : 0;
+
+      const isTooDark = mean < 16.0;
+      const isBlank = stdDev < 6.0;
+      const isBlurry = sharpness < 2.0;
+      const isClear = !isTooDark && !isBlank && !isBlurry;
+
+      let reason = 'OK';
+      if (isTooDark) {
+        reason = 'Face not clear: Lighting is too dark or camera is covered (brightness: ' + Math.round(mean) + '/255).';
+      } else if (isBlank) {
+        reason = 'Face not clear: Camera screen is blank. No facial features visible.';
+      } else if (isBlurry) {
+        reason = 'Face not clear: Photo is blurry or out of focus. Please hold phone steady.';
+      }
+
+      return { isClear, isTooDark, isBlank, isBlurry, mean, stdDev, sharpness, reason };
     } catch (e) {
-      return false;
+      return { isClear: true, reason: 'OK' };
     }
+  }
+
+  function showFaceNotClearModal(msg) {
+    const modal = $('face-not-clear-modal');
+    const msgEl = $('face-not-clear-msg');
+    if (modal) {
+      if (msgEl && msg) {
+        msgEl.innerHTML = `<b>${msg}</b><br><span style="font-size:0.84rem;color:var(--text-muted);display:block;margin-top:6px">Attendance punch was NOT recorded. Please position your face clearly in bright light and try again.</span>`;
+      }
+      modal.style.display = 'flex';
+    }
+  }
+
+  function hideFaceNotClearModal() {
+    const modal = $('face-not-clear-modal');
+    if (modal) modal.style.display = 'none';
+    if (video && video.paused) {
+      try { video.play(); } catch(e){}
+    }
+    busy = false;
+    refresh();
+  }
+
+  const btnTryAgain = $('btn-face-try-again');
+  if (btnTryAgain) {
+    btnTryAgain.addEventListener('click', hideFaceNotClearModal);
   }
 
   function grab(w, h, q) {
@@ -117,7 +180,8 @@
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
       ctx.drawImage(video, 0, 0, w, h);
     }
-    return { dataUrl: c.toDataURL('image/jpeg', q), isDark: isCanvasBlackOrTooDark(c, 8) };
+    const clarity = analyzeCanvasClarity(c);
+    return { dataUrl: c.toDataURL('image/jpeg', q), clarity };
   }
 
   async function countdown(sec) {
@@ -137,28 +201,26 @@
         try { await video.play(); } catch(e){}
       }
 
-      // 2. CRITICAL FOR iOS (iPhone Safari/Chrome) & ANDROID:
-      // Capture live attendance selfie snapshot FIRST before triggering native Phone Face ID.
-      // On Apple iOS and Android, the OS WebKit/browser pauses or suspends video streaming
-      // while system Passkey / Face ID dialogs are open on screen.
-      // Capturing the selfie photo now guarantees a bright, crystal-clear face photo
-      // while the user is actively looking directly at the camera oval.
-      promptEl.textContent = 'Scanning face…';
+      // 2. Capture live attendance selfie snapshot with face clarity check
+      promptEl.textContent = 'Checking face clarity & lighting…';
       await sleep(100);
       let selfieObj = grab(480, 360, 0.85);
 
-      // If camera frame was momentarily settling or auto-exposing, retry once after 120ms
-      if (selfieObj.isDark) {
+      // If camera frame was settling or auto-exposing, retry once after 150ms
+      if (!selfieObj.clarity.isClear) {
         if (video && video.paused) {
           try { await video.play(); } catch(e){}
         }
-        await sleep(120);
+        await sleep(150);
         selfieObj = grab(480, 360, 0.85);
       }
 
-      if (selfieObj.isDark) {
-        promptEl.textContent = '⚠️ Camera screen is black or dark! No face detected.';
-        throw new Error('Camera screen is black or too dark. No face detected! Please ensure camera lens is uncovered and lighting is adequate.');
+      // Face Not Clear / Dark -> POP-UP modal and DO NOT TAKE PUNCH!
+      if (!selfieObj.clarity.isClear) {
+        showFaceNotClearModal(selfieObj.clarity.reason);
+        const err = new Error(selfieObj.clarity.reason);
+        err.face_not_clear = true;
+        throw err;
       }
       const selfie = selfieObj.dataUrl;
 
@@ -217,6 +279,10 @@
       if (!res.ok) {
         const err = new Error(res.error || 'Something went wrong.');
         err.shield_status = res.shield_status;
+        err.face_not_clear = res.face_not_clear;
+        if (res.face_not_clear) {
+          showFaceNotClearModal(res.error);
+        }
         throw err;
       }
 
@@ -226,8 +292,8 @@
       const otStr = res.overtime_text || (res.ot_hours ? res.ot_hours + ' h' : '');
       let details = '';
 
-      if (res.auth_method === 'webauthn_face_id' || res.face_verified) {
-        details += `<br><span style="color:#10b981">🛡️ <b>Phone Face ID Verified</b> (Hardware Cryptographic Signature Valid)</span>`;
+      if (res.auth_method === 'webauthn_face_id' || res.auth_method === 'android_biometric' || res.face_verified) {
+        details += `<br><span style="color:#10b981">🛡️ <b>Phone Biometrics Verified</b> (Hardware Cryptographic Signature Valid)</span>`;
       }
       if (durStr) details += `<br>Worked: <strong>${durStr}</strong>`;
       if (otStr && otStr !== '0m' && otStr !== '0 h') details += ` · Overtime: <strong>${otStr}</strong>`;
@@ -242,6 +308,9 @@
     } catch (e) {
       promptEl.textContent = '';
       countEl.textContent = '';
+      if (e.face_not_clear || (e.message && (e.message.toLowerCase().includes('face not clear') || e.message.toLowerCase().includes('black or too dark') || e.message.toLowerCase().includes('blurry')))) {
+        showFaceNotClearModal(e.message);
+      }
       result.className = 'result bad';
       result.hidden = false;
       if (e.shield_status === 'BLOCKED' || (e.message && (e.message.includes('Blocked') || e.message.includes('locked')))) {

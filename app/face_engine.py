@@ -57,13 +57,13 @@ def _load_image(img_input):
 
 def check_selfie_image_quality(img_input):
     """Detects whether an attendance camera snapshot is pitch black, extremely dark,
-    blank, or covered (meaning NO human face is present).
+    blurry, blank, or covered (meaning NO clear human face is present).
     Returns: (is_valid: bool, reason: str, mean_brightness: float)
     """
     try:
         im = _load_image(img_input)
         if im.size[0] < 4 or im.size[1] < 4:
-            return False, "Liveness / Camera check failed: Camera image is corrupt or empty.", 0.0
+            return False, "Face not clear: Camera image is corrupt or empty. Please try again.", 0.0
 
         gray = im.convert("L")
         stat = ImageStat.Stat(gray)
@@ -71,13 +71,24 @@ def check_selfie_image_quality(img_input):
         std_val = float(stat.stddev[0])
 
         # Pitch black or covered lens detection (black screen)
-        # Pitch black is 0-5. Covered camera / very dark low light is < 14.0.
-        if mean_val < 14.0:
-            return False, f"Camera screen is black or too dark (brightness: {mean_val:.1f}/255). No face detected. Please ensure your camera lens is uncovered and you have sufficient lighting.", mean_val
+        # Pitch black is 0-5. Covered camera / very dark low light is < 15.0.
+        if mean_val < 15.0:
+            return False, f"Face not clear: Camera screen is black or too dark (brightness: {mean_val:.1f}/255). No clear face detected. Please ensure your camera lens is uncovered, face good lighting, and try again.", mean_val
 
         # Blank screen or uniform canvas detection (lack of texture/variance)
         if std_val < 6.0:
-            return False, "Liveness check failed: Camera screen is blank or uniform. No human facial features visible.", mean_val
+            return False, "Face not clear (Liveness check failed): Camera screen is blank or uniform. No human facial features visible. Please face the camera and try again.", mean_val
+
+        # Blur / lack of clarity detection
+        try:
+            import cv2
+            import numpy as np
+            gray_arr = np.array(gray)
+            lap_var = float(cv2.Laplacian(gray_arr, cv2.CV_64F).var())
+            if lap_var < 8.0:
+                return False, f"Face not clear: Camera photo is blurry or out of focus (sharpness: {lap_var:.1f}). Please hold your phone steady and try again.", mean_val
+        except Exception:
+            pass
 
         return True, "OK", mean_val
     except Exception as e:

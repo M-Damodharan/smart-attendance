@@ -236,7 +236,11 @@ def punch():
     if not is_quality_ok:
         audit("BLACK_CAMERA_REJECTED", "attendance", user["id"], f"kind={kind} brightness={b_mean:.1f} err={quality_err}")
         db.commit()
-        return _err(quality_err, 400)
+        return jsonify({
+            "ok": False,
+            "error": quality_err,
+            "face_not_clear": True
+        }), 400
 
     # REAL-TIME AI BIOMETRIC BUDDY PUNCH DEFENSE:
     # Compares live selfie against today's punches by other employees and registered templates.
