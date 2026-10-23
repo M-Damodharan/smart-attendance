@@ -48,11 +48,14 @@ def dashboard():
                           (u["id"], d2s(t))).fetchone()
     perm_today = db.execute("SELECT * FROM permission_requests WHERE emp_id=? AND perm_date=? AND status='Approved'",
                             (u["id"], d2s(t))).fetchone()
-    category = get_employee_category(u["id"])
+    from .api import get_department_office
+    category = get_employee_category(u)
     face_req = db.execute("SELECT * FROM face_change_requests WHERE emp_id=? ORDER BY id DESC LIMIT 1", (u["id"],)).fetchone()
+    office = get_department_office(db, u)
     current_shift = _shift(u, t, rec["shift_id"] if (rec and "shift_id" in rec.keys() and rec["shift_id"]) else None)
     return render_template("emp/dashboard.html", rec=rec, shift=current_shift, category=category, summary=reg["summary"], recent=recent,
-                           pend=pend_l + pend_o + pend_p, holiday=holiday, od_today=od_today, perm_today=perm_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"))
+                           pend=pend_l + pend_o + pend_p, holiday=holiday, od_today=od_today, perm_today=perm_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"),
+                           office=office)
 
 
 @bp.route("/punch")

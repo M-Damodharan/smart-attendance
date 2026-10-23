@@ -82,16 +82,10 @@ def get_department_office(db, user):
         target_dept = "Contract Operations"
     elif "prod" in user_dept or "operator" in user_dept or "employee" in cat_name or cat_code == "employees":
         target_dept = "Production"
-    elif "staff" in user_dept or "eng" in user_dept or "hr" in user_dept or "human" in user_dept or "it" in user_dept or "staff" in cat_name or cat_code == "staff":
+    elif "staff" in user_dept or "eng" in user_dept or "hr" in user_dept or "human" in user_dept or "it" in user_dept or "staff" in cat_name or cat_code == "staff" or (user.get("role") if hasattr(user, "get") else None) == "hr":
         target_dept = "Staff"
 
-    # 1. First check if employee's explicitly assigned office matches and is active
-    if "office_id" in user_keys and user["office_id"]:
-        off = db.execute("SELECT * FROM offices WHERE id=? AND active=1", (user["office_id"],)).fetchone()
-        if off:
-            return off
-
-    # 2. Check marked office for this department
+    # 1. Prioritize the department-separated marked location point
     if target_dept:
         dept_off = db.execute(
             "SELECT * FROM offices WHERE active=1 AND (LOWER(department)=LOWER(?) OR LOWER(name) LIKE LOWER(?)) ORDER BY id LIMIT 1",
@@ -99,6 +93,12 @@ def get_department_office(db, user):
         ).fetchone()
         if dept_off:
             return dept_off
+
+    # 2. Check if employee's assigned office is valid and active
+    if "office_id" in user_keys and user["office_id"]:
+        off = db.execute("SELECT * FROM offices WHERE id=? AND active=1", (user["office_id"],)).fetchone()
+        if off:
+            return off
 
     # 3. Fallback to first active office
     return db.execute("SELECT * FROM offices WHERE active=1 ORDER BY id LIMIT 1").fetchone()

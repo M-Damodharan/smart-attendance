@@ -2,53 +2,104 @@
 {% block title %}Settings · SBG{% endblock %}
 {% block content %}
 <section class="card">
-  <h3>4 Department Marked Locations &amp; Geofence (Strict 50 m Policy)</h3>
-  <p class="muted small">Configured for the 4 company departments: <b>Staff</b> (Admin/Engineering/HR), <b>Production</b> (Factory Floor/Operators), <b>Contract Labour</b> (Operations/Logistics), and <b>Accounts &amp; Finance</b>. <b>Strict 50 m maximum allowed distance</b> is enforced for all attendance punches.</p>
-  <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office_link">
-    <input name="link" placeholder="Paste Google Maps link or 'lat,lng'" required style="flex:3 1 260px">
-    <select name="id" title="Apply to">
-      <option value="">Add as new department location</option>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <h3 style="margin:0;">4 Department Marked Locations &amp; Geofence (Strict 50 m Policy)</h3>
+      <p class="muted small" style="margin:2px 0 0;">Each department has its own separated GPS location point. Attendance punching is strictly restricted to within <b>50 meters</b> of the employee's assigned department location point.</p>
+    </div>
+    <span class="badge" style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:6px 12px;border-radius:8px;">
+      📍 Strict 50m Max Radius Policy
+    </span>
+  </div>
+
+  <!-- Quick GPS link parser -->
+  <form method="post" class="row-form" style="background:var(--bg-surface);padding:10px 14px;border-radius:10px;margin-bottom:1rem;border:1px solid var(--border-default);">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="office_link">
+    <input name="link" placeholder="Paste Google Maps link (e.g. https://maps.app.goo.gl/... or '12.743475,77.817446')" required style="flex:3 1 260px">
+    <select name="id" title="Apply to Department Location" required style="flex:2 1 200px">
+      <option value="">Select Department Location...</option>
       {% for o in offices %}
-      <option value="{{ o['id'] }}" {{ 'selected' if loop.first }}>Update: {{ o['name'] }} ({{ o['department'] or 'General' }})</option>
+      <option value="{{ o['id'] }}">{{ o['name'] }} ({{ o['department'] or 'General' }})</option>
       {% endfor %}
     </select>
-    <button class="btn sm primary">Set from link</button>
-    <button type="button" class="btn sm" onclick="useMyLocation()">Use my current location</button>
+    <button class="btn sm primary">Set from Link</button>
   </form>
-  {% for o in offices %}
-  <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office"><input type="hidden" name="id" value="{{ o['id'] }}">
-    <input name="name" value="{{ o['name'] }}" required title="Location Name" style="flex:2 1 180px">
-    <select name="department" title="Department" style="flex:1 1 140px">
-      <option value="Staff" {{ 'selected' if o['department'] == 'Staff' }}>Staff (Engineering/Admin)</option>
-      <option value="Production" {{ 'selected' if o['department'] == 'Production' }}>Production (Factory Floor)</option>
-      <option value="Contract Operations" {{ 'selected' if o['department'] == 'Contract Operations' or o['department'] == 'Contract Labour' }}>Contract Labour</option>
-      <option value="Accounts & Finance" {{ 'selected' if o['department'] == 'Accounts & Finance' }}>Accounts &amp; Finance</option>
-      <option value="" {{ 'selected' if not o['department'] }}>General / All</option>
-    </select>
-    <input name="lat" value="{{ o['lat'] }}" required inputmode="decimal" placeholder="Latitude" style="flex:1 1 110px">
-    <input name="lng" value="{{ o['lng'] }}" required inputmode="decimal" placeholder="Longitude" style="flex:1 1 110px">
-    <input name="radius_m" type="number" min="10" max="50" value="50" required title="Radius strictly 50 m" style="flex:0 1 70px" readonly>
-    <span class="small muted" style="white-space:nowrap;margin-right:4px">50m only</span>
-    <label class="check"><input type="checkbox" name="active" {{ 'checked' if o['active'] }}> Active</label>
-    <button class="btn sm">Save</button>
-  </form>
-  {% endfor %}
-  <form method="post" class="row-form add"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office">
-    <input name="name" placeholder="New location name" required style="flex:2 1 180px">
-    <select name="department" title="Department" style="flex:1 1 140px">
-      <option value="Staff">Staff (Engineering/Admin)</option>
-      <option value="Production">Production (Factory Floor)</option>
-      <option value="Contract Operations">Contract Labour</option>
-      <option value="Accounts & Finance">Accounts &amp; Finance</option>
-      <option value="">General / All</option>
-    </select>
-    <input name="lat" placeholder="Latitude" required inputmode="decimal" style="flex:1 1 110px">
-    <input name="lng" placeholder="Longitude" required inputmode="decimal" style="flex:1 1 110px">
-    <input name="radius_m" type="number" value="50" readonly style="flex:0 1 70px">
-    <span class="small muted" style="white-space:nowrap;margin-right:4px">50m only</span>
-    <label class="check"><input type="checkbox" name="active" checked> Active</label>
-    <button class="btn sm primary">Add</button>
-  </form>
+
+  <!-- 4 Department-Separated Location Cards Grid -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;margin-bottom:1rem;">
+    {% for o in offices %}
+    <form method="post" style="background:var(--bg-card,#1e293b);border:1px solid var(--border-default,#334155);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="office">
+      <input type="hidden" name="id" value="{{ o['id'] }}">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-default);padding-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          {% if 'staff' in (o['department'] or '')|lower or 'admin' in (o['name'] or '')|lower %}
+          <span style="font-size:1.2rem;">💼</span>
+          {% elif 'prod' in (o['department'] or '')|lower or 'employee' in (o['name'] or '')|lower %}
+          <span style="font-size:1.2rem;">⚙️</span>
+          {% elif 'contract' in (o['department'] or '')|lower %}
+          <span style="font-size:1.2rem;">👷</span>
+          {% elif 'account' in (o['department'] or '')|lower or 'finance' in (o['department'] or '')|lower %}
+          <span style="font-size:1.2rem;">📊</span>
+          {% else %}
+          <span style="font-size:1.2rem;">📍</span>
+          {% endif %}
+          <b style="font-size:0.95rem;">{{ o['department'] or 'General Location' }}</b>
+        </div>
+        <label class="check" style="margin:0;font-size:0.8rem;">
+          <input type="checkbox" name="active" {{ 'checked' if o['active'] }}> Active
+        </label>
+      </div>
+
+      <div>
+        <label class="muted small" style="display:block;margin-bottom:3px;">Location Name
+          <input name="name" value="{{ o['name'] }}" required style="width:100%;">
+        </label>
+      </div>
+
+      <div>
+        <label class="muted small" style="display:block;margin-bottom:3px;">Assigned Department
+          <select name="department" style="width:100%;">
+            <option value="Staff" {{ 'selected' if o['department'] == 'Staff' }}>Staff (Engineering/Admin/HR)</option>
+            <option value="Production" {{ 'selected' if o['department'] == 'Production' }}>Employees (Factory Floor/Production)</option>
+            <option value="Contract Operations" {{ 'selected' if o['department'] == 'Contract Operations' or o['department'] == 'Contract Labour' }}>Contract Labour (Operations/Logistics)</option>
+            <option value="Accounts & Finance" {{ 'selected' if o['department'] == 'Accounts & Finance' }}>Accounts &amp; Finance</option>
+            <option value="" {{ 'selected' if not o['department'] }}>General / All Departments</option>
+          </select>
+        </label>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <label class="muted small">Latitude
+          <input name="lat" value="{{ o['lat'] }}" required inputmode="decimal" placeholder="12.743475">
+        </label>
+        <label class="muted small">Longitude
+          <input name="lng" value="{{ o['lng'] }}" required inputmode="decimal" placeholder="77.817446">
+        </label>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-surface);padding:8px 10px;border-radius:8px;">
+        <span class="small muted">Allowed Radius:</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input name="radius_m" type="number" min="10" max="50" value="50" required style="width:55px;padding:2px 6px;" readonly>
+          <span class="badge b-approved" style="font-size:0.72rem;">Strict 50m Max</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button type="button" class="btn sm" style="flex:1;" onclick="fillLocationFor(this)">
+          📍 Use My Location
+        </button>
+        <button class="btn sm primary" style="flex:1;">
+          💾 Save Location
+        </button>
+      </div>
+    </form>
+    {% endfor %}
+  </div>
 </section>
 
 <section class="card">
@@ -228,12 +279,34 @@
 </section>
 {% endblock %}
 {% block scripts %}<script>
+function fillLocationFor(btn){
+  if(!navigator.geolocation){ alert('GPS not available on this browser/device'); return; }
+  const form = btn.closest('form');
+  const latInput = form.querySelector('input[name=lat]');
+  const lngInput = form.querySelector('input[name=lng]');
+  btn.textContent = '⏳ Fetching GPS…';
+  btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(p => {
+    latInput.value = p.coords.latitude.toFixed(6);
+    lngInput.value = p.coords.longitude.toFixed(6);
+    btn.textContent = '✓ GPS Captured (' + Math.round(p.coords.accuracy) + 'm)';
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = '📍 Use My Location'; }, 4000);
+  }, err => {
+    alert('Location permission denied or unavailable: ' + err.message);
+    btn.textContent = '📍 Use My Location';
+    btn.disabled = false;
+  }, { enableHighAccuracy: true, timeout: 20000 });
+}
+
 function useMyLocation(){
   if(!navigator.geolocation){alert('GPS not available');return;}
   navigator.geolocation.getCurrentPosition(p=>{
     const f=document.querySelector('input[name=lat]'), g=document.querySelector('input[name=lng]');
-    f.value=p.coords.latitude.toFixed(6); g.value=p.coords.longitude.toFixed(6);
-    alert('Filled the first office with your current position (±'+Math.round(p.coords.accuracy)+' m). Press Save on that row.');
+    if(f && g) {
+      f.value=p.coords.latitude.toFixed(6); g.value=p.coords.longitude.toFixed(6);
+      alert('Filled location with your current position (±'+Math.round(p.coords.accuracy)+' m). Press Save Location.');
+    }
   },()=>alert('Location permission denied'),{enableHighAccuracy:true,timeout:20000});
 }
 </script>{% endblock %}

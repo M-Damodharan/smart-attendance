@@ -412,6 +412,27 @@ def init_db(app):
     if acc_off:
         con.execute("UPDATE employees SET office_id=? WHERE (office_id IS NULL OR office_id=1) AND (department IN ('Accounts & Finance', 'Accounts') OR department LIKE '%Accounts%')", (acc_off[0],))
 
+    # Ensure Accounts & Finance shift exists and link accounts employees
+    acc_shift = con.execute("SELECT id FROM shifts WHERE (name LIKE '%Accounts%' OR name LIKE '%Finance%') AND active=1 ORDER BY id LIMIT 1").fetchone()
+    if not acc_shift:
+        con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours, active) "
+                    "VALUES ('Accounts & Finance (09:00-18:00)', '09:00', '18:00', 15, 8.0, 4.0, 1.0, 1)")
+        acc_shift = con.execute("SELECT id FROM shifts WHERE name LIKE '%Accounts%' ORDER BY id LIMIT 1").fetchone()
+
+    acc_cat = con.execute("SELECT id FROM employee_categories WHERE code='ACCOUNTS_FINANCE'").fetchone()
+    if acc_cat and acc_shift:
+        con.execute("UPDATE employees SET category_id=? WHERE (department LIKE '%Accounts%' OR department LIKE '%Finance%') AND (category_id IS NULL OR category_id NOT IN (SELECT id FROM employee_categories WHERE code='ACCOUNTS_FINANCE'))", (acc_cat[0],))
+        con.execute("UPDATE employees SET shift_id=? WHERE (category_id=? OR department LIKE '%Accounts%' OR department LIKE '%Finance%') AND (shift_id=1 OR shift_id IS NULL)", (acc_shift[0], acc_cat[0]))
+        con.execute("UPDATE attendance SET shift_id=? WHERE emp_id IN (SELECT id FROM employees WHERE category_id=? OR department LIKE '%Accounts%' OR department LIKE '%Finance%') AND shift_id=1", (acc_shift[0], acc_cat[0]))
+        if acc_off:
+            con.execute("UPDATE employees SET office_id=? WHERE (category_id=? OR department LIKE '%Accounts%' OR department LIKE '%Finance%') AND (office_id=1 OR office_id IS NULL)", (acc_off[0], acc_cat[0]))
+
+    # Propagate real coordinates if set (e.g. from office with non-default coordinates):
+    real_coord_row = con.execute("SELECT lat, lng FROM offices WHERE lat != 0 AND lat != 12.9716 AND active=1 ORDER BY id LIMIT 1").fetchone()
+    if real_coord_row:
+        real_lat, real_lng = real_coord_row[0], real_coord_row[1]
+        con.execute("UPDATE offices SET lat=?, lng=? WHERE (lat=0 OR lat=12.9716) AND active=1", (real_lat, real_lng))
+
     # Ensure General Shift, Morning Shift, and Evening Shift exist
     con.execute("UPDATE shifts SET name='Shift 1 (Morning Shift)', start_time='08:00', end_time='20:00' WHERE (name LIKE '%Shift 1%' OR id=1)")
     con.execute("UPDATE shifts SET name='Shift 2 (Evening Shift)', start_time='20:00', end_time='08:00' WHERE (name LIKE '%Shift 2%' OR id=2)")

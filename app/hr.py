@@ -162,22 +162,52 @@ def employee_form(eid=None):
         code = f.get("emp_code", "").strip().upper()
         name = f.get("name", "").strip()
         role = f.get("role", "employee")
+        dept = f.get("department", "").strip()
         category_id = f.get("category_id", type=int)
         if not category_id:
-            # Fallback based on role
-            cat_code = "STAFF" if role == "hr" else "EMPLOYEES"
-            crow = db.execute("SELECT id FROM employee_categories WHERE code=?", (cat_code,)).fetchone()
+            # Smart category fallback based on department or role
+            if "account" in dept.lower() or "finance" in dept.lower():
+                crow = db.execute("SELECT id FROM employee_categories WHERE code='ACCOUNTS_FINANCE'").fetchone()
+            elif "contract" in dept.lower() or "labour" in dept.lower():
+                crow = db.execute("SELECT id FROM employee_categories WHERE code='CONTRACT'").fetchone()
+            elif role == "hr" or "staff" in dept.lower() or "admin" in dept.lower():
+                crow = db.execute("SELECT id FROM employee_categories WHERE code='STAFF'").fetchone()
+            else:
+                crow = db.execute("SELECT id FROM employee_categories WHERE code='EMPLOYEES'").fetchone()
             category_id = crow[0] if crow else 1
 
+        cat_row = db.execute("SELECT code FROM employee_categories WHERE id=?", (category_id,)).fetchone()
+        cat_code = cat_row["code"] if cat_row else ""
+
         shift_id = f.get("shift_id", type=int)
-        if not shift_id:
-            srow = db.execute("SELECT MIN(id) FROM shifts WHERE active=1").fetchone()
-            shift_id = srow[0] if srow and srow[0] else None
+        if not shift_id or (shift_id == 1 and (cat_code == "ACCOUNTS_FINANCE" or "account" in dept.lower())):
+            # Smart shift default based on department and category
+            if cat_code == "ACCOUNTS_FINANCE" or "account" in dept.lower() or "finance" in dept.lower():
+                srow = db.execute("SELECT id FROM shifts WHERE (name LIKE '%Accounts%' OR name LIKE '%Finance%') AND active=1 ORDER BY id LIMIT 1").fetchone()
+                if not srow:
+                    srow = db.execute("SELECT id FROM shifts WHERE name LIKE '%General%' AND active=1 ORDER BY id LIMIT 1").fetchone()
+            elif cat_code == "STAFF" or "staff" in dept.lower() or role == "hr":
+                srow = db.execute("SELECT id FROM shifts WHERE (name LIKE '%Staff%' OR name LIKE '%General%') AND active=1 ORDER BY id LIMIT 1").fetchone()
+            else:
+                srow = db.execute("SELECT id FROM shifts WHERE name LIKE '%Shift 1%' AND active=1 ORDER BY id LIMIT 1").fetchone()
+            shift_id = srow[0] if srow and srow[0] else 1
 
         office_id = f.get("office_id", type=int)
         if not office_id:
-            orow = db.execute("SELECT MIN(id) FROM offices WHERE active=1").fetchone()
-            office_id = orow[0] if orow and orow[0] else None
+            # Smart department location point default
+            if cat_code == "ACCOUNTS_FINANCE" or "account" in dept.lower() or "finance" in dept.lower():
+                orow = db.execute("SELECT id FROM offices WHERE department='Accounts & Finance' AND active=1 ORDER BY id LIMIT 1").fetchone()
+            elif cat_code == "CONTRACT" or "contract" in dept.lower():
+                orow = db.execute("SELECT id FROM offices WHERE department='Contract Operations' AND active=1 ORDER BY id LIMIT 1").fetchone()
+            elif cat_code == "STAFF" or "staff" in dept.lower() or role == "hr":
+                orow = db.execute("SELECT id FROM offices WHERE department='Staff' AND active=1 ORDER BY id LIMIT 1").fetchone()
+            else:
+                orow = db.execute("SELECT id FROM offices WHERE department='Production' AND active=1 ORDER BY id LIMIT 1").fetchone()
+            if orow:
+                office_id = orow[0]
+            elif not office_id:
+                orow = db.execute("SELECT MIN(id) FROM offices WHERE active=1").fetchone()
+                office_id = orow[0] if orow and orow[0] else None
 
         if not code or not name or role not in ("employee", "hr"):
             flash("Employee code and name are required.", "err")

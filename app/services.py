@@ -171,11 +171,13 @@ def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback
        - If scheduled shift is rotating (Shift 1 / Shift 2) and check_in is provided,
          allow auto day/night detection via determine_shift_from_punch.
        - Otherwise, return scheduled shift.
-    2. Explicit fallback_shift_id (e.g. from attendance record's recorded shift_id, if valid).
-    3. Employee's assigned shift in employees table.
-       - If assigned shift is rotating (Shift 1 / Shift 2) and check_in is provided,
-         allow auto day/night detection via determine_shift_from_punch.
-       - Otherwise (General Shift, Staff, Accounts & Finance, etc.), preserve the assigned shift!
+    2. Check employee's department and category:
+       - ACCOUNTS & FINANCE: Accounts employees ALWAYS belong to the Accounts & Finance shift (09:00-18:00)
+         or General Shift. They are NEVER assigned to factory Shift 1!
+       - STAFF / HR: Staff employees belong to General Shift or Staff Shift.
+       - CONTRACT: Contract employees belong to their shift.
+       - EMPLOYEES: Factory workers rotate between Shift 1 (08:00-20:00) and Shift 2 (20:00-08:00).
+    3. Check employee's assigned shift in employees table or fallback_shift_id.
     4. Fallback to determine_shift_from_punch if check_in provided.
     5. First active shift in database.
     """
@@ -196,16 +198,48 @@ def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback
             return determine_shift_from_punch(check_in, db) or sched
         return sched
 
-    # 2. Check explicit fallback or employee assigned shift
-    emp = db.execute("SELECT shift_id FROM employees WHERE id=?", (emp_id,)).fetchone()
-    target_sid = fallback_shift_id if fallback_shift_id is not None else (emp["shift_id"] if emp else None)
-    if target_sid:
-        s = db.execute("SELECT * FROM shifts WHERE id=?", (target_sid,)).fetchone()
-        if s:
-            s_name = (s["name"] or "").lower()
-            if ("shift 1" in s_name or "shift 2" in s_name) and check_in:
-                return determine_shift_from_punch(check_in, db) or s
-            return s
+    # 2. Check employee record with category and department
+    emp = db.execute(
+        "SELECT e.*, c.code category_code, c.name category_name "
+        "FROM employees e LEFT JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?",
+        (emp_id,)
+    ).fetchone()
+
+    if emp:
+        dept = (emp["department"] or "").strip().lower()
+        cat_code = (emp["category_code"] or "").strip().lower()
+        cat_name = (emp["category_name"] or "").strip().lower()
+        is_accounts = ("account" in dept or "finance" in dept or cat_code == "accounts_finance" or "account" in cat_name or "finance" in cat_name)
+        is_staff = (cat_code == "staff" or "staff" in dept or "admin" in dept or "hr" in dept or "human" in dept or "it" in dept or emp["role"] == "hr")
+
+        # ACCOUNTS & FINANCE: Always resolve to Accounts & Finance Shift (09:00-18:00) or General Shift
+        if is_accounts:
+            acc_s = db.execute(
+                "SELECT * FROM shifts WHERE active=1 AND (name LIKE '%Accounts%' OR name LIKE '%Finance%') ORDER BY id LIMIT 1"
+            ).fetchone()
+            if not acc_s:
+                acc_s = db.execute("SELECT * FROM shifts WHERE active=1 AND name LIKE '%General%' ORDER BY id LIMIT 1").fetchone()
+            if acc_s:
+                return acc_s
+
+        # Assigned shift in employees table or fallback_shift_id
+        target_sid = fallback_shift_id or emp["shift_id"]
+        if target_sid:
+            s = db.execute("SELECT * FROM shifts WHERE id=?", (target_sid,)).fetchone()
+            if s:
+                s_name = (s["name"] or "").lower()
+                if ("shift 1" in s_name or "shift 2" in s_name) and check_in:
+                    return determine_shift_from_punch(check_in, db) or s
+                return s
+
+        # STAFF fallback if no shift assigned: General Shift or Staff Shift
+        if is_staff:
+            staff_s = db.execute(
+                "SELECT * FROM shifts WHERE active=1 AND (name LIKE '%General%' OR name LIKE '%Staff%') ORDER BY id LIMIT 1"
+            ).fetchone()
+            if staff_s:
+                return staff_s
+                return s
 
     # 3. Fallback to determine from punch time
     if check_in:
@@ -215,9 +249,11 @@ def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback
     return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id LIMIT 1").fetchone()
 
 
-def get_employee_category(emp_id: int):
+def get_employee_category(emp_id):
     """Retrieve employee category details (work hours, overtime, half-day/full-day cutoffs)."""
     db = get_db()
+    if isinstance(emp_id, dict) or hasattr(emp_id, "keys"):
+        emp_id = emp_id.get("id") if isinstance(emp_id, dict) else emp_id["id"]
     cat = db.execute(
         "SELECT c.* FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?",
         (emp_id,),
