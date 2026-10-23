@@ -412,3 +412,116 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
             att = db.execute("SELECT id, check_in FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')").fetchone()
             self.assertIsNotNone(att)
             self.assertIsNotNone(att["check_in"])
+
+    def test_11_user_sample_image_backlit_shadow_rejected_without_punch(self):
+        """11. User sample backlit/shadowed image is rejected: Face Not Clear, punch blocked."""
+        sample_path = r"C:/Users/ddamo/.gemini/antigravity/brain/1562887f-095c-4913-9c3b-4742010ba294/.user_uploaded/media_1792735228113_6ed5798c.jpg"
+        if not os.path.exists(sample_path):
+            self.skipTest("Sample image file not found in local artifacts")
+
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
+            db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
+            db.commit()
+
+        self._login(c, "E0012", "123456789")
+        ch_res = c.get("/api/android-biometric/challenge")
+        ch_data = ch_res.get_json()
+
+        with open(sample_path, "rb") as f:
+            sample_b64 = "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
+
+        res = c.post("/api/punch", json={
+            "kind": "in",
+            "selfie": sample_b64,
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "accuracy": 10,
+            "android_biometric_assertion": {
+                "id": "android_hw_device_001_test",
+                "type": "android_biometric",
+                "signature": "sig_test_hardware_signature",
+                "challenge": ch_data["challenge"]
+            }
+        })
+        data = res.get_json()
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(data["ok"])
+        self.assertTrue(data.get("face_not_clear"))
+        self.assertIn("face not clear", data["error"].lower())
+
+        # Verify punch was NOT recorded in database
+        with self.app.app_context():
+            db = get_db()
+            att = db.execute("SELECT id FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')").fetchone()
+            self.assertIsNone(att)
+
+    def test_12_strict_50m_geofence_enforced(self):
+        """12. Strictly 50 m maximum radius allowed: >50m rejected, <=50m accepted."""
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
+            db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
+            # Ensure office has strict 50m radius
+            db.execute("UPDATE offices SET lat=12.971600, lng=77.594600, radius_m=50 WHERE department='Staff' OR id=1")
+            db.commit()
+
+        self._login(c, "E0012", "123456789")
+
+        # 1. Test coordinate ~80m away (12.972300, 77.594600 is ~78 meters north)
+        geo_out = c.post("/api/geo-check", json={"lat": 12.972350, "lng": 77.594600, "accuracy": 10}).get_json()
+        self.assertTrue(geo_out["ok"])
+        self.assertFalse(geo_out["inside"])
+        self.assertFalse(geo_out["allowed"])
+        self.assertEqual(geo_out["radius"], 50)
+        self.assertGreater(geo_out["distance"], 50)
+
+        # 2. Punch attempt outside 50m is rejected
+        ch_res = c.get("/api/android-biometric/challenge")
+        ch_data = ch_res.get_json()
+        clear_selfie = make_test_face(1)
+        res_fail = c.post("/api/punch", json={
+            "kind": "in",
+            "selfie": clear_selfie,
+            "lat": 12.972350,
+            "lng": 77.594600,
+            "accuracy": 10,
+            "android_biometric_assertion": {
+                "id": "android_hw_device_001_test",
+                "type": "android_biometric",
+                "signature": "sig_test_hardware_signature",
+                "challenge": ch_data["challenge"]
+            }
+        })
+        self.assertEqual(res_fail.status_code, 400)
+        fail_data = res_fail.get_json()
+        self.assertFalse(fail_data["ok"])
+        self.assertIn("allowed 50 m only", fail_data["error"])
+
+        # 3. Coordinate within 50m (12.971750, 77.594600 is ~17 meters north) is allowed
+        geo_in = c.post("/api/geo-check", json={"lat": 12.971750, "lng": 77.594600, "accuracy": 10}).get_json()
+        self.assertTrue(geo_in["ok"])
+        self.assertTrue(geo_in["inside"])
+        self.assertTrue(geo_in["allowed"])
+        self.assertEqual(geo_in["radius"], 50)
+        self.assertLessEqual(geo_in["distance"], 50)
+
+    def test_13_four_department_marked_locations(self):
+        """13. All 4 departments (Staff, Production, Contract Operations, Accounts & Finance) have marked location points."""
+        with self.app.app_context():
+            db = get_db()
+            offices = db.execute("SELECT name, department, radius_m, active FROM offices WHERE active=1").fetchall()
+            dept_names = [o["department"] for o in offices if o["department"]]
+
+            # Verify all 4 departments are represented
+            self.assertIn("Staff", dept_names)
+            self.assertIn("Production", dept_names)
+            self.assertIn("Contract Operations", dept_names)
+            self.assertIn("Accounts & Finance", dept_names)
+
+            # Verify every department location has strict 50m radius
+            for o in offices:
+                self.assertLessEqual(o["radius_m"], 50)

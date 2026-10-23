@@ -79,6 +79,29 @@ def check_selfie_image_quality(img_input):
         if std_val < 6.0:
             return False, "Face not clear (Liveness check failed): Camera screen is blank or uniform. No human facial features visible. Please face the camera and try again.", mean_val
 
+        # Core face region & Backlit / Shadow Detection:
+        # In front-camera selfies, the face is in the central region (x: 35%-65%, y: 25%-65%).
+        # If the background is bright (e.g. window/light behind employee) but the face is in deep shadow,
+        # the global mean might be high but the face itself is a pitch-black silhouette with no recognizable features.
+        w, h = im.size
+        if w >= 20 and h >= 20:
+            core_box = (int(w * 0.38), int(h * 0.25), int(w * 0.62), int(h * 0.65))
+            core_crop = gray.crop(core_box)
+            core_stat = ImageStat.Stat(core_crop)
+            core_mean = float(core_stat.mean[0])
+            core_med = float(core_stat.median[0])
+
+            # Outer background flanks (left and right)
+            bg_left = gray.crop((0, int(h * 0.25), int(w * 0.30), int(h * 0.65)))
+            bg_right = gray.crop((int(w * 0.70), int(h * 0.25), w, int(h * 0.65)))
+            bg_mean = (float(ImageStat.Stat(bg_left).mean[0]) + float(ImageStat.Stat(bg_right).mean[0])) / 2.0
+
+            if core_mean < 22.0 or core_med < 16.0:
+                return False, f"Face not clear: Face is in deep shadow or dark (brightness: {core_mean:.1f}/255). No clear facial features detected. Please face good lighting and try again.", core_mean
+
+            if core_mean < 36.0 and bg_mean > 65.0 and (core_mean / (bg_mean + 1e-5)) < 0.40:
+                return False, f"Face not clear: Face is in deep shadow or backlit (face brightness: {core_mean:.1f}, background: {bg_mean:.1f}). Please face the light so your face is clearly visible, and try again.", core_mean
+
         # Blur / lack of clarity detection
         try:
             import cv2

@@ -128,21 +128,55 @@
       }
       const sharpness = edgeCount > 0 ? (edgeSum / edgeCount) : 0;
 
-      const isTooDark = mean < 16.0;
+      // Center face region vs background flanks (Backlight & Shadow Detection)
+      let faceSum = 0, faceCount = 0;
+      let bgSum = 0, bgCount = 0;
+      const xFaceMin = Math.floor(w * 0.38), xFaceMax = Math.floor(w * 0.62);
+      const yFaceMin = Math.floor(h * 0.25), yFaceMax = Math.floor(h * 0.65);
+      const xBgLeftMax = Math.floor(w * 0.30);
+      const xBgRightMin = Math.floor(w * 0.70);
+
+      for (let y = yFaceMin; y < yFaceMax; y += 4) {
+        for (let x = xFaceMin; x < xFaceMax; x += 4) {
+          const idx = (y * w + x) * 4;
+          faceSum += 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+          faceCount++;
+        }
+      }
+      for (let y = yFaceMin; y < yFaceMax; y += 4) {
+        for (let x = 0; x < xBgLeftMax; x += 4) {
+          const idx = (y * w + x) * 4;
+          bgSum += 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+          bgCount++;
+        }
+        for (let x = xBgRightMin; x < w; x += 4) {
+          const idx = (y * w + x) * 4;
+          bgSum += 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+          bgCount++;
+        }
+      }
+      const faceMean = faceCount > 0 ? (faceSum / faceCount) : mean;
+      const bgMean = bgCount > 0 ? (bgSum / bgCount) : mean;
+
+      const isShadowed = faceMean < 22.0;
+      const isBacklit = (faceMean < 36.0 && bgMean > 65.0 && (faceMean / (bgMean + 0.001) < 0.40));
+      const isTooDark = mean < 16.0 || isShadowed || isBacklit;
       const isBlank = stdDev < 6.0;
       const isBlurry = sharpness < 2.0;
       const isClear = !isTooDark && !isBlank && !isBlurry;
 
       let reason = 'OK';
-      if (isTooDark) {
-        reason = 'Face not clear: Lighting is too dark or camera is covered (brightness: ' + Math.round(mean) + '/255).';
+      if (isBacklit) {
+        reason = 'Face not clear: Face is in deep shadow or backlit. Facial features are not visible. Please face the light and try again.';
+      } else if (isShadowed || isTooDark) {
+        reason = 'Face not clear: Face is too dark or in shadow (brightness: ' + Math.round(faceMean) + '/255). Please ensure good lighting and try again.';
       } else if (isBlank) {
         reason = 'Face not clear: Camera screen is blank. No facial features visible.';
       } else if (isBlurry) {
         reason = 'Face not clear: Photo is blurry or out of focus. Please hold phone steady.';
       }
 
-      return { isClear, isTooDark, isBlank, isBlurry, mean, stdDev, sharpness, reason };
+      return { isClear, isTooDark, isBlank, isBlurry, mean, faceMean, bgMean, stdDev, sharpness, reason };
     } catch (e) {
       return { isClear: true, reason: 'OK' };
     }

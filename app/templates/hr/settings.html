@@ -2,21 +2,53 @@
 {% block title %}Settings · SBG{% endblock %}
 {% block content %}
 <section class="card">
-  <h3>Offices &amp; geofence</h3>
-  <p class="muted small">Set the latitude/longitude of the office (right-click a spot in Google Maps → copy coordinates) and the allowed radius in metres.</p>
+  <h3>4 Department Marked Locations &amp; Geofence (Strict 50 m Policy)</h3>
+  <p class="muted small">Configured for the 4 company departments: <b>Staff</b> (Admin/Engineering/HR), <b>Production</b> (Factory Floor/Operators), <b>Contract Labour</b> (Operations/Logistics), and <b>Accounts &amp; Finance</b>. <b>Strict 50 m maximum allowed distance</b> is enforced for all attendance punches.</p>
   <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office_link">
     <input name="link" placeholder="Paste Google Maps link or 'lat,lng'" required style="flex:3 1 260px">
-    <select name="id" title="Apply to"><option value="">Add as new office</option>{% for o in offices %}<option value="{{ o['id'] }}" {{ 'selected' if loop.first }}>Update: {{ o['name'] }}</option>{% endfor %}</select>
+    <select name="id" title="Apply to">
+      <option value="">Add as new department location</option>
+      {% for o in offices %}
+      <option value="{{ o['id'] }}" {{ 'selected' if loop.first }}>Update: {{ o['name'] }} ({{ o['department'] or 'General' }})</option>
+      {% endfor %}
+    </select>
     <button class="btn sm primary">Set from link</button>
-    <button type="button" class="btn sm" onclick="useMyLocation()">Use my current location</button></form>
+    <button type="button" class="btn sm" onclick="useMyLocation()">Use my current location</button>
+  </form>
   {% for o in offices %}
   <form method="post" class="row-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office"><input type="hidden" name="id" value="{{ o['id'] }}">
-    <input name="name" value="{{ o['name'] }}" required><input name="lat" value="{{ o['lat'] }}" required inputmode="decimal" placeholder="Latitude"><input name="lng" value="{{ o['lng'] }}" required inputmode="decimal" placeholder="Longitude"><input name="radius_m" type="number" min="20" value="{{ o['radius_m'] }}" required title="Radius (m)">
-    <label class="check"><input type="checkbox" name="active" {{ 'checked' if o['active'] }}> Active</label><button class="btn sm">Save</button></form>
+    <input name="name" value="{{ o['name'] }}" required title="Location Name" style="flex:2 1 180px">
+    <select name="department" title="Department" style="flex:1 1 140px">
+      <option value="Staff" {{ 'selected' if o['department'] == 'Staff' }}>Staff (Engineering/Admin)</option>
+      <option value="Production" {{ 'selected' if o['department'] == 'Production' }}>Production (Factory Floor)</option>
+      <option value="Contract Operations" {{ 'selected' if o['department'] == 'Contract Operations' or o['department'] == 'Contract Labour' }}>Contract Labour</option>
+      <option value="Accounts & Finance" {{ 'selected' if o['department'] == 'Accounts & Finance' }}>Accounts &amp; Finance</option>
+      <option value="" {{ 'selected' if not o['department'] }}>General / All</option>
+    </select>
+    <input name="lat" value="{{ o['lat'] }}" required inputmode="decimal" placeholder="Latitude" style="flex:1 1 110px">
+    <input name="lng" value="{{ o['lng'] }}" required inputmode="decimal" placeholder="Longitude" style="flex:1 1 110px">
+    <input name="radius_m" type="number" min="10" max="50" value="50" required title="Radius strictly 50 m" style="flex:0 1 70px" readonly>
+    <span class="small muted" style="white-space:nowrap;margin-right:4px">50m only</span>
+    <label class="check"><input type="checkbox" name="active" {{ 'checked' if o['active'] }}> Active</label>
+    <button class="btn sm">Save</button>
+  </form>
   {% endfor %}
   <form method="post" class="row-form add"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="office">
-    <input name="name" placeholder="New office name" required><input name="lat" placeholder="Latitude" required inputmode="decimal"><input name="lng" placeholder="Longitude" required inputmode="decimal"><input name="radius_m" type="number" value="150" required>
-    <label class="check"><input type="checkbox" name="active" checked> Active</label><button class="btn sm primary">Add</button></form>
+    <input name="name" placeholder="New location name" required style="flex:2 1 180px">
+    <select name="department" title="Department" style="flex:1 1 140px">
+      <option value="Staff">Staff (Engineering/Admin)</option>
+      <option value="Production">Production (Factory Floor)</option>
+      <option value="Contract Operations">Contract Labour</option>
+      <option value="Accounts & Finance">Accounts &amp; Finance</option>
+      <option value="">General / All</option>
+    </select>
+    <input name="lat" placeholder="Latitude" required inputmode="decimal" style="flex:1 1 110px">
+    <input name="lng" placeholder="Longitude" required inputmode="decimal" style="flex:1 1 110px">
+    <input name="radius_m" type="number" value="50" readonly style="flex:0 1 70px">
+    <span class="small muted" style="white-space:nowrap;margin-right:4px">50m only</span>
+    <label class="check"><input type="checkbox" name="active" checked> Active</label>
+    <button class="btn sm primary">Add</button>
+  </form>
 </section>
 
 <section class="card">

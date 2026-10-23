@@ -9,9 +9,10 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS offices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    department TEXT,
     lat REAL NOT NULL,
     lng REAL NOT NULL,
-    radius_m INTEGER NOT NULL DEFAULT 150,
+    radius_m INTEGER NOT NULL DEFAULT 50,
     active INTEGER NOT NULL DEFAULT 1
 );
 
@@ -315,6 +316,14 @@ def init_db(app):
     if "device_credential_id" not in att_cols:
         con.execute("ALTER TABLE attendance ADD COLUMN device_credential_id TEXT")
 
+    office_cols = [c[1] for c in con.execute("PRAGMA table_info(offices)").fetchall()]
+    if "department" not in office_cols:
+        con.execute("ALTER TABLE offices ADD COLUMN department TEXT")
+
+    # Strict 50 m location geofence policy: radius_m = 50 max, geofence_tolerance_m = 0
+    con.execute("UPDATE offices SET radius_m=50 WHERE radius_m > 50")
+    con.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '0')")
+
     # Create permission_requests table if missing in existing database
     con.execute("""
     CREATE TABLE IF NOT EXISTS permission_requests (
@@ -360,6 +369,48 @@ def init_db(app):
     con.execute("UPDATE employees SET category_id=? WHERE (category_id IS NULL OR category_id=0)", (emp_cat_id,))
     if con.execute("SELECT COUNT(*) FROM offices").fetchone()[0] == 0:
         _seed_base(con)
+
+    # Seed & Ensure 4 Department-Wise Marked Location Points exist (strict 50 m radius):
+    # 1. Staff (Staff, Engineering, Admin, HR)
+    # 2. Employees (Production, Machine Shop, Operators)
+    # 3. Contract Labour (Contract Operations, Logistics, Loading)
+    # 4. Accounts & Finance
+    base_off = con.execute("SELECT lat, lng FROM offices WHERE lat != 0 ORDER BY id LIMIT 1").fetchone()
+    def_lat = base_off[0] if base_off else 12.9716
+    def_lng = base_off[1] if base_off else 77.5946
+
+    con.execute("UPDATE offices SET department='Staff', radius_m=50 WHERE id=1 AND (department IS NULL OR department='')")
+
+    dept_points = [
+        ("Staff - Engineering & Admin Office", "Staff", def_lat, def_lng),
+        ("Employees - Production & Factory Floor", "Production", def_lat, def_lng),
+        ("Contract Labour - Operations & Yard", "Contract Operations", def_lat, def_lng),
+        ("Accounts & Finance - Finance Office", "Accounts & Finance", def_lat, def_lng),
+    ]
+    for name, dept, d_lat, d_lng in dept_points:
+        row = con.execute("SELECT id FROM offices WHERE department=? OR name=?", (dept, name)).fetchone()
+        if not row:
+            con.execute(
+                "INSERT INTO offices (name, department, lat, lng, radius_m, active) VALUES (?,?,?,?, 50, 1)",
+                (name, dept, d_lat, d_lng)
+            )
+        else:
+            con.execute("UPDATE offices SET department=?, radius_m=50 WHERE id=?", (dept, row[0]))
+
+    # Link employees to their marked department location points:
+    staff_off = con.execute("SELECT id FROM offices WHERE department='Staff' ORDER BY id LIMIT 1").fetchone()
+    prod_off = con.execute("SELECT id FROM offices WHERE department='Production' ORDER BY id LIMIT 1").fetchone()
+    contract_off = con.execute("SELECT id FROM offices WHERE department='Contract Operations' ORDER BY id LIMIT 1").fetchone()
+    acc_off = con.execute("SELECT id FROM offices WHERE department='Accounts & Finance' ORDER BY id LIMIT 1").fetchone()
+
+    if staff_off:
+        con.execute("UPDATE employees SET office_id=? WHERE (office_id IS NULL OR office_id=1) AND (department IN ('Staff', 'Engineering', 'Human Resources', 'IT') OR role='hr')", (staff_off[0],))
+    if prod_off:
+        con.execute("UPDATE employees SET office_id=? WHERE (office_id IS NULL OR office_id=1) AND department IN ('Production', 'Employees')", (prod_off[0],))
+    if contract_off:
+        con.execute("UPDATE employees SET office_id=? WHERE (office_id IS NULL OR office_id=1) AND (department IN ('Contract Operations', 'Contract Labour') OR department LIKE '%Contract%')", (contract_off[0],))
+    if acc_off:
+        con.execute("UPDATE employees SET office_id=? WHERE (office_id IS NULL OR office_id=1) AND (department IN ('Accounts & Finance', 'Accounts') OR department LIKE '%Accounts%')", (acc_off[0],))
 
     # Ensure General Shift, Morning Shift, and Evening Shift exist
     con.execute("UPDATE shifts SET name='Shift 1 (Morning Shift)', start_time='08:00', end_time='20:00' WHERE (name LIKE '%Shift 1%' OR id=1)")
@@ -462,14 +513,17 @@ def create_admin(con, code, name, password):
 
 def _seed_base(con):
     """Minimum config every install needs. HR edits these in Settings."""
-    con.execute("INSERT INTO offices (name, lat, lng, radius_m) VALUES ('Main Office', 0, 0, 150)")  # 0,0 = NOT SET YET
+    con.execute("INSERT INTO offices (name, department, lat, lng, radius_m) VALUES ('Staff - Engineering & Admin Office', 'Staff', 0, 0, 50)")  # 0,0 = NOT SET YET
+    con.execute("INSERT INTO offices (name, department, lat, lng, radius_m) VALUES ('Employees - Production & Factory Floor', 'Production', 0, 0, 50)")
+    con.execute("INSERT INTO offices (name, department, lat, lng, radius_m) VALUES ('Contract Labour - Operations & Yard', 'Contract Operations', 0, 0, 50)")
+    con.execute("INSERT INTO offices (name, department, lat, lng, radius_m) VALUES ('Accounts & Finance - Finance Office', 'Accounts & Finance', 0, 0, 50)")
     con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('General Shift', '09:00', '18:00', 15, 8.0, 4.0, 1.0)")
     con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 1 (Morning Shift)', '08:00', '20:00', 10, 8.0, 4.0, 1.0)")
     con.execute("INSERT INTO shifts (name, start_time, end_time, grace_min, full_hours, half_hours, ot_min_hours) VALUES ('Shift 2 (Evening Shift)', '20:00', '08:00', 10, 8.0, 4.0, 1.0)")
     for code, name, q in (("CL", "Casual Leave", 12), ("SL", "Sick Leave", 12), ("PL", "Privilege Leave", 15)):
         con.execute("INSERT INTO leave_types (code, name, annual_quota) VALUES (?,?,?)", (code, name, q))
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '350')")
-    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '50')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '0')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('require_face_match', '1')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.58')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_buddy_punch_block_threshold', '0.60')")
@@ -478,7 +532,10 @@ def _seed_base(con):
 
 def _seed_demo(con):
     """Demo data for development only (DEMO_DATA=1)."""
-    con.execute("UPDATE offices SET lat=12.9716, lng=77.5946, radius_m=200 WHERE id=1")
+    con.execute("UPDATE offices SET lat=12.9716, lng=77.5946, radius_m=50 WHERE id=1 OR department='Staff'")
+    con.execute("UPDATE offices SET lat=12.9716, lng=77.5946, radius_m=50 WHERE department='Production'")
+    con.execute("UPDATE offices SET lat=12.9716, lng=77.5946, radius_m=50 WHERE department='Contract Operations'")
+    con.execute("UPDATE offices SET lat=12.9716, lng=77.5946, radius_m=50 WHERE department='Accounts & Finance'")
     for d, n in (("2026-10-02", "Gandhi Jayanti"), ("2026-12-25", "Christmas"), ("2027-01-26", "Republic Day")):
         con.execute("INSERT OR IGNORE INTO holidays (date, name) VALUES (?,?)", (d, n))
     create_admin(con, "HR001", "HR Admin", "admin123")

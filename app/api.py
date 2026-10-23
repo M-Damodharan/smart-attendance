@@ -55,11 +55,59 @@ def motion_score(images):
     return sum(diffs) / len(diffs) if diffs else 0.0
 
 
+def get_department_office(db, user):
+    """Resolves the marked department-wise location point for an employee.
+    Enforces the 4-department location scheme:
+    1. Staff (Staff, Engineering, Admin, HR, IT)
+    2. Employees (Production, Machine Shop, Operators)
+    3. Contract Labour (Contract Operations, Logistics)
+    4. Accounts & Finance
+    """
+    user_keys = user.keys() if hasattr(user, "keys") else []
+    user_dept = (user["department"] if "department" in user_keys and user["department"] else "").strip().lower()
+    cat_id = user["category_id"] if "category_id" in user_keys else None
+    cat_code = ""
+    cat_name = ""
+    if cat_id:
+        c = db.execute("SELECT name, code FROM employee_categories WHERE id=?", (cat_id,)).fetchone()
+        if c:
+            cat_name = (c["name"] or "").strip().lower()
+            cat_code = (c["code"] or "").strip().lower()
+
+    target_dept = None
+    if "account" in user_dept or "finance" in user_dept or "account" in cat_name or "finance" in cat_name or cat_code == "accounts_finance":
+        target_dept = "Accounts & Finance"
+    elif "contract" in user_dept or "labour" in user_dept or "contract" in cat_name or cat_code == "contract":
+        target_dept = "Contract Operations"
+    elif "prod" in user_dept or "operator" in user_dept or "employee" in cat_name or cat_code == "employees":
+        target_dept = "Production"
+    elif "staff" in user_dept or "eng" in user_dept or "hr" in user_dept or "human" in user_dept or "it" in user_dept or "staff" in cat_name or cat_code == "staff":
+        target_dept = "Staff"
+
+    # 1. First check if employee's explicitly assigned office matches and is active
+    if "office_id" in user_keys and user["office_id"]:
+        off = db.execute("SELECT * FROM offices WHERE id=? AND active=1", (user["office_id"],)).fetchone()
+        if off:
+            return off
+
+    # 2. Check marked office for this department
+    if target_dept:
+        dept_off = db.execute(
+            "SELECT * FROM offices WHERE active=1 AND (LOWER(department)=LOWER(?) OR LOWER(name) LIKE LOWER(?)) ORDER BY id LIMIT 1",
+            (target_dept, f"%{target_dept[:5]}%")
+        ).fetchone()
+        if dept_off:
+            return dept_off
+
+    # 3. Fallback to first active office
+    return db.execute("SELECT * FROM offices WHERE active=1 ORDER BY id LIMIT 1").fetchone()
+
+
 def evaluate_geo(user, lat, lng, acc):
     db = get_db()
-    office = db.execute("SELECT * FROM offices WHERE id=? AND active=1", (user["office_id"],)).fetchone()
+    office = get_department_office(db, user)
     if not office:
-        return {"ok": False, "error": "No active office is assigned to you. Contact HR."}
+        return {"ok": False, "error": "No active department location point is assigned to you. Contact HR."}
     try:
         lat, lng, acc = float(lat), float(lng), float(acc or 0)
     except (TypeError, ValueError):
@@ -77,21 +125,28 @@ def evaluate_geo(user, lat, lng, acc):
     if acc > max_acc:
         return {"ok": False, "error": f"GPS accuracy too low (±{int(acc)} m). Move to an open area or ask HR to adjust GPS threshold in Settings."}
 
-    tol = current_app.config["GEOFENCE_TOLERANCE_M"]
-    try:
-        row = db.execute("SELECT value FROM system_settings WHERE key='geofence_tolerance_m'").fetchone()
-        if row and row[0]:
-            tol = float(row[0])
-    except Exception:
-        pass
-
+    # Strict 50-meter maximum policy: Location point 50 m only allowed
+    max_policy_radius = 50
+    office_radius = min(int(office["radius_m"] or 50), max_policy_radius)
+    allowed = office_radius
     dist = haversine(lat, lng, office["lat"], office["lng"])
-    allowed = office["radius_m"] + tol
     inside = dist <= allowed
     od = approved_od_for(user["id"], today())
-    return {"ok": True, "inside": inside, "distance": round(dist), "radius": office["radius_m"],
-            "office": office["name"], "od": bool(od), "allowed": inside or bool(od),
-            "od_location": od["location"] if od else None, "lat": lat, "lng": lng}
+    office_keys = office.keys() if hasattr(office, "keys") else []
+    dept_val = office["department"] if "department" in office_keys and office["department"] else office["name"]
+    return {
+        "ok": True,
+        "inside": inside,
+        "distance": round(dist),
+        "radius": allowed,
+        "office": office["name"],
+        "department": dept_val,
+        "od": bool(od),
+        "allowed": inside or bool(od),
+        "od_location": od["location"] if od else None,
+        "lat": lat,
+        "lng": lng
+    }
 
 
 def _save_selfie(im, user, kind):
@@ -219,9 +274,9 @@ def punch():
     if not geo["ok"]:
         return _err(geo["error"])
     if not geo["allowed"]:
-        audit("GEOFENCE_BLOCK", "attendance", user["id"], f"kind={kind} dist={geo['distance']}m radius={geo['radius']}m")
+        audit("GEOFENCE_BLOCK", "attendance", user["id"], f"kind={kind} dist={geo['distance']}m radius={geo['radius']}m dept={geo.get('department')}")
         db.commit()
-        return _err(f"You are {geo['distance']} m from {geo['office']} (allowed {geo['radius']} m).")
+        return _err(f"You are {geo['distance']} m from {geo['office']} Location Point (allowed {geo['radius']} m only).")
 
     # Decode snapshot selfie (captured for visual attendance audit)
     try:

@@ -65,7 +65,8 @@ def punch():
         (u["id"], d2s(t - timedelta(days=1)))
     ).fetchone()
 
-    office = db.execute("SELECT * FROM offices WHERE id=?", (u["office_id"],)).fetchone()
+    from .api import get_department_office
+    office = get_department_office(db, u)
     if yesterday_rec:
         rec = yesterday_rec
         mode = "out"
