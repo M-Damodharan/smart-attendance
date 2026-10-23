@@ -20,7 +20,7 @@
       <div class="muted small">Punch In: <b>{{ rec['check_in']|hm }}</b> · Punch Out: <b>{{ rec['check_out']|hm }}</b></div>
       <div style="margin-top:6px;">{{ chip(rec['status']) }} {{ STATUS_LABELS.get(rec['status'],'') }}{% if rec['late'] %} · <span class="late">Late</span>{% endif %}</div>
     {% elif rec %}
-      <div class="state working">⏱️ Checked in at {{ rec['check_in']|hm }}</div>
+      <div class="state working">⏱️ Checked in at {{ rec['check_in']|hm }}{% if rec['late'] %} · <span class="late" style="background:rgba(239,68,68,0.18);color:#ef4444;font-size:0.75rem;padding:2px 8px;border-radius:6px;font-weight:700;">Late</span>{% endif %}</div>
       <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check out</a>
     {% else %}
       <div class="state">Not checked in today</div>

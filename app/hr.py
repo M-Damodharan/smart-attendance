@@ -10,8 +10,8 @@ from .db import get_db
 from .face_engine import register_face_for_employee, reset_face_for_employee
 from .services import (coords_from_maps_link, audit, build_register, d2s, daterange,
                        finalize_attendance, format_duration, get_employee_category,
-                       get_employee_shift_for_date, month_range, now, s2d, today,
-                       DT_FMT, STATUS_LABELS)
+                       get_employee_shift_for_date, is_late, month_range, now, parse_dt,
+                       resolve_employee_shift, s2d, today, DT_FMT, STATUS_LABELS)
 
 bp = Blueprint("hr", __name__, url_prefix="/hr")
 
@@ -51,15 +51,9 @@ def dashboard():
         code = reg[e["id"]]["days"][t]
         rec = reg[e["id"]]["recs"].get(t)
         present = code in ("P", "OT", "HD", "IN", "MP")
-        from .services import determine_shift_from_punch
         rec_d = dict(rec) if rec else {}
-        if rec_d.get("check_in"):
-            eff_shift = determine_shift_from_punch(rec_d["check_in"], db)
-            eff_shift_id = eff_shift["id"]
-        elif rec_d.get("shift_id"):
-            eff_shift_id = rec_d["shift_id"]
-        else:
-            eff_shift_id = e["shift_id"]
+        eff_shift = resolve_employee_shift(e["id"], t, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"))
+        eff_shift_id = eff_shift["id"] if eff_shift else e["shift_id"]
 
         bs = by_shift.get(eff_shift_id)
         if bs:
@@ -78,6 +72,19 @@ def dashboard():
                 bs["absent"] += 1
         if code == "IN":
             stats["working"] += 1
+
+        # Calculate late count
+        if rec_d.get("late") == 1 or rec_d.get("late") is True:
+            stats["late"] += 1
+        elif rec_d.get("check_in") and eff_shift:
+            cin_dt = parse_dt(rec_d["check_in"]) if isinstance(rec_d["check_in"], str) else rec_d["check_in"]
+            if cin_dt and is_late(cin_dt, eff_shift):
+                stats["late"] += 1
+
+    # Also synchronize with database attendance table for today's late arrivals
+    db_late_count = db.execute("SELECT COUNT(DISTINCT emp_id) FROM attendance WHERE date=? AND late=1", (d2s(t),)).fetchone()[0]
+    stats["late"] = max(stats["late"], db_late_count)
+
     pending_leave = db.execute("SELECT COUNT(*) FROM leaves WHERE status='Pending'").fetchone()[0]
     pending_od = db.execute("SELECT COUNT(*) FROM od_requests WHERE status='Pending'").fetchone()[0]
     pending_face_changes = db.execute("SELECT COUNT(*) FROM face_change_requests WHERE status='Pending'").fetchone()[0]
@@ -88,6 +95,7 @@ def dashboard():
         "staff": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='STAFF'").fetchone()[0],
         "employees": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='EMPLOYEES'").fetchone()[0],
         "contract": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='CONTRACT'").fetchone()[0],
+        "accounts": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND (c.code='ACCOUNTS_FINANCE' OR e.department LIKE '%Accounts%')").fetchone()[0],
     }
 
     face_stats = {
@@ -108,7 +116,7 @@ def dashboard():
 
     recent = db.execute(
         "SELECT a.*, e.name, e.emp_code FROM attendance a JOIN employees e ON e.id=a.emp_id "
-        "WHERE a.date=? ORDER BY COALESCE(a.check_out, a.check_in) DESC LIMIT 8", (d2s(t),)).fetchall()
+        "WHERE a.date=? AND e.active=1 ORDER BY COALESCE(a.check_out, a.check_in) DESC LIMIT 8", (d2s(t),)).fetchall()
     office_unset = db.execute("SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0").fetchone()[0] > 0
     active_face_alerts = db.execute("""
         SELECT a.*, 
@@ -276,21 +284,14 @@ def attendance():
     total_present = 0
     total_not_in = 0
     total_leave = 0
-    from .services import determine_shift_from_punch
     for s in shifts:
         rows = []
         for e in emps:
             r = reg[e["id"]]
             rec = r["recs"].get(d)
             rec_d = dict(rec) if rec else {}
-            if rec_d.get("check_in"):
-                eff_shift = determine_shift_from_punch(rec_d["check_in"], db)
-                eff_shift_id = eff_shift["id"]
-            elif rec_d.get("shift_id"):
-                eff_shift_id = rec_d["shift_id"]
-            else:
-                eff_shift = get_employee_shift_for_date(e["id"], d, e["shift_id"])
-                eff_shift_id = eff_shift["id"]
+            eff_shift = resolve_employee_shift(e["id"], d, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"))
+            eff_shift_id = eff_shift["id"] if eff_shift else e["shift_id"]
 
             if eff_shift_id != s["id"]:
                 continue
@@ -553,17 +554,17 @@ def corrections():
             if cout and cout <= cin:
                 flash("Check-out must be after check-in.", "err")
                 return redirect(url_for("hr.corrections"))
-            shift = get_employee_shift_for_date(emp["id"], d, emp["shift_id"])
+            shift = resolve_employee_shift(emp["id"], d, cin, db)
             cat = get_employee_category(emp["id"])
             upd = finalize_attendance({"check_in": cin, "check_out": cout}, shift, cat)
             if old:
-                db.execute("UPDATE attendance SET check_in=?, check_out=?, work_hours=?, ot_hours=?, status=?, late=?, "
+                db.execute("UPDATE attendance SET shift_id=?, check_in=?, check_out=?, work_hours=?, ot_hours=?, status=?, late=?, "
                            "source='correction', remarks=? WHERE id=?",
-                           (cin, cout, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], reason, old["id"]))
+                           (shift["id"], cin, cout, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], reason, old["id"]))
             else:
-                db.execute("INSERT INTO attendance (emp_id, date, check_in, check_out, work_hours, ot_hours, status, late, "
-                           "source, remarks) VALUES (?,?,?,?,?,?,?,?, 'correction', ?)",
-                           (eid, d2s(d), cin, cout, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], reason))
+                db.execute("INSERT INTO attendance (emp_id, date, shift_id, check_in, check_out, work_hours, ot_hours, status, late, "
+                           "source, remarks) VALUES (?,?,?,?,?,?,?,?,?, 'correction', ?)",
+                           (eid, d2s(d), shift["id"], cin, cout, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], reason))
             audit("CORRECTION", "attendance", f"{emp['emp_code']}@{d}",
                   f"old: in={old['check_in'] if old else None} out={old['check_out'] if old else None} "
                   f"status={old['status'] if old else None} -> new: in={cin} out={cout} status={upd['status']} | reason: {reason}")

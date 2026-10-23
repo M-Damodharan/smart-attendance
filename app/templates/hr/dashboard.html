@@ -145,7 +145,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
     <div>
       <h3 style="margin:0;font-size:1.05rem">Workforce &amp; Biometric Security Overview</h3>
-      <span class="muted small">3-Tier Login Architecture &bull; One Face, One Account Binding</span>
+      <span class="muted small">4-Department Architecture &bull; One Face, One Account Binding</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       {% if ai_blocked_count or pending_ai_alerts %}
@@ -161,11 +161,11 @@
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px">
     <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
       <span class="muted small" style="display:block;font-weight:600">💼 Staff Portal</span>
       <b style="font-size:1.4rem;color:#3b82f6">{{ workforce['staff'] }}</b>
-      <span class="muted small" style="display:block">General Shift (09:00–18:00)</span>
+      <span class="muted small" style="display:block">General / Staff Shift</span>
     </div>
     <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
       <span class="muted small" style="display:block;font-weight:600">⚙️ Employees (Rotating)</span>
@@ -178,12 +178,17 @@
       <span class="muted small" style="display:block">Independent Shift Control</span>
     </div>
     <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
-      <span class="muted small" style="display:block;font-weight:600">🔒 Biometric Face ID Binding</span>
+      <span class="muted small" style="display:block;font-weight:600">📊 Accounts &amp; Finance</span>
+      <b style="font-size:1.4rem;color:#8b5cf6">{{ workforce['accounts'] }}</b>
+      <span class="muted small" style="display:block">General Shift (09:00–18:00)</span>
+    </div>
+    <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
+      <span class="muted small" style="display:block;font-weight:600">🔒 Biometric Face Binding</span>
       <div style="margin-top:2px;font-size:0.9rem">
         <span style="color:#10b981;font-weight:700">{{ face_stats['registered'] }}</span> Verified &bull;
-        <span style="color:#f59e0b;font-weight:700">{{ face_stats['pending_setup'] }}</span> Pending Setup
+        <span style="color:#f59e0b;font-weight:700">{{ face_stats['pending_setup'] }}</span> Pending
       </div>
-      <a href="{{ url_for('hr.employees') }}" class="muted small" style="color:var(--brand-accent)">View Employee List &rarr;</a>
+      <a href="{{ url_for('hr.employees') }}" class="muted small" style="color:var(--brand-accent)">View All Staff &rarr;</a>
     </div>
   </div>
 </div>
@@ -194,7 +199,7 @@
     <span style="font-weight:700;font-size:0.82rem;color:var(--brand-accent);text-transform:uppercase;letter-spacing:0.5px;">Active Category Working Rules &amp; Overtime Policies</span>
     <a href="{{ url_for('hr.settings') }}" class="muted small" style="color:var(--brand-accent);">Manage in Settings →</a>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;">
     <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;">
       <div>
         <span style="font-weight:700;font-size:0.9rem;">Staff Category</span>
@@ -215,6 +220,13 @@
         <span class="muted small" style="display:block">10 Regular Hours + 2 Hours OT</span>
       </div>
       <span class="badge" style="background:var(--status-ot-bg);color:var(--status-ot);font-weight:600;">Configured 2h OT</span>
+    </div>
+    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <span style="font-weight:700;font-size:0.9rem;">Accounts &amp; Finance</span>
+        <span class="muted small" style="display:block">10 Regular Working Hours/day</span>
+      </div>
+      <span class="badge" style="background:var(--bg-surface-hover);color:#8b5cf6;font-weight:600;">Day Shift (09:00–18:00)</span>
     </div>
   </div>
 </div>

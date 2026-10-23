@@ -14,7 +14,8 @@ from .auth import employee_required, login_required
 from .db import get_db
 from .face_engine import verify_face_for_employee, FACE_MATCH_THRESHOLD
 from .services import (approved_od_for, approved_permission_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
-                       get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s, parse_dt)
+                       get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s, parse_dt,
+                       resolve_employee_shift)
 from .webauthn_engine import (generate_registration_challenge, verify_registration_response,
                              generate_authentication_challenge, verify_authentication_response, get_rp_info)
 
@@ -461,7 +462,7 @@ def punch():
                     return _err("Face verification could not detect a valid face in selfie.", 403)
 
     selfie_name = _save_selfie(selfie, user, kind)
-    shift = determine_shift_from_punch(t, db)
+    shift = resolve_employee_shift(user["id"], today_s, t, db)
     cat = get_employee_category(user["id"])
 
     if kind == "in":
@@ -493,8 +494,18 @@ def punch():
             auth_method=auth_method
         )
 
-    shift_target = determine_shift_from_punch(target_rec["check_in"], db)
+    shift_target = None
+    target_dict = dict(target_rec) if target_rec else {}
+    if target_dict.get("shift_id"):
+        shift_target = db.execute("SELECT * FROM shifts WHERE id=?", (target_dict["shift_id"],)).fetchone()
+    if not shift_target:
+        shift_target = resolve_employee_shift(user["id"], today_s, target_dict.get("check_in"), db)
+
     upd = finalize_attendance({"check_in": target_rec["check_in"], "check_out": t.strftime("%Y-%m-%d %H:%M:%S")}, shift_target, cat)
+    perm = approved_permission_for(user["id"], today_s)
+    if upd["late"] and perm:
+        upd["late"] = 0
+
     dur_str = format_duration(upd["work_hours"])
     db.execute(
         "UPDATE attendance SET shift_id=?, check_out=?, out_lat=?, out_lng=?, out_dist=?, out_selfie=?, out_geo_ok=?, "

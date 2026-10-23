@@ -12,9 +12,9 @@ from .services import (audit, build_register, d2s, daterange, get_employee_categ
 bp = Blueprint("emp", __name__)
 
 
-def _shift(user, target_date=None):
+def _shift(user, target_date=None, shift_id=None):
     d = target_date or today()
-    return get_employee_shift_for_date(user["id"], d, user["shift_id"])
+    return get_employee_shift_for_date(user["id"], d, shift_id or user.get("shift_id"))
 
 
 @bp.route("/dashboard")
@@ -50,7 +50,8 @@ def dashboard():
                             (u["id"], d2s(t))).fetchone()
     category = get_employee_category(u["id"])
     face_req = db.execute("SELECT * FROM face_change_requests WHERE emp_id=? ORDER BY id DESC LIMIT 1", (u["id"],)).fetchone()
-    return render_template("emp/dashboard.html", rec=rec, shift=_shift(u), category=category, summary=reg["summary"], recent=recent,
+    current_shift = _shift(u, t, rec["shift_id"] if (rec and "shift_id" in rec.keys() and rec["shift_id"]) else None)
+    return render_template("emp/dashboard.html", rec=rec, shift=current_shift, category=category, summary=reg["summary"], recent=recent,
                            pend=pend_l + pend_o + pend_p, holiday=holiday, od_today=od_today, perm_today=perm_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"))
 
 
@@ -82,7 +83,8 @@ def punch():
     category = get_employee_category(u["id"])
     perm_today = db.execute("SELECT * FROM permission_requests WHERE emp_id=? AND perm_date=? AND status='Approved'",
                             (u["id"], d2s(t))).fetchone()
-    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=_shift(u), category=category, perm_today=perm_today)
+    effective_shift = _shift(u, t, rec["shift_id"] if (rec and "shift_id" in rec.keys() and rec["shift_id"]) else None)
+    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=effective_shift, category=category, perm_today=perm_today)
 
 
 @bp.route("/history")

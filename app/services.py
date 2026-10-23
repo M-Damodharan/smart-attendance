@@ -164,6 +164,57 @@ def determine_shift_from_punch(cin, db=None):
     return shift
 
 
+def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback_shift_id=None):
+    """Resolve the effective shift for an employee.
+    Priority:
+    1. Weekly shift schedule for target date (if any).
+       - If scheduled shift is rotating (Shift 1 / Shift 2) and check_in is provided,
+         allow auto day/night detection via determine_shift_from_punch.
+       - Otherwise, return scheduled shift.
+    2. Explicit fallback_shift_id (e.g. from attendance record's recorded shift_id, if valid).
+    3. Employee's assigned shift in employees table.
+       - If assigned shift is rotating (Shift 1 / Shift 2) and check_in is provided,
+         allow auto day/night detection via determine_shift_from_punch.
+       - Otherwise (General Shift, Staff, Accounts & Finance, etc.), preserve the assigned shift!
+    4. Fallback to determine_shift_from_punch if check_in provided.
+    5. First active shift in database.
+    """
+    db = db or get_db()
+    d = d or today()
+    d_str = d2s(d) if isinstance(d, (date, datetime)) else str(d)[:10]
+
+    # 1. Weekly shift schedule for target date
+    sched = db.execute(
+        "SELECT s.* FROM weekly_shift_schedules w JOIN shifts s ON s.id = w.shift_id "
+        "WHERE w.emp_id = ? AND w.start_date <= ? AND w.end_date >= ? "
+        "ORDER BY w.id DESC LIMIT 1",
+        (emp_id, d_str, d_str),
+    ).fetchone()
+    if sched:
+        s_name = (sched["name"] or "").lower()
+        if ("shift 1" in s_name or "shift 2" in s_name) and check_in:
+            return determine_shift_from_punch(check_in, db) or sched
+        return sched
+
+    # 2. Check explicit fallback or employee assigned shift
+    emp = db.execute("SELECT shift_id FROM employees WHERE id=?", (emp_id,)).fetchone()
+    target_sid = fallback_shift_id if fallback_shift_id is not None else (emp["shift_id"] if emp else None)
+    if target_sid:
+        s = db.execute("SELECT * FROM shifts WHERE id=?", (target_sid,)).fetchone()
+        if s:
+            s_name = (s["name"] or "").lower()
+            if ("shift 1" in s_name or "shift 2" in s_name) and check_in:
+                return determine_shift_from_punch(check_in, db) or s
+            return s
+
+    # 3. Fallback to determine from punch time
+    if check_in:
+        return determine_shift_from_punch(check_in, db)
+
+    # 4. Fallback to first active shift
+    return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id LIMIT 1").fetchone()
+
+
 def get_employee_category(emp_id: int):
     """Retrieve employee category details (work hours, overtime, half-day/full-day cutoffs)."""
     db = get_db()
@@ -372,10 +423,7 @@ def build_register(emp_rows, start: date, end: date):
             k = (emp["id"], d2s(d))
             rec = att.get(k)
             rec_dict = dict(rec) if rec else {}
-            if rec_dict.get("check_in"):
-                shift = determine_shift_from_punch(rec_dict["check_in"], db)
-            else:
-                shift = get_employee_shift_for_date(emp["id"], d, emp["shift_id"])
+            shift = resolve_employee_shift(emp["id"], d, rec_dict.get("check_in"), db, fallback_shift_id=rec_dict.get("shift_id"))
             code = day_code(d, rec, leave_map.get(k), ods.get(k), hols.get(d2s(d)), t, joined, shift)
             days[d] = code
             if rec:

@@ -35,17 +35,13 @@ def _get_company_today_stats():
     shift1_present = []
     shift2_present = []
 
-    from .services import determine_shift_from_punch
+    from .services import resolve_employee_shift
 
     for e in emps:
         code = reg[e["id"]]["days"][today()]
         rec = reg[e["id"]]["recs"].get(today())
         rec_d = dict(rec) if rec else {}
-        eff_shift = None
-        if rec_d.get("check_in"):
-            eff_shift = determine_shift_from_punch(rec_d["check_in"], db)
-        elif rec_d.get("shift_id"):
-            eff_shift = db.execute("SELECT * FROM shifts WHERE id=?", (rec_d["shift_id"],)).fetchone()
+        eff_shift = resolve_employee_shift(e["id"], today(), rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"))
 
         if code in ("P", "OT", "HD", "IN", "MP"):
             present.append((e, rec, code, eff_shift))
@@ -374,8 +370,8 @@ def process_ai_query(user, query: str):
         
         punch_note = ""
         if rec and rec.get("check_in"):
-            from .services import determine_shift_from_punch
-            actual_shift = determine_shift_from_punch(rec["check_in"], db)
+            from .services import resolve_employee_shift
+            actual_shift = resolve_employee_shift(uid, t, rec["check_in"], db, fallback_shift_id=rec.get("shift_id"))
             punch_note = f"\n\n🎯 **Today's Punch Shift:** Based on your check-in at **{parse_dt(rec['check_in']).strftime('%I:%M %p')}**, you are recorded under **{actual_shift['name']} ({actual_shift['start_time']}–{actual_shift['end_time']})**."
 
         return {
