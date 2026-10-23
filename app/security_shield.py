@@ -285,7 +285,7 @@ def check_cross_punch_buddy_face_realtime(db, live_img, emp_id: int, date_str: s
     1. Phone hardware Face ID credential used by any other employee today.
     2. All attendance check-in/check-out photos recorded in the database by ANY OTHER employee
        (both today's punches and historical stored photos, up to 400 images across all 4 departments).
-    3. All other employees' registered 360-degree face templates and profile photos across all 4 departments.
+    3. All other employees' registered dual-reference face templates and profile photos across all 4 departments.
     If similarity >= threshold (calibrated 0.50 for phone cameras), immediately flags a buddy-punch violation,
     allowing caller to auto-block the employee ID and abort the punch.
     """

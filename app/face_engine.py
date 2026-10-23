@@ -531,10 +531,10 @@ def verify_face_for_employee(db, emp_id: int, live_input, threshold=FACE_MATCH_T
 
 
 def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int = None, force: bool = False):
-    """Registers a face for an employee with duplicate-face detection and 360 multi-angle support.
+    """Registers a face for an employee with duplicate-face detection and Two-Image verification support.
     `img_input` can be:
       - A single image (data URL, file path, bytes, or PIL Image)
-      - A dictionary of angles: {"center": img, "left": img, "right": img}
+      - A dictionary of views: {"photo1": img1, "photo2": img2}
     Returns: (success: bool, message: str, duplicate_info: dict | None)
     """
     user = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
