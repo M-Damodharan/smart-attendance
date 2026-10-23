@@ -242,8 +242,12 @@ def punch():
     # Compares live selfie against today's punches by other employees and registered templates.
     # If the same face is used across 2 or more IDs, immediately blocks the account and rejects punch.
     from .security_shield import check_cross_punch_buddy_face_realtime, block_employee_account_by_ai
-    webauthn_assertion_data = d.get("webauthn_assertion")
-    device_cred_check = webauthn_assertion_data.get("id") if (isinstance(webauthn_assertion_data, dict) and webauthn_assertion_data.get("id")) else None
+    webauthn_assertion_data = d.get("webauthn_assertion") or d.get("android_biometric_assertion")
+    device_cred_check = (
+        webauthn_assertion_data.get("id") or webauthn_assertion_data.get("device_id")
+        if (isinstance(webauthn_assertion_data, dict))
+        else None
+    )
     cross_check = check_cross_punch_buddy_face_realtime(db, selfie, user["id"], today_s, device_credential_id=device_cred_check)
     if cross_check.get("violation"):
         other = cross_check.get("other_emp") or {}
@@ -291,13 +295,33 @@ def punch():
             "conflicting_account": f"{other_name} ({other_code} · {other_dept})"
         }), 403
 
-    webauthn_assertion = d.get("webauthn_assertion")
-    auth_method = "webauthn_face_id" if webauthn_assertion else "camera_face_id"
+    webauthn_assertion = d.get("webauthn_assertion") or d.get("android_biometric_assertion")
+    auth_method = "camera_face_id"
     device_cred_id = None
     face_verified = 0
     face_sim = 0.0
 
-    if webauthn_assertion:
+    if webauthn_assertion and isinstance(webauthn_assertion, dict) and webauthn_assertion.get("type") == "android_biometric":
+        # Native Android BiometricPrompt Verification
+        dev_id = webauthn_assertion.get("id") or webauthn_assertion.get("device_id")
+        ch = webauthn_assertion.get("challenge")
+        stored_ch = session.get("android_biometric_ch")
+        if not stored_ch or stored_ch != ch:
+            return _err("Biometric session expired. Please tap to verify again.", 400)
+
+        cred_row = db.execute(
+            "SELECT id FROM webauthn_credentials WHERE credential_id=? AND emp_id=?",
+            (dev_id, user["id"])
+        ).fetchone()
+        if not cred_row:
+            return _err("This phone Face ID is not registered to your account. Please complete phone Face ID binding first.", 403)
+
+        session.pop("android_biometric_ch", None)
+        auth_method = "android_biometric"
+        device_cred_id = dev_id
+        face_verified = 1
+        face_sim = 1.0
+    elif webauthn_assertion:
         # Hardware Biometric Face ID Verification via WebAuthn / Passkeys
         stored_ch = session.get("webauthn_punch_challenge")
         if not stored_ch:
@@ -307,6 +331,7 @@ def punch():
         if not ok:
             return _err(msg, 403)
         session.pop("webauthn_punch_challenge", None)
+        auth_method = "webauthn_face_id"
         face_verified = 1
         face_sim = 1.0
         device_cred_id = webauthn_assertion.get("id") or (cred_info.get("credential_id") if cred_info else None)
@@ -430,6 +455,68 @@ def punch():
         auth_method=auth_method
     )
 
+
+
+@bp.get("/android-biometric/challenge")
+@login_required
+def android_biometric_challenge():
+    ch = secrets.token_hex(32)
+    session["android_biometric_ch"] = ch
+    return jsonify({"ok": True, "challenge": ch, "emp_code": g.user["emp_code"]})
+
+
+@bp.post("/android-biometric/register-device")
+@login_required
+def android_biometric_register_device():
+    db = get_db()
+    d = request.get_json(silent=True) or {}
+    device_id = str(d.get("device_id") or "").strip()
+    signature = str(d.get("signature") or "").strip()
+    ch = d.get("challenge")
+
+    stored_ch = session.get("android_biometric_ch")
+    if not stored_ch or stored_ch != ch:
+        return jsonify({"ok": False, "error": "Biometric session expired. Please retry."}), 400
+
+    if not device_id:
+        return jsonify({"ok": False, "error": "Missing device hardware ID."}), 400
+
+    # One Phone, One Account: Check if this phone is registered to another employee
+    other = db.execute(
+        "SELECT e.emp_code, e.name, e.department, c.name as category_name "
+        "FROM webauthn_credentials w "
+        "JOIN employees e ON e.id = w.emp_id "
+        "LEFT JOIN employee_categories c ON c.id = e.category_id "
+        "WHERE w.credential_id = ? AND w.emp_id != ?",
+        (device_id, g.user["id"])
+    ).fetchone()
+    if other:
+        dept = other["department"] or other["category_name"] or "Company"
+        return jsonify({
+            "ok": False,
+            "error": f"One Phone, One Employee Policy: This phone is already registered to employee {other['name']} ({other['emp_code']} · {dept})."
+        }), 403
+
+    now_ts = now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Store in webauthn_credentials
+    existing = db.execute("SELECT id FROM webauthn_credentials WHERE credential_id=? AND emp_id=?", (device_id, g.user["id"])).fetchone()
+    if not existing:
+        db.execute(
+            "INSERT INTO webauthn_credentials (emp_id, credential_id, public_key, sign_count, device_name, aaguid, created_at) "
+            "VALUES (?, ?, ?, 0, 'Android Native Face ID', 'android-biometric', ?)",
+            (g.user["id"], device_id, signature, now_ts)
+        )
+
+    db.execute(
+        "UPDATE employees SET device_registered=1, device_name='Android Native Face ID', device_registered_at=?, "
+        "face_registered=1, face_registered_at=? WHERE id=?",
+        (now_ts, now_ts, g.user["id"])
+    )
+    audit("ANDROID_BIOMETRIC_REGISTERED", "employee", g.user["id"], f"Device={device_id}")
+    db.commit()
+    session.pop("android_biometric_ch", None)
+    return jsonify({"ok": True, "message": "Phone Face ID successfully bound to your account!"})
 
 
 @bp.get("/selfie/<path:name>")

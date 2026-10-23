@@ -62,8 +62,8 @@ def check_selfie_image_quality(img_input):
         std_val = float(stat.stddev[0])
 
         # Pitch black or covered lens detection (black screen)
-        # Pitch black or completely covered lens is < 8.0.
-        if mean_val < 8.0:
+        # Pitch black is 0-5. Covered camera / very dark low light is < 14.0.
+        if mean_val < 14.0:
             return False, f"Camera screen is black or too dark (brightness: {mean_val:.1f}/255). No face detected. Please ensure your camera lens is uncovered and you have sufficient lighting.", mean_val
 
         # Blank screen or uniform canvas detection (lack of texture/variance)
@@ -289,10 +289,15 @@ def parse_template_angles(template_str) -> list:
         if isinstance(data, dict):
             vecs = []
             if "angles" in data and isinstance(data["angles"], dict):
-                for k in ("center", "left", "right"):
+                for k in ("photo1", "photo2", "center", "left", "right"):
                     v = data["angles"].get(k)
                     if v and isinstance(v, list):
                         vecs.append(v)
+            if "photos" in data and isinstance(data["photos"], (list, dict)):
+                p_items = data["photos"].values() if isinstance(data["photos"], dict) else data["photos"]
+                for p in p_items:
+                    if p and isinstance(p, list):
+                        vecs.append(p)
             if "multi_views" in data and isinstance(data["multi_views"], list):
                 for mv in data["multi_views"]:
                     if mv and isinstance(mv, list):
@@ -530,22 +535,44 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
     embeddings = {}
     multi_views = []
     primary_img = None
+    photo1_filename = None
+    photo2_filename = None
 
     if isinstance(img_input, dict):
-        for angle in ("center", "left", "right"):
-            if angle in img_input and img_input[angle]:
-                try:
-                    emb = extract_face_embedding(img_input[angle])
-                    embeddings[angle] = emb
-                    views = get_candidate_live_embeddings(img_input[angle])
-                    multi_views.extend(views)
-                    if angle == "center" or primary_img is None:
-                        primary_img = img_input[angle]
-                except Exception as e:
-                    return False, f"Could not process {angle} face angle: {e}", None
+        # Support both new two-image ("photo1", "photo2") and legacy ("center", "left", "right")
+        keys = []
+        if "photo1" in img_input or "photo2" in img_input:
+            keys = [k for k in ("photo1", "photo2") if k in img_input and img_input[k]]
+        else:
+            keys = [k for k in ("center", "left", "right") if k in img_input and img_input[k]]
+
+        for angle in keys:
+            try:
+                emb = extract_face_embedding(img_input[angle])
+                embeddings[angle] = emb
+                views = get_candidate_live_embeddings(img_input[angle])
+                multi_views.extend(views)
+                if angle in ("photo1", "center") or primary_img is None:
+                    primary_img = img_input[angle]
+            except Exception as e:
+                label = "Photo 1" if angle == "photo1" else ("Photo 2" if angle == "photo2" else angle)
+                return False, f"Could not process {label} face image: {e}", None
+
         if not embeddings:
-            return False, "No valid face angles provided.", None
-        primary_embedding = embeddings.get("center") or next(iter(embeddings.values()))
+            return False, "No valid face photos provided.", None
+
+        # If both photo1 and photo2 are provided, verify they belong to the same person
+        if "photo1" in embeddings and "photo2" in embeddings:
+            try:
+                emb1 = embeddings["photo1"]
+                emb2 = embeddings["photo2"]
+                pair_sim = compute_similarity(emb1, emb2)
+                if pair_sim < 0.50:
+                    return False, f"Both photos must be of the same employee face. Photo 1 and Photo 2 do not match (Similarity: {pair_sim*100:.1f}%).", None
+            except Exception:
+                pass
+
+        primary_embedding = embeddings.get("photo1") or embeddings.get("center") or next(iter(embeddings.values()))
     else:
         try:
             primary_embedding = extract_face_embedding(img_input)
@@ -571,23 +598,38 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
                 f"'{other_emp['name']}' ({other_emp['emp_code']}). One face cannot be registered to multiple accounts."
             ), other_emp
 
-    # Save reference photo to disk
+    # Save reference photo(s) to disk
     now_ts = now()
     face_filename = f"face_{user['emp_code']}_{now_ts.strftime('%Y%m%d_%H%M%S')}.jpg"
     selfie_dir = current_app.config.get("SELFIE_DIR")
-    if selfie_dir and primary_img:
+    if selfie_dir:
         os.makedirs(selfie_dir, exist_ok=True)
-        im = _load_image(primary_img)
-        im.thumbnail((640, 640))
-        im.save(os.path.join(selfie_dir, face_filename), "JPEG", quality=85)
+        if isinstance(img_input, dict) and "photo1" in img_input and img_input["photo1"]:
+            photo1_filename = face_filename
+            im1 = _load_image(img_input["photo1"])
+            im1.thumbnail((640, 640))
+            im1.save(os.path.join(selfie_dir, photo1_filename), "JPEG", quality=85)
+        elif primary_img:
+            photo1_filename = face_filename
+            im = _load_image(primary_img)
+            im.thumbnail((640, 640))
+            im.save(os.path.join(selfie_dir, photo1_filename), "JPEG", quality=85)
+
+        if isinstance(img_input, dict) and "photo2" in img_input and img_input["photo2"]:
+            photo2_filename = f"face_{user['emp_code']}_p2_{now_ts.strftime('%Y%m%d_%H%M%S')}.jpg"
+            im2 = _load_image(img_input["photo2"])
+            im2.thumbnail((640, 640))
+            im2.save(os.path.join(selfie_dir, photo2_filename), "JPEG", quality=85)
 
     template_payload = json.dumps({
         "vector": primary_embedding,
         "angles": embeddings,
-        "multi_views": multi_views[:16],  # Store key invariant views
+        "multi_views": multi_views[:24],
+        "photo1_file": photo1_filename,
+        "photo2_file": photo2_filename,
         "registered_at": now_ts.isoformat(),
         "registered_by": registered_by_id,
-        "algorithm": "sbg-multi-angle-adaptive-v2",
+        "algorithm": "sbg-dual-photo-adaptive-v3",
     })
 
     db.execute(
@@ -600,7 +642,7 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
         "FACE_REGISTERED",
         "employee",
         emp_id,
-        f"Face ID registered for {user['emp_code']} ({user['name']}) by ID {registered_by_id or 'self'} with 360 multi-view support"
+        f"Face ID registered for {user['emp_code']} ({user['name']}) by ID {registered_by_id or 'self'} with Two-Image verification"
     )
     db.commit()
     return True, "Face registered successfully.", None

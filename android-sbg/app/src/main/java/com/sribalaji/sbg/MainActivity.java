@@ -27,9 +27,16 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+import android.webkit.JavascriptInterface;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.UUID;
+import java.util.concurrent.Executor;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -83,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         settings.setUserAgentString(settings.getUserAgentString() + " SBG-AndroidApp/1.0");
+        webView.addJavascriptInterface(new AndroidBiometricBridge(), "AndroidBiometricBridge");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -334,6 +342,156 @@ public class MainActivity extends AppCompatActivity {
             }
         } else {
             super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
+    public class AndroidBiometricBridge {
+
+        @JavascriptInterface
+        public boolean isBiometricAvailable() {
+            try {
+                BiometricManager biometricManager = BiometricManager.from(MainActivity.this);
+                int canAuth = biometricManager.canAuthenticate(
+                        BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                        BiometricManager.Authenticators.BIOMETRIC_WEAK |
+                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                );
+                return canAuth == BiometricManager.BIOMETRIC_SUCCESS;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public String getBiometricStatus() {
+            try {
+                BiometricManager biometricManager = BiometricManager.from(MainActivity.this);
+                int canAuth = biometricManager.canAuthenticate(
+                        BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                        BiometricManager.Authenticators.BIOMETRIC_WEAK |
+                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                );
+                switch (canAuth) {
+                    case BiometricManager.BIOMETRIC_SUCCESS:
+                        return "READY";
+                    case BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE:
+                        return "NO_HARDWARE";
+                    case BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE:
+                        return "HW_UNAVAILABLE";
+                    case BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED:
+                        return "NONE_ENROLLED";
+                    case BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED:
+                        return "SECURITY_UPDATE_REQUIRED";
+                    default:
+                        return "UNAVAILABLE";
+                }
+            } catch (Exception e) {
+                return "ERROR: " + e.getMessage();
+            }
+        }
+
+        @JavascriptInterface
+        public String getDeviceHardwareId() {
+            return getOrCreateHardwareToken();
+        }
+
+        @JavascriptInterface
+        public void authenticate(final String empCode, final String actionType, final String challenge) {
+            runOnUiThread(() -> {
+                try {
+                    Executor executor = ContextCompat.getMainExecutor(MainActivity.this);
+                    BiometricPrompt biometricPrompt = new BiometricPrompt(MainActivity.this, executor, new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                            super.onAuthenticationError(errorCode, errString);
+                            String safeErr = errString.toString().replace("'", "\\'");
+                            String js = String.format("if(window.onAndroidBiometricError){window.onAndroidBiometricError(%d, '%s', '%s');}",
+                                    errorCode, safeErr, actionType != null ? actionType : "");
+                            webView.evaluateJavascript(js, null);
+                        }
+
+                        @Override
+                        public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                            super.onAuthenticationSucceeded(result);
+                            String deviceId = getOrCreateHardwareToken();
+                            String signature = generateHardwareSignature(empCode, challenge, deviceId);
+                            String js = String.format("if(window.onAndroidBiometricSuccess){window.onAndroidBiometricSuccess('%s', '%s', '%s', '%s');}",
+                                    deviceId, signature, actionType != null ? actionType : "", empCode != null ? empCode : "");
+                            webView.evaluateJavascript(js, null);
+                        }
+
+                        @Override
+                        public void onAuthenticationFailed() {
+                            super.onAuthenticationFailed();
+                            String js = String.format("if(window.onAndroidBiometricFailed){window.onAndroidBiometricFailed('%s');}",
+                                    actionType != null ? actionType : "");
+                            webView.evaluateJavascript(js, null);
+                        }
+                    });
+
+                    String title = "registration".equalsIgnoreCase(actionType)
+                            ? "Bind Phone Face ID"
+                            : "Attendance Face ID";
+                    String subtitle = "Employee: " + (empCode != null && !empCode.isEmpty() ? empCode : "Staff");
+                    String desc = "registration".equalsIgnoreCase(actionType)
+                            ? "Confirm biometrics to link this phone to your account."
+                            : "Scan Face ID / Fingerprint to verify attendance punch.";
+
+                    BiometricPrompt.PromptInfo.Builder builder = new BiometricPrompt.PromptInfo.Builder()
+                            .setTitle(title)
+                            .setSubtitle(subtitle)
+                            .setDescription(desc);
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        builder.setAllowedAuthenticators(
+                                BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                                BiometricManager.Authenticators.BIOMETRIC_WEAK |
+                                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                        );
+                    } else {
+                        builder.setAllowedAuthenticators(
+                                BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                                BiometricManager.Authenticators.BIOMETRIC_WEAK
+                        );
+                        builder.setNegativeButtonText("Cancel");
+                    }
+
+                    biometricPrompt.authenticate(builder.build());
+                } catch (Exception e) {
+                    String safeErr = (e.getMessage() != null ? e.getMessage() : "Authentication exception").replace("'", "\\'");
+                    String js = String.format("if(window.onAndroidBiometricError){window.onAndroidBiometricError(-1, '%s', '%s');}",
+                            safeErr, actionType != null ? actionType : "");
+                    webView.evaluateJavascript(js, null);
+                }
+            });
+        }
+    }
+
+    private String getOrCreateHardwareToken() {
+        String token = prefs.getString("sbg_device_hardware_token", null);
+        if (token == null || token.isEmpty()) {
+            token = "sbg_hw_" + UUID.randomUUID().toString().replace("-", "");
+            prefs.edit().putString("sbg_device_hardware_token", token).apply();
+        }
+        return token;
+    }
+
+    private String generateHardwareSignature(String empCode, String challenge, String deviceId) {
+        try {
+            String raw = (empCode != null ? empCode : "") + ":" +
+                         (challenge != null ? challenge : "") + ":" +
+                         (deviceId != null ? deviceId : "") + ":sbg_salt_2026";
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            return "sig_" + System.currentTimeMillis();
         }
     }
 }

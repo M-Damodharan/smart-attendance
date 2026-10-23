@@ -42,10 +42,18 @@ window.WebAuthnHelper = (() => {
   }
 
   function isSupported() {
+    if (window.AndroidBiometricBridge && typeof window.AndroidBiometricBridge.isBiometricAvailable === 'function') {
+      try {
+        return window.AndroidBiometricBridge.isBiometricAvailable();
+      } catch (e) {
+        return false;
+      }
+    }
     return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
   }
 
   function getDeviceModelName() {
+    if (window.AndroidBiometricBridge) return 'Android Phone (Native Face ID)';
     const ua = navigator.userAgent;
     if (/iPhone/i.test(ua)) return 'iPhone (Face ID)';
     if (/iPad/i.test(ua)) return 'iPad (Face ID / Touch ID)';
@@ -60,10 +68,50 @@ window.WebAuthnHelper = (() => {
    */
   async function enrollDevice(customName) {
     if (!isSupported()) {
-      throw new Error('Biometric authentication (WebAuthn/Face ID) is not supported in this browser.');
+      throw new Error('Biometric authentication is not supported on this device/browser.');
     }
 
     const tok = getCsrfToken();
+
+    // 0. Native Android BiometricPrompt support
+    if (window.AndroidBiometricBridge && window.AndroidBiometricBridge.isBiometricAvailable()) {
+      const chRes = await fetch('/api/android-biometric/challenge');
+      const chData = await chRes.json();
+      if (!chData.ok) {
+        throw new Error(chData.error || 'Could not start biometric setup');
+      }
+      return new Promise((resolve, reject) => {
+        window.onAndroidBiometricSuccess = async function(deviceId, signature, actionType, empCode) {
+          try {
+            const regRes = await fetch('/api/android-biometric/register-device', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': tok
+              },
+              body: JSON.stringify({
+                device_id: deviceId,
+                signature: signature,
+                challenge: chData.challenge,
+                csrf_token: tok
+              })
+            });
+            const regData = await regRes.json();
+            if (regData.ok) {
+              resolve(regData);
+            } else {
+              reject(new Error(regData.error || 'Failed to bind phone Face ID'));
+            }
+          } catch (e) {
+            reject(e);
+          }
+        };
+        window.onAndroidBiometricError = function(code, err) {
+          reject(new Error(err || 'Biometric authentication cancelled or failed'));
+        };
+        window.AndroidBiometricBridge.authenticate(chData.emp_code, 'registration', chData.challenge);
+      });
+    }
 
     // 1. Get registration options from server
     const chalRes = await fetch('/api/webauthn/register/challenge', {
@@ -123,10 +171,33 @@ window.WebAuthnHelper = (() => {
    */
   async function getPunchAssertion() {
     if (!isSupported()) {
-      throw new Error('Biometric authentication is not supported in this browser.');
+      throw new Error('Biometric authentication is not supported on this device/browser.');
     }
 
     const tok = getCsrfToken();
+
+    // 0. Native Android BiometricPrompt assertion
+    if (window.AndroidBiometricBridge && window.AndroidBiometricBridge.isBiometricAvailable()) {
+      const chRes = await fetch('/api/android-biometric/challenge');
+      const chData = await chRes.json();
+      if (!chData.ok) {
+        throw new Error(chData.error || 'Could not initiate biometric punch challenge');
+      }
+      return new Promise((resolve, reject) => {
+        window.onAndroidBiometricSuccess = function(deviceId, signature, actionType, empCode) {
+          resolve({
+            id: deviceId,
+            type: 'android_biometric',
+            signature: signature,
+            challenge: chData.challenge
+          });
+        };
+        window.onAndroidBiometricError = function(code, err) {
+          reject(new Error(err || 'Biometric authentication cancelled'));
+        };
+        window.AndroidBiometricBridge.authenticate(chData.emp_code, 'punch', chData.challenge);
+      });
+    }
 
     // 1. Get punch challenge options from server
     const chalRes = await fetch('/api/webauthn/punch/challenge', {

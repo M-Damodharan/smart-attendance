@@ -357,32 +357,48 @@ def onboarding_face():
 
     db = get_db()
     if request.method == "POST":
-        face_center = request.form.get("face_camera_center") or request.form.get("face_camera_data")
-        face_left = request.form.get("face_camera_left")
-        face_right = request.form.get("face_camera_right")
+        # Photo 1 (Camera capture or file upload)
+        photo1 = request.form.get("face_camera_photo1") or request.form.get("face_camera_center") or request.form.get("face_camera_data")
+        if not photo1 and "face_file_1" in request.files:
+            f1 = request.files["face_file_1"]
+            if f1 and f1.filename:
+                f1_bytes = f1.read()
+                if len(f1_bytes) > 15 * 1024 * 1024:
+                    flash("Photo 1 exceeds 15MB file limit. Please select a smaller photo.", "err")
+                    return render_template("emp/onboarding_face.html")
+                photo1 = f1_bytes
+        elif not photo1 and "face_file" in request.files:
+            f1 = request.files["face_file"]
+            if f1 and f1.filename:
+                photo1 = f1.read()
 
-        if not face_center and "face_file" in request.files:
-            f = request.files["face_file"]
-            if f and f.filename:
-                face_center = f.read()
+        # Photo 2 (Camera capture or file upload)
+        photo2 = request.form.get("face_camera_photo2") or request.form.get("face_camera_left") or request.form.get("face_camera_right")
+        if not photo2 and "face_file_2" in request.files:
+            f2 = request.files["face_file_2"]
+            if f2 and f2.filename:
+                f2_bytes = f2.read()
+                if len(f2_bytes) > 15 * 1024 * 1024:
+                    flash("Photo 2 exceeds 15MB file limit. Please select a smaller photo.", "err")
+                    return render_template("emp/onboarding_face.html")
+                photo2 = f2_bytes
 
-        if not face_center:
-            flash("Please complete the 360° face scan or upload a selfie photo to complete onboarding.", "err")
+        if not photo1:
+            flash("Please capture or upload Photo 1 (Front View) to register your Face ID.", "err")
             return render_template("emp/onboarding_face.html")
 
-        # Bundle into 360 multi-angle dictionary if left/right angles were captured
-        if face_center and face_left and face_right:
+        # Bundle into two-image registration dictionary
+        if photo1 and photo2:
             img_input = {
-                "center": face_center,
-                "left": face_left,
-                "right": face_right
+                "photo1": photo1,
+                "photo2": photo2
             }
         else:
-            img_input = face_center
+            img_input = photo1
 
         ok, msg, other_emp = register_face_for_employee(db, g.user["id"], img_input, registered_by_id=g.user["id"])
         if ok:
-            flash("Biometric 360° Face ID successfully registered and verified! Your punches are now strongly protected.", "ok")
+            flash("Face ID registered successfully with Two-Image verification! Your attendance punches are now active.", "ok")
             return redirect(url_for("emp.punch"))
         else:
             flash(msg, "err")
