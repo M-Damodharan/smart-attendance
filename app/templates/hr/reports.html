@@ -19,7 +19,7 @@
   <input type="hidden" name="month" value="{{ start.strftime('%Y-%m') }}">
   
   <select name="category" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-default);font-weight:600">
-    <option value="">All Categories (Staff / Employees / Contract)</option>
+    <option value="">All Categories (Staff / Employees / Contract / Accounts)</option>
     {% for c in categories %}
     <option value="{{ c['id'] }}" {{ 'selected' if category_id==c['id'] }}>🏷️ {{ c['name'] }} ({{ c['work_hours']|int }}h{% if c['overtime_hours'] %} + {{ c['overtime_hours']|int }}h OT{% endif %})</option>
     {% endfor %}

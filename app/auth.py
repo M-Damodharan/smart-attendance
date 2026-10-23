@@ -206,7 +206,8 @@ def login(login_type=None):
         if u and is_pw_valid:
             cat_code = (u["category_code"] or "").upper()
             cat_name = (u["category_name"] or "").upper()
-            is_accounts = bool("ACCOUNT" in cat_code or "FINANCE" in cat_code or "ACCOUNT" in cat_name or "FINANCE" in cat_name)
+            dept = (u["department"] or "").upper()
+            is_accounts = bool("ACCOUNT" in cat_code or "FINANCE" in cat_code or "ACCOUNT" in cat_name or "FINANCE" in cat_name or "ACCOUNT" in dept or "FINANCE" in dept)
 
             # Strict 4-Category Enforcement when a specific portal is selected
             if login_type_post == "staff":

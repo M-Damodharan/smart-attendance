@@ -30,6 +30,7 @@
         <option value="{{ c['id'] }}" {% if category_id == c['id'] %}selected{% endif %}>
           {% if c['code'] == 'STAFF' %}💼 Staff
           {% elif c['code'] == 'CONTRACT' %}👷 Contract Labour
+          {% elif c['code'] == 'ACCOUNTS_FINANCE' or 'account' in c['name']|lower %}📊 Accounts &amp; Finance
           {% else %}⚙️ Employees
           {% endif %}
           ({{ c['name'] }})
@@ -185,6 +186,10 @@
             {% elif e['category_code'] == 'CONTRACT' %}
               <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(217,119,6,0.12);color:#d97706;font-weight:600;font-size:0.75rem">
                 👷 Contract Labour
+              </span>
+            {% elif e['category_code'] == 'ACCOUNTS_FINANCE' or 'account' in (e['category_name'] or '')|lower or 'account' in (e['department'] or '')|lower %}
+              <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(139,92,246,0.12);color:#8b5cf6;font-weight:600;font-size:0.75rem">
+                📊 Accounts &amp; Finance
               </span>
             {% else %}
               <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,0.12);color:#059669;font-weight:600;font-size:0.75rem">

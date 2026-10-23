@@ -28,6 +28,7 @@
       <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check in</a>
       {% if od_today %}<div class="small okc">On-duty approved today ({{ od_today['location'] }}) — field check-in allowed</div>{% endif %}
     {% endif %}
+  </div>
 </section>
 
 {% if perm_today %}

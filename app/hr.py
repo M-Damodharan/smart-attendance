@@ -953,6 +953,7 @@ def resolve_face_security_alert(alert_id):
             flash("Employee ID has been granted permission and UNLOCKED successfully.", "ok")
         else:
             flash("Could not find or unlock incident.", "err")
+    elif action == "confirm":
         now_ts = now().strftime(DT_FMT)
         db.execute(
             "UPDATE ai_face_alerts SET status='CONFIRMED_VIOLATION', hr_action_by=?, hr_action_at=?, hr_notes=? WHERE id=?",
