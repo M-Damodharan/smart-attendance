@@ -351,10 +351,10 @@ public class MainActivity extends AppCompatActivity {
         public boolean isBiometricAvailable() {
             try {
                 BiometricManager biometricManager = BiometricManager.from(MainActivity.this);
+                // Strict Biometrics Only: Fingerprint & Device Face Unlock. NO DEVICE_CREDENTIAL (PIN/Pattern/Password).
                 int canAuth = biometricManager.canAuthenticate(
                         BiometricManager.Authenticators.BIOMETRIC_STRONG |
-                        BiometricManager.Authenticators.BIOMETRIC_WEAK |
-                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                        BiometricManager.Authenticators.BIOMETRIC_WEAK
                 );
                 return canAuth == BiometricManager.BIOMETRIC_SUCCESS;
             } catch (Exception e) {
@@ -366,10 +366,10 @@ public class MainActivity extends AppCompatActivity {
         public String getBiometricStatus() {
             try {
                 BiometricManager biometricManager = BiometricManager.from(MainActivity.this);
+                // Strict Biometrics Only: Fingerprint & Device Face Unlock. NO DEVICE_CREDENTIAL (PIN/Pattern/Password).
                 int canAuth = biometricManager.canAuthenticate(
                         BiometricManager.Authenticators.BIOMETRIC_STRONG |
-                        BiometricManager.Authenticators.BIOMETRIC_WEAK |
-                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                        BiometricManager.Authenticators.BIOMETRIC_WEAK
                 );
                 switch (canAuth) {
                     case BiometricManager.BIOMETRIC_SUCCESS:
@@ -399,6 +399,31 @@ public class MainActivity extends AppCompatActivity {
         public void authenticate(final String empCode, final String actionType, final String challenge) {
             runOnUiThread(() -> {
                 try {
+                    BiometricManager biometricManager = BiometricManager.from(MainActivity.this);
+                    // Check biometric hardware and enrollment strictly (NO PIN/Pattern/Password allowed)
+                    int canAuth = biometricManager.canAuthenticate(
+                            BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                            BiometricManager.Authenticators.BIOMETRIC_WEAK
+                    );
+
+                    if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
+                        String errMsg;
+                        if (canAuth == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) {
+                            errMsg = "Biometric setup required: Please enroll your fingerprint or face unlock in Android phone Settings. Device PIN, pattern, and password are not accepted for attendance.";
+                        } else if (canAuth == BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE) {
+                            errMsg = "Biometric hardware required: This device does not support fingerprint or face authentication. Attendance punching requires a biometric-supported phone.";
+                        } else if (canAuth == BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE) {
+                            errMsg = "Biometric hardware is currently busy or unavailable. Please try again in a few moments.";
+                        } else {
+                            errMsg = "Biometric authentication is not supported or ready on this device.";
+                        }
+                        String safeErr = errMsg.replace("'", "\\'");
+                        String js = String.format("if(window.onAndroidBiometricError){window.onAndroidBiometricError(-2, '%s', '%s');}",
+                                safeErr, actionType != null ? actionType : "");
+                        webView.evaluateJavascript(js, null);
+                        return;
+                    }
+
                     Executor executor = ContextCompat.getMainExecutor(MainActivity.this);
                     BiometricPrompt biometricPrompt = new BiometricPrompt(MainActivity.this, executor, new BiometricPrompt.AuthenticationCallback() {
                         @Override
@@ -430,31 +455,22 @@ public class MainActivity extends AppCompatActivity {
                     });
 
                     String title = "registration".equalsIgnoreCase(actionType)
-                            ? "Bind Phone Face ID"
-                            : "Attendance Face ID";
+                            ? "Bind Phone Biometrics"
+                            : "Attendance Biometrics";
                     String subtitle = "Employee: " + (empCode != null && !empCode.isEmpty() ? empCode : "Staff");
                     String desc = "registration".equalsIgnoreCase(actionType)
-                            ? "Confirm biometrics to link this phone to your account."
-                            : "Scan Face ID / Fingerprint to verify attendance punch.";
+                            ? "Scan fingerprint or face unlock to link this phone to your account."
+                            : "Scan fingerprint or face unlock to verify attendance punch.";
 
                     BiometricPrompt.PromptInfo.Builder builder = new BiometricPrompt.PromptInfo.Builder()
                             .setTitle(title)
                             .setSubtitle(subtitle)
-                            .setDescription(desc);
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        builder.setAllowedAuthenticators(
-                                BiometricManager.Authenticators.BIOMETRIC_STRONG |
-                                BiometricManager.Authenticators.BIOMETRIC_WEAK |
-                                BiometricManager.Authenticators.DEVICE_CREDENTIAL
-                        );
-                    } else {
-                        builder.setAllowedAuthenticators(
-                                BiometricManager.Authenticators.BIOMETRIC_STRONG |
-                                BiometricManager.Authenticators.BIOMETRIC_WEAK
-                        );
-                        builder.setNegativeButtonText("Cancel");
-                    }
+                            .setDescription(desc)
+                            .setAllowedAuthenticators(
+                                    BiometricManager.Authenticators.BIOMETRIC_STRONG |
+                                    BiometricManager.Authenticators.BIOMETRIC_WEAK
+                            )
+                            .setNegativeButtonText("Cancel");
 
                     biometricPrompt.authenticate(builder.build());
                 } catch (Exception e) {

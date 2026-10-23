@@ -74,7 +74,18 @@ window.WebAuthnHelper = (() => {
     const tok = getCsrfToken();
 
     // 0. Native Android BiometricPrompt support
-    if (window.AndroidBiometricBridge && window.AndroidBiometricBridge.isBiometricAvailable()) {
+    if (window.AndroidBiometricBridge) {
+      if (typeof window.AndroidBiometricBridge.getBiometricStatus === 'function') {
+        const st = window.AndroidBiometricBridge.getBiometricStatus();
+        if (st === 'NONE_ENROLLED') {
+          throw new Error('Biometric setup required: Please enroll your fingerprint or face unlock in Android phone Settings. PIN, pattern, and password are not accepted.');
+        } else if (st === 'NO_HARDWARE') {
+          throw new Error('Biometric hardware required: This phone does not support fingerprint or face authentication. Attendance requires a biometric-supported phone.');
+        } else if (st !== 'READY' && !window.AndroidBiometricBridge.isBiometricAvailable()) {
+          throw new Error('Biometric authentication is not ready or unavailable (' + st + ').');
+        }
+      }
+
       const chRes = await fetch('/api/android-biometric/challenge');
       const chData = await chRes.json();
       if (!chData.ok) {
@@ -100,7 +111,7 @@ window.WebAuthnHelper = (() => {
             if (regData.ok) {
               resolve(regData);
             } else {
-              reject(new Error(regData.error || 'Failed to bind phone Face ID'));
+              reject(new Error(regData.error || 'Failed to bind phone Biometrics'));
             }
           } catch (e) {
             reject(e);
@@ -108,6 +119,9 @@ window.WebAuthnHelper = (() => {
         };
         window.onAndroidBiometricError = function(code, err) {
           reject(new Error(err || 'Biometric authentication cancelled or failed'));
+        };
+        window.onAndroidBiometricFailed = function() {
+          // Retry within system dialog
         };
         window.AndroidBiometricBridge.authenticate(chData.emp_code, 'registration', chData.challenge);
       });
@@ -130,6 +144,9 @@ window.WebAuthnHelper = (() => {
     const options = chalData.options;
     options.challenge = base64UrlToBuffer(options.challenge);
     options.user.id = base64UrlToBuffer(options.user.id);
+    if (options.authenticatorSelection) {
+      options.authenticatorSelection.userVerification = 'required';
+    }
 
     // 2. Trigger native Phone Face ID prompt
     const cred = await navigator.credentials.create({ publicKey: options });
@@ -170,14 +187,21 @@ window.WebAuthnHelper = (() => {
    * Request native Phone Face ID verification assertion for attendance punch.
    */
   async function getPunchAssertion() {
-    if (!isSupported()) {
-      throw new Error('Biometric authentication is not supported on this device/browser.');
-    }
-
     const tok = getCsrfToken();
 
     // 0. Native Android BiometricPrompt assertion
-    if (window.AndroidBiometricBridge && window.AndroidBiometricBridge.isBiometricAvailable()) {
+    if (window.AndroidBiometricBridge) {
+      if (typeof window.AndroidBiometricBridge.getBiometricStatus === 'function') {
+        const st = window.AndroidBiometricBridge.getBiometricStatus();
+        if (st === 'NONE_ENROLLED') {
+          throw new Error('Biometric setup required: Please enroll your fingerprint or face unlock in Android phone Settings. PIN, pattern, and password are not accepted for attendance.');
+        } else if (st === 'NO_HARDWARE') {
+          throw new Error('Biometric hardware required: This phone does not support fingerprint or face authentication. Attendance punching requires a biometric-supported phone.');
+        } else if (st !== 'READY' && !window.AndroidBiometricBridge.isBiometricAvailable()) {
+          throw new Error('Biometric authentication is not ready or unavailable (' + st + ').');
+        }
+      }
+
       const chRes = await fetch('/api/android-biometric/challenge');
       const chData = await chRes.json();
       if (!chData.ok) {
@@ -193,10 +217,17 @@ window.WebAuthnHelper = (() => {
           });
         };
         window.onAndroidBiometricError = function(code, err) {
-          reject(new Error(err || 'Biometric authentication cancelled'));
+          reject(new Error(err || 'Biometric authentication cancelled or failed'));
+        };
+        window.onAndroidBiometricFailed = function() {
+          // Retry within system dialog
         };
         window.AndroidBiometricBridge.authenticate(chData.emp_code, 'punch', chData.challenge);
       });
+    }
+
+    if (!isSupported()) {
+      throw new Error('Biometric authentication required: Attendance punching requires a smartphone with native Face ID, Touch ID, or biometric security. Passwords, PINs, and patterns are strictly disabled.');
     }
 
     // 1. Get punch challenge options from server
@@ -221,11 +252,12 @@ window.WebAuthnHelper = (() => {
         id: base64UrlToBuffer(c.id)
       }));
     }
+    options.userVerification = 'required';
 
     // 2. Trigger native Phone Face ID prompt
     const assertion = await navigator.credentials.get({ publicKey: options });
     if (!assertion) {
-      throw new Error('Biometric Face ID verification was cancelled.');
+      throw new Error('Biometric verification was cancelled.');
     }
 
     // 3. Package assertion payload

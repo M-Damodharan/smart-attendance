@@ -239,3 +239,94 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
             self.assertEqual(att["auth_method"], "android_biometric")
             self.assertEqual(att["face_verified"], 1)
             self.assertEqual(att["device_credential_id"], "android_hw_device_001_test")
+
+    def test_06_unauthenticated_punch_blocked_without_biometrics(self):
+        """6. Rejects punch without phone biometric assertion (disables password/PIN/pattern)."""
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
+            db.commit()
+
+        self._login(c, "E0012", "123456789")
+        tok = self._get_csrf(c, "/punch")
+
+        # Temporarily set app.config["TESTING"] = False to test live production enforcement
+        self.app.config["TESTING"] = False
+        try:
+            selfie = make_test_face(1)
+            res = c.post("/api/punch", json={
+                "kind": "in",
+                "selfie": selfie,
+                "lat": 12.9716,
+                "lng": 77.5946,
+                "accuracy": 10
+            }, headers={"X-CSRFToken": tok})
+            data = res.get_json()
+            self.assertEqual(res.status_code, 403)
+            self.assertFalse(data["ok"])
+            self.assertIn("biometric authentication required", data["error"].lower())
+            self.assertIn("passwords, pins, and patterns are strictly disabled", data["error"].lower())
+        finally:
+            self.app.config["TESTING"] = True
+
+    def test_07_device_not_registered_to_account_rejected_on_punch(self):
+        """7. Punching with an unbound device is blocked with account binding error."""
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='EMP001'")
+            db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='EMP001')")
+            db.commit()
+
+        self._login(c, "EMP001", "123456789")
+
+        # EMP001 gets challenge
+        ch_res = c.get("/api/android-biometric/challenge")
+        ch_data = ch_res.get_json()
+
+        # EMP001 tries to submit punch assertion with an unbound device_id
+        res = c.post("/api/punch", json={
+            "kind": "in",
+            "selfie": make_test_face(2),
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "accuracy": 10,
+            "android_biometric_assertion": {
+                "id": "unbound_hardware_device_999",  # not registered to EMP001
+                "type": "android_biometric",
+                "signature": "sig_test_hardware_signature",
+                "challenge": ch_data["challenge"]
+            }
+        })
+        data = res.get_json()
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(data["ok"])
+        self.assertIn("not registered to your account", data["error"].lower())
+
+    def test_08_selfie_image_access_and_owner_permissions(self):
+        """8. Face images display properly for the registered employee and HR."""
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE employees SET active=1, block_reason=NULL")
+            db.commit()
+            e = db.execute("SELECT id, emp_code, face_image FROM employees WHERE emp_code='EMP001'").fetchone()
+            face_img_name = e["face_image"]
+            self.assertIsNotNone(face_img_name)
+
+        # Logged in employee can view their own face image
+        self._login(c, "EMP001", "123456789")
+        img_res = c.get(f"/api/selfie/{face_img_name}")
+        self.assertEqual(img_res.status_code, 200)
+
+        # Another non-HR employee is forbidden from viewing this face image
+        self._login(c, "E0012", "123456789")
+        bad_res = c.get(f"/api/selfie/{face_img_name}")
+        self.assertEqual(bad_res.status_code, 403)
+
+        # HR can view all employee face images
+        self._login(c, "HR001", "123456789")
+        hr_res = c.get(f"/api/selfie/{face_img_name}")
+        self.assertEqual(hr_res.status_code, 200)

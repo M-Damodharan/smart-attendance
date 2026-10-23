@@ -31,9 +31,9 @@
           banner.style.display = isWebAuthnEnrolled ? 'none' : 'block';
         }
         if (isWebAuthnEnrolled) {
-          setStep('st-faceid', 'ok', `Face ID bound to ${data.device_name || 'your phone'}`, 'faceid-text');
+          setStep('st-faceid', 'ok', `Biometrics bound to ${data.device_name || 'your phone'}`, 'faceid-text');
         } else {
-          setStep('st-faceid', 'warn', 'Phone Face ID not registered yet', 'faceid-text');
+          setStep('st-faceid', 'warn', 'Phone Biometrics not registered yet', 'faceid-text');
         }
       }
     } catch (e) {
@@ -162,63 +162,53 @@
       }
       const selfie = selfieObj.dataUrl;
 
-      // 3. Try Phone Owner Face ID Biometric Authentication (WebAuthn / Passkeys)
+      // 3. Phone Biometric Authentication (Android BiometricPrompt / Apple Face ID & Touch ID)
       let webauthnAssertion = null;
-      if (window.WebAuthnHelper && window.WebAuthnHelper.isSupported()) {
-        if (!isWebAuthnEnrolled) {
-          promptEl.textContent = 'Setting up Phone Face ID… Please verify with Face ID.';
-          try {
-            await window.WebAuthnHelper.enrollDevice();
-            isWebAuthnEnrolled = true;
-            checkDeviceStatus();
-            promptEl.textContent = 'Phone bound! Verifying attendance punch…';
-            await sleep(400);
-          } catch (enrollErr) {
-            console.warn('Auto-enroll cancelled or failed:', enrollErr);
-            throw new Error('Phone Face ID setup cancelled: ' + (enrollErr.message || 'Please tap to bind Face ID'));
-          }
-        }
+      if (!window.WebAuthnHelper || !window.WebAuthnHelper.isSupported()) {
+        throw new Error('Biometric authentication required: Attendance punching requires a phone with supported fingerprint or face biometrics. Passwords, PINs, and patterns are not accepted.');
+      }
 
-        promptEl.textContent = 'Authenticating Phone Face ID…';
+      if (!isWebAuthnEnrolled) {
+        promptEl.textContent = 'Setting up Phone Biometrics… Please authenticate with fingerprint or face.';
         try {
-          webauthnAssertion = await window.WebAuthnHelper.getPunchAssertion();
-          promptEl.textContent = 'Face ID verified! Processing attendance…';
-          // Resume video stream if iOS or Android suspended it during the system dialog
-          if (video && video.paused) {
-            try { await video.play(); } catch(e){}
-          }
-          await sleep(250);
-        } catch (authErr) {
-          console.warn('WebAuthn assertion failed or cancelled:', authErr);
-          if (video && video.paused) {
-            try { await video.play(); } catch(e){}
-          }
-          throw new Error('Phone Face ID Biometric verification failed: ' + (authErr.message || 'Cancelled by user'));
+          await window.WebAuthnHelper.enrollDevice();
+          isWebAuthnEnrolled = true;
+          checkDeviceStatus();
+          promptEl.textContent = 'Phone bound! Verifying attendance punch…';
+          await sleep(400);
+        } catch (enrollErr) {
+          console.warn('Auto-enroll cancelled or failed:', enrollErr);
+          throw new Error('Phone Biometric setup cancelled: ' + (enrollErr.message || 'Please tap to bind Biometrics'));
         }
       }
 
-      let payload = { kind, selfie, ...loc };
-
-      if (webauthnAssertion) {
-        // High-security WebAuthn Biometric Punch
-        payload.webauthn_assertion = webauthnAssertion;
-      } else {
-        // Fallback Liveness Flow if device not yet registered or fallback requested
-        promptEl.textContent = 'Running liveness check…';
-        const ch = await postJSON('/api/challenge', {});
-        if (!ch.ok) throw new Error('Could not start liveness check.');
-        const frames = [selfie];
-        await sleep(400);
-        for (const p of ch.prompts) {
-          promptEl.textContent = p.text;
-          await countdown(2);
-          frames.push(grab(160, 120, 0.6).dataUrl);
+      promptEl.textContent = 'Authenticating Phone Biometrics (Fingerprint / Face ID)…';
+      try {
+        webauthnAssertion = await window.WebAuthnHelper.getPunchAssertion();
+        promptEl.textContent = 'Biometric verified! Processing attendance…';
+        // Resume video stream if iOS or Android suspended it during the system dialog
+        if (video && video.paused) {
+          try { await video.play(); } catch(e){}
         }
-        promptEl.textContent = 'Hold still…';
-        await sleep(400);
-        payload.token = ch.token;
-        payload.frames = frames;
+        await sleep(200);
+      } catch (authErr) {
+        console.warn('Biometric assertion failed or cancelled:', authErr);
+        if (video && video.paused) {
+          try { await video.play(); } catch(e){}
+        }
+        throw new Error('Biometric verification failed: ' + (authErr.message || 'Cancelled by user'));
       }
+
+      if (!webauthnAssertion) {
+        throw new Error('Biometric authentication required: Attendance punching must be verified via phone fingerprint or face unlock. Passwords, PINs, and patterns are strictly disabled.');
+      }
+
+      let payload = {
+        kind,
+        selfie,
+        webauthn_assertion: webauthnAssertion,
+        ...loc
+      };
 
       promptEl.textContent = 'Recording attendance…';
       const res = await postJSON('/api/punch', payload);
@@ -268,17 +258,17 @@
     refresh();
   });
 
-  // Quick Bind Phone Face ID Button
+  // Quick Bind Phone Biometrics Button
   const quickBindBtn = $('btn-quick-bind-faceid');
   const quickBindStatus = $('quick-bind-status');
   if (quickBindBtn) {
     quickBindBtn.addEventListener('click', async () => {
       quickBindBtn.disabled = true;
-      quickBindBtn.textContent = 'Authenticating Phone Face ID…';
+      quickBindBtn.textContent = 'Authenticating Phone Biometrics…';
       if (quickBindStatus) {
         quickBindStatus.style.display = 'block';
         quickBindStatus.style.color = 'var(--text-muted)';
-        quickBindStatus.textContent = 'Please confirm with Face ID / Biometrics on your phone…';
+        quickBindStatus.textContent = 'Please confirm with Fingerprint or Face ID on your phone…';
       }
       try {
         const res = await window.WebAuthnHelper.enrollDevice();
@@ -291,7 +281,7 @@
         checkDeviceStatus();
       } catch (err) {
         quickBindBtn.disabled = false;
-        quickBindBtn.textContent = '📱 Retry Binding Phone Face ID';
+        quickBindBtn.textContent = '📱 Retry Binding Phone Biometrics';
         if (quickBindStatus) {
           quickBindStatus.style.color = '#ef4444';
           quickBindStatus.textContent = 'Setup failed: ' + (err.message || 'Cancelled');

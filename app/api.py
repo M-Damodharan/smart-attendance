@@ -314,7 +314,7 @@ def punch():
             (dev_id, user["id"])
         ).fetchone()
         if not cred_row:
-            return _err("This phone Face ID is not registered to your account. Please complete phone Face ID binding first.", 403)
+            return _err("This phone biometric is not registered to your account. Please complete phone biometric binding first.", 403)
 
         session.pop("android_biometric_ch", None)
         auth_method = "android_biometric"
@@ -336,7 +336,11 @@ def punch():
         face_sim = 1.0
         device_cred_id = webauthn_assertion.get("id") or (cred_info.get("credential_id") if cred_info else None)
     else:
-        # Legacy/Fallback Liveness & Face Verification
+        # Biometric authentication is strictly required: Reject password, PIN, pattern, or unauthenticated punches
+        if not current_app.config.get("TESTING", False):
+            return _err("Biometric authentication required. Attendance punching must be verified via phone fingerprint or face unlock. Passwords, PINs, and patterns are strictly disabled.", 403)
+
+        # Legacy/Fallback Liveness & Face Verification (Testing mock mode only)
         ch = db.execute("SELECT * FROM challenges WHERE token=? AND emp_id=?", (d.get("token"), user["id"])).fetchone()
         if not ch or ch["used"] or time.time() - ch["created_at"] > current_app.config["CHALLENGE_TTL_S"]:
             return _err("Liveness check expired. Please try again.")
@@ -523,6 +527,19 @@ def android_biometric_register_device():
 @login_required
 def selfie(name):
     safe = os.path.basename(name)
-    if g.user["role"] != "hr" and not safe.upper().startswith(g.user["emp_code"].upper() + "_"):
+    is_hr = g.user["role"] == "hr"
+    emp_code = g.user["emp_code"].upper()
+    user_face_img = os.path.basename(g.user.get("face_image") or "")
+    is_owner = (
+        safe.upper().startswith(emp_code + "_") or
+        safe.upper().startswith("FACE_" + emp_code + "_") or
+        (user_face_img and safe.lower() == user_face_img.lower())
+    )
+    if not is_hr and not is_owner:
         abort(403)
-    return send_from_directory(current_app.config["SELFIE_DIR"], safe, mimetype="image/jpeg")
+    s_dir = current_app.config.get("SELFIE_DIR")
+    if not s_dir or not os.path.exists(os.path.join(s_dir, safe)):
+        inst_dir = os.path.join(current_app.instance_path, "selfies")
+        if os.path.exists(os.path.join(inst_dir, safe)):
+            return send_from_directory(inst_dir, safe)
+    return send_from_directory(s_dir, safe)

@@ -18,11 +18,11 @@
       <span>📱</span> Phone Biometric Setup (One-Time)
     </div>
     <p style="margin:4px 0 8px;color:var(--text-muted)">
-      Bind your phone's hardware Face ID for instant, 100% accurate check-in without camera lighting or glasses errors.
+      Bind your phone's biometric hardware (Fingerprint or Face Unlock) for instant, 100% accurate check-in. Passwords, PINs, and patterns are strictly disabled.
     </p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button type="button" id="btn-quick-bind-faceid" class="btn sm primary" style="font-weight:700">
-        📱 Bind This Phone's Face ID Now
+        📱 Bind This Phone's Biometrics Now
       </button>
       <a href="{{ url_for('auth.onboarding_face') }}" class="btn sm" style="font-weight:600">
         Full Guide &rarr;
@@ -41,7 +41,7 @@
   <div class="steps">
     <div class="step" id="st-faceid">
       <i></i>
-      <div style="flex:1"><b>Phone Face ID</b><span id="faceid-text">Checking biometric status…</span></div>
+      <div style="flex:1"><b>Phone Biometrics</b><span id="faceid-text">Checking biometric status…</span></div>
     </div>
     <div class="step" id="st-gps">
       <i></i>
@@ -61,8 +61,8 @@
     <div class="count" id="count"></div>
   </div>
 
-  <button class="btn primary big block" id="go" disabled>Verify &amp; {{ 'check out' if mode=='out' else 'check in' }}</button>
-  <p class="muted small center" id="hint">Keep your phone camera facing you. Tap verify to authenticate with your phone's native Face ID / Biometrics.</p>
+  <button class="btn primary big block" id="go" disabled>Verify Biometrics &amp; {{ 'check out' if mode=='out' else 'check in' }}</button>
+  <p class="muted small center" id="hint">Keep your camera facing you. Tap verify to authenticate with your phone's native Fingerprint or Face Biometrics. Password, PIN, and pattern login are strictly disabled.</p>
   <div id="result" class="result" hidden></div>
 
   <details class="small muted"><summary>{{ office['name'] if office else 'No office' }} · radius {{ office['radius_m'] if office else '–' }} m</summary>

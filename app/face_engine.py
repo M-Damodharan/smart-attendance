@@ -32,17 +32,26 @@ FACE_MATCH_THRESHOLD = 0.75
 
 
 def _load_image(img_input):
-    """Safely loads PIL image from data URL, file path, bytes, or PIL object."""
+    """Safely loads PIL image from data URL, file path, bytes, or PIL object,
+    auto-orienting mobile EXIF rotation and converting to RGB."""
+    from PIL import ImageOps
+    im = None
     if isinstance(img_input, Image.Image):
-        return img_input.copy()
-    if isinstance(img_input, str):
+        im = img_input.copy()
+    elif isinstance(img_input, str):
         if img_input.startswith("data:image"):
             raw = base64.b64decode(img_input.split(",", 1)[1])
-            return Image.open(io.BytesIO(raw))
-        if os.path.exists(img_input):
-            return Image.open(img_input)
-    if isinstance(img_input, (bytes, bytearray)):
-        return Image.open(io.BytesIO(img_input))
+            im = Image.open(io.BytesIO(raw))
+        elif os.path.exists(img_input):
+            im = Image.open(img_input)
+    elif isinstance(img_input, (bytes, bytearray)):
+        im = Image.open(io.BytesIO(img_input))
+    if im is not None:
+        try:
+            im = ImageOps.exif_transpose(im)
+        except Exception:
+            pass
+        return im.convert("RGB")
     raise ValueError("Unsupported or invalid image input format.")
 
 
@@ -601,6 +610,8 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
     # Save reference photo(s) to disk
     now_ts = now()
     face_filename = f"face_{user['emp_code']}_{now_ts.strftime('%Y%m%d_%H%M%S')}.jpg"
+    photo1_filename = face_filename
+    photo2_filename = None
     selfie_dir = current_app.config.get("SELFIE_DIR")
     if selfie_dir:
         os.makedirs(selfie_dir, exist_ok=True)
