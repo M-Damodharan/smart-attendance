@@ -162,33 +162,33 @@
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px">
-    <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
-      <span class="muted small" style="display:block;font-weight:600">💼 Staff Portal</span>
-      <b style="font-size:1.4rem;color:#3b82f6">{{ workforce['staff'] }}</b>
+    <div style="padding:14px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
+      <span class="muted small" style="display:block;font-weight:700">💼 Staff Portal</span>
+      <b style="font-size:1.5rem;color:#3b82f6;letter-spacing:-0.01em">{{ workforce['staff'] }}</b>
       <span class="muted small" style="display:block">General / Staff Shift</span>
     </div>
-    <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
-      <span class="muted small" style="display:block;font-weight:600">⚙️ Employees (Rotating)</span>
-      <b style="font-size:1.4rem;color:#10b981">{{ workforce['employees'] }}</b>
+    <div style="padding:14px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
+      <span class="muted small" style="display:block;font-weight:700">⚙️ Employees (Rotating)</span>
+      <b style="font-size:1.5rem;color:#10b981;letter-spacing:-0.01em">{{ workforce['employees'] }}</b>
       <span class="muted small" style="display:block">Morning / Evening Shifts</span>
     </div>
-    <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
-      <span class="muted small" style="display:block;font-weight:600">👷 Contract Labour</span>
-      <b style="font-size:1.4rem;color:#f59e0b">{{ workforce['contract'] }}</b>
+    <div style="padding:14px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
+      <span class="muted small" style="display:block;font-weight:700">👷 Contract Labour</span>
+      <b style="font-size:1.5rem;color:#f59e0b;letter-spacing:-0.01em">{{ workforce['contract'] }}</b>
       <span class="muted small" style="display:block">Independent Shift Control</span>
     </div>
-    <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
-      <span class="muted small" style="display:block;font-weight:600">📊 Accounts &amp; Finance</span>
-      <b style="font-size:1.4rem;color:#8b5cf6">{{ workforce['accounts'] }}</b>
+    <div style="padding:14px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
+      <span class="muted small" style="display:block;font-weight:700">📊 Accounts &amp; Finance</span>
+      <b style="font-size:1.5rem;color:#8b5cf6;letter-spacing:-0.01em">{{ workforce['accounts'] }}</b>
       <span class="muted small" style="display:block">General Shift (09:00–18:00)</span>
     </div>
-    <div style="padding:12px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:10px">
-      <span class="muted small" style="display:block;font-weight:600">🔒 Biometric Face Binding</span>
-      <div style="margin-top:2px;font-size:0.9rem">
-        <span style="color:#10b981;font-weight:700">{{ face_stats['registered'] }}</span> Verified &bull;
-        <span style="color:#f59e0b;font-weight:700">{{ face_stats['pending_setup'] }}</span> Pending
+    <div style="padding:14px;background:var(--bg-canvas,#0f172a);border:1px solid var(--border-default,#334155);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
+      <span class="muted small" style="display:block;font-weight:700">🔒 Biometric Face Binding</span>
+      <div style="margin-top:2px;font-size:0.95rem">
+        <span style="color:#10b981;font-weight:800">{{ face_stats['registered'] }}</span> Verified &bull;
+        <span style="color:#f59e0b;font-weight:800">{{ face_stats['pending_setup'] }}</span> Pending
       </div>
-      <a href="{{ url_for('hr.employees') }}" class="muted small" style="color:var(--brand-accent)">View All Staff &rarr;</a>
+      <a href="{{ url_for('hr.employees') }}" class="muted small" style="color:var(--brand-accent);font-weight:600">View All Staff &rarr;</a>
     </div>
   </div>
 </div>
