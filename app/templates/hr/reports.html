@@ -18,21 +18,21 @@
 <form method="get" class="filters" style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <input type="hidden" name="month" value="{{ start.strftime('%Y-%m') }}">
   
-  <select name="category" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-default);font-weight:600">
+  <select name="category" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main);font-weight:600">
     <option value="">All Categories (Staff / Employees / Contract / Accounts)</option>
     {% for c in categories %}
     <option value="{{ c['id'] }}" {{ 'selected' if category_id==c['id'] }}>🏷️ {{ c['name'] }} ({{ c['work_hours']|int }}h{% if c['overtime_hours'] %} + {{ c['overtime_hours']|int }}h OT{% endif %})</option>
     {% endfor %}
   </select>
 
-  <select name="shift" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-default)">
+  <select name="shift" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main)">
     <option value="">All Shifts</option>
     {% for s in shifts %}
     <option value="{{ s['id'] }}" {{ 'selected' if shift_id==s['id'] }}>🕒 {{ s['name'] }} ({{ s['start_time'] }}–{{ s['end_time'] }})</option>
     {% endfor %}
   </select>
 
-  <select name="dept" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-default)">
+  <select name="dept" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main)">
     <option value="">All Departments</option>
     {% for d in depts %}
     <option {{ 'selected' if dept==d }}>{{ d }}</option>

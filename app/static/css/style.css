@@ -11,11 +11,13 @@
   --bg-surface: #f8fafc;
   --bg-surface-hover: #f1f5f9;
   --bg-glass: rgba(255, 255, 255, 0.9);
+  --bg-canvas: #f8fafc;
 
   --text-main: #0f172a;
   --text-secondary: #334155;
   --text-muted: #64748b;
   --text-inverse: #ffffff;
+  --text-default: #0f172a;
 
   --border-subtle: #f1f5f9;
   --border-default: #dbe4ef;
@@ -86,11 +88,13 @@
   --bg-surface: #142238;
   --bg-surface-hover: #1a2c48;
   --bg-glass: rgba(14, 23, 38, 0.9);
+  --bg-canvas: #09121f;
 
   --text-main: #f8fafc;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
   --text-inverse: #070d18;
+  --text-default: #f8fafc;
 
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-default: rgba(255, 255, 255, 0.1);
@@ -769,7 +773,6 @@ form.inline { display: inline; }
    Login Page Styling — Premium 3D Industrial-Corporate Identity
    ========================================================================== */
 body.login-page {
-  background: radial-gradient(circle at 50% 20%, #0d2238 0%, #060e19 100%);
   min-height: 100vh;
   margin: 0;
   display: flex;
@@ -780,13 +783,9 @@ body.login-page {
   box-sizing: border-box;
 }
 
-[data-theme="dark"] body.login-page {
-  background: radial-gradient(circle at 50% 20%, #0a1b2d 0%, #040810 100%);
-}
-
 body.login-page .wrap {
   width: 100% !important;
-  max-width: 460px !important;
+  max-width: 1240px !important;
   margin: 0 auto !important;
   padding: 0 !important;
   display: flex;
@@ -797,7 +796,7 @@ body.login-page .wrap {
 
 .login-wrapper {
   width: 100%;
-  max-width: 460px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 0;
   display: flex;
@@ -2718,6 +2717,358 @@ body.login-page .wrap {
   border: 1px solid rgba(255, 255, 255, 0.16) !important;
   border-radius: 28px !important;
   box-shadow: 0 25px 65px -10px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* ==========================================================================
+   Outcrowd High-Contrast Theme Color Matching
+   Ensures 100% text readability, high contrast, and zero blending in light & dark modes
+   ========================================================================== */
+
+/* Dark Mode Color Matching (Default & [data-theme="dark"]) */
+[data-theme="dark"] body.login-page,
+:root:not([data-theme="light"]) body.login-page {
+  background: radial-gradient(circle at 50% 15%, #0c1a32 0%, #050a14 100%) !important;
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .outcrowd-topbar,
+:root:not([data-theme="light"]) .outcrowd-topbar {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+[data-theme="dark"] .outcrowd-brand-title,
+:root:not([data-theme="light"]) .outcrowd-brand-title {
+  color: #ffffff;
+}
+[data-theme="dark"] .outcrowd-hero-title,
+:root:not([data-theme="light"]) .outcrowd-hero-title {
+  color: #ffffff;
+}
+[data-theme="dark"] .outcrowd-hero-title .gradient-text,
+:root:not([data-theme="light"]) .outcrowd-hero-title .gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #38bdf8 50%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+[data-theme="dark"] .outcrowd-hero-desc,
+:root:not([data-theme="light"]) .outcrowd-hero-desc {
+  color: #cbd5e1;
+}
+[data-theme="dark"] .orbit-card,
+:root:not([data-theme="light"]) .orbit-card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+[data-theme="dark"] .orbit-card-title,
+:root:not([data-theme="light"]) .orbit-card-title {
+  color: #ffffff;
+}
+[data-theme="dark"] .orbit-card-sub,
+:root:not([data-theme="light"]) .orbit-card-sub {
+  color: #94a3b8;
+}
+[data-theme="dark"] .outcrowd-kpi-ticker,
+:root:not([data-theme="light"]) .outcrowd-kpi-ticker {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+[data-theme="dark"] .ticker-item b,
+:root:not([data-theme="light"]) .ticker-item b {
+  color: #ffffff;
+}
+[data-theme="dark"] .ticker-divider,
+:root:not([data-theme="light"]) .ticker-divider {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+[data-theme="dark"] .outcrowd-glass-card,
+:root:not([data-theme="light"]) .outcrowd-glass-card {
+  background: rgba(15, 23, 42, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 25px 65px -10px rgba(0, 0, 0, 0.85), 0 0 30px rgba(56, 189, 248, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .brand-text h1,
+:root:not([data-theme="light"]) .outcrowd-glass-card .brand-text h1 {
+  color: #ffffff !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .login-subtitle,
+:root:not([data-theme="light"]) .outcrowd-glass-card .login-subtitle {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card label,
+:root:not([data-theme="light"]) .outcrowd-glass-card label {
+  color: #e2e8f0 !important;
+  font-weight: 700;
+}
+[data-theme="dark"] .outcrowd-glass-card input,
+:root:not([data-theme="light"]) .outcrowd-glass-card input {
+  background: rgba(30, 41, 59, 0.8) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+[data-theme="dark"] .outcrowd-glass-card input::placeholder,
+:root:not([data-theme="light"]) .outcrowd-glass-card input::placeholder {
+  color: #64748b !important;
+}
+[data-theme="dark"] .outcrowd-glass-card input:focus,
+:root:not([data-theme="light"]) .outcrowd-glass-card input:focus {
+  background: rgba(15, 23, 42, 0.95) !important;
+  color: #ffffff !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.28) !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .input-icon,
+:root:not([data-theme="light"]) .outcrowd-glass-card .input-icon {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .pw-toggle-btn,
+:root:not([data-theme="light"]) .outcrowd-glass-card .pw-toggle-btn {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .copy-line,
+:root:not([data-theme="light"]) .outcrowd-glass-card .copy-line {
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .author-line,
+:root:not([data-theme="light"]) .outcrowd-glass-card .author-line {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .author-line strong,
+:root:not([data-theme="light"]) .outcrowd-glass-card .author-line strong {
+  color: #38bdf8 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .login-footer-security,
+:root:not([data-theme="light"]) .outcrowd-glass-card .login-footer-security {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .login-tab-btn,
+:root:not([data-theme="light"]) .outcrowd-glass-card .login-tab-btn {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .login-tab-btn:hover,
+:root:not([data-theme="light"]) .outcrowd-glass-card .login-tab-btn:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+[data-theme="dark"] .outcrowd-glass-card .login-tab-btn.active,
+:root:not([data-theme="light"]) .outcrowd-glass-card .login-tab-btn.active {
+  background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;
+  color: #ffffff !important;
+}
+
+/* Light Mode Color Matching ([data-theme="light"]) */
+[data-theme="light"] body.login-page {
+  background: radial-gradient(circle at 50% 15%, #f8fafc 0%, #e2e8f0 100%) !important;
+  color: #0f172a;
+}
+[data-theme="light"] .outcrowd-glow-orb.orb-1 {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.22) 0%, rgba(14, 165, 233, 0) 70%);
+}
+[data-theme="light"] .outcrowd-glow-orb.orb-2 {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.18) 0%, rgba(99, 102, 241, 0) 70%);
+}
+[data-theme="light"] .outcrowd-bg-grid {
+  background-image: 
+    linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+}
+[data-theme="light"] .outcrowd-topbar {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 8px 30px rgba(15, 44, 74, 0.08), inset 0 1px 0 rgba(255, 255, 255, 1);
+  color: #0f172a;
+}
+[data-theme="light"] .outcrowd-brand-title {
+  color: #0f172a;
+}
+[data-theme="light"] .outcrowd-brand-sub {
+  color: #0284c7;
+}
+[data-theme="light"] .outcrowd-topbar .theme-toggle-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+[data-theme="light"] .outcrowd-hero-title {
+  color: #0f172a;
+}
+[data-theme="light"] .outcrowd-hero-title .gradient-text {
+  background: linear-gradient(135deg, #0f172a 0%, #0284c7 60%, #4338ca 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+[data-theme="light"] .outcrowd-hero-desc {
+  color: #334155;
+}
+[data-theme="light"] .orbit-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 30px rgba(15, 44, 74, 0.1), inset 0 1px 0 #ffffff;
+}
+[data-theme="light"] .orbit-card-title {
+  color: #0f172a;
+}
+[data-theme="light"] .orbit-card-sub {
+  color: #64748b;
+}
+[data-theme="light"] .orbit-card-icon {
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+[data-theme="light"] .outcrowd-kpi-ticker {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 20px rgba(15, 44, 74, 0.08);
+}
+[data-theme="light"] .ticker-item b {
+  color: #0f172a;
+}
+[data-theme="light"] .ticker-item span {
+  color: #0284c7;
+}
+[data-theme="light"] .ticker-divider {
+  background: rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="light"] .outcrowd-glass-card {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  box-shadow: 0 25px 65px -10px rgba(15, 44, 74, 0.16), inset 0 1px 0 #ffffff !important;
+}
+[data-theme="light"] .outcrowd-glass-card .brand-text h1 {
+  color: #0f172a !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-subtitle {
+  color: #475569 !important;
+}
+[data-theme="light"] .outcrowd-glass-card label {
+  color: #0f172a !important;
+  font-weight: 700;
+}
+[data-theme="light"] .outcrowd-glass-card input {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+[data-theme="light"] .outcrowd-glass-card input::placeholder {
+  color: #94a3b8 !important;
+}
+[data-theme="light"] .outcrowd-glass-card input:focus {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2) !important;
+}
+[data-theme="light"] .outcrowd-glass-card .input-icon {
+  color: #64748b !important;
+}
+[data-theme="light"] .outcrowd-glass-card .pw-toggle-btn {
+  color: #64748b !important;
+}
+[data-theme="light"] .outcrowd-glass-card .copy-line {
+  color: #334155 !important;
+}
+[data-theme="light"] .outcrowd-glass-card .author-line {
+  color: #64748b !important;
+}
+[data-theme="light"] .outcrowd-glass-card .author-line strong {
+  color: #0284c7 !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-footer-security {
+  color: #64748b !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-type-tabs {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+[data-theme="light"] .outcrowd-glass-card .login-tab-btn {
+  color: #64748b !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-tab-btn:hover {
+  color: #0f172a !important;
+  background: #e2e8f0 !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-tab-btn.active {
+  background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;
+  color: #ffffff !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-portal-badge.badge-staff {
+  background: rgba(37, 99, 235, 0.09) !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(37, 99, 235, 0.28) !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-portal-badge.badge-employee {
+  background: rgba(16, 185, 129, 0.09) !important;
+  color: #047857 !important;
+  border: 1px solid rgba(16, 185, 129, 0.28) !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-portal-badge.badge-contract {
+  background: rgba(217, 119, 6, 0.09) !important;
+  color: #b45309 !important;
+  border: 1px solid rgba(217, 119, 6, 0.28) !important;
+}
+[data-theme="light"] .outcrowd-glass-card .login-portal-badge.badge-accounts {
+  background: rgba(14, 165, 233, 0.09) !important;
+  color: #0369a1 !important;
+  border: 1px solid rgba(14, 165, 233, 0.28) !important;
+}
+[data-theme="light"] .outcrowd-glass-card a.btn:not(.primary) {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06) !important;
+}
+[data-theme="light"] .outcrowd-glass-card a.btn:not(.primary):hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0284c7 !important;
+}
+[data-theme="dark"] .outcrowd-glass-card a.btn:not(.primary),
+:root:not([data-theme="light"]) .outcrowd-glass-card a.btn:not(.primary) {
+  background: rgba(30, 41, 59, 0.8) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+[data-theme="dark"] .outcrowd-glass-card a.btn:not(.primary):hover,
+:root:not([data-theme="light"]) .outcrowd-glass-card a.btn:not(.primary):hover {
+  background: rgba(51, 65, 85, 0.9) !important;
+  border-color: #38bdf8 !important;
+}
+
+/* Hero Badge Styling for Dashboard */
+.hero-badge {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.hero-badge-link {
+  text-decoration: none;
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.hero-badge-link.active {
+  background: rgba(16, 185, 129, 0.28);
+  color: #a7f3d0;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+}
+.hero-badge-link.pending {
+  background: rgba(245, 158, 11, 0.28);
+  color: #fde68a;
+  border: 1px solid rgba(251, 191, 36, 0.45);
 }
 
 /* Outcrowd Punch Page Holographic Viewfinder & Crosshairs */
