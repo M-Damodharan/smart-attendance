@@ -83,8 +83,8 @@
       </div>
     </div>
 
-    <!-- Profile Avatar Trigger -->
-    <div class="user-chip profile-trigger" id="profile-menu-trigger" onclick="toggleProfileMenu(event)" title="Profile & Account Settings" tabindex="0" role="button" aria-haspopup="true">
+    <!-- User Chip & Direct Action Links -->
+    <div class="user-chip">
       <span class="user-avatar" title="{{ g.user['name'] }}">{{ g.user['name'][:1]|upper }}</span>
       <div class="user-info">
         <span class="user-name">{{ g.user['name'] }}</span>
@@ -92,44 +92,23 @@
           {{ g.user['emp_code'] }} · {{ 'HR' if g.user['role']=='hr' else (g.user['category_name'] or 'Staff') }}
         </span>
       </div>
-      <svg class="profile-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
     </div>
 
-    <!-- Profile Dropdown Menu -->
-    <div class="profile-dropdown-menu" id="profile-dropdown-menu" style="display:none">
-      <div class="profile-menu-header">
-        <div class="profile-avatar-lg">{{ g.user['name'][:1]|upper }}</div>
-        <div class="profile-header-info">
-          <strong class="profile-header-name">{{ g.user['name'] }}</strong>
-          <span class="profile-header-code">ID: <code>{{ g.user['emp_code'] }}</code></span>
-          <span class="profile-header-role badge {% if g.user['role']=='hr' %}b-approved{% else %}b-pending{% endif %}">
-            {{ 'HR Administrator' if g.user['role']=='hr' else (g.user['category_name'] or 'Standard Employee') }}
-          </span>
-          <span class="profile-header-email muted small">{{ g.user['email'] or 'No email registered' }}</span>
-        </div>
-      </div>
+    {% if session.get('original_hr_id') and g.user['role'] != 'hr' %}
+    <button type="button" class="btn sm primary" onclick="switchToAccount({{ session['original_hr_id'] }})" style="font-size:0.78rem;padding:4px 10px;">
+      ↩️ Return to HR
+    </button>
+    {% endif %}
 
-      {% if session.get('original_hr_id') and g.user['role'] != 'hr' %}
-      <div class="profile-menu-notice">
-        <span class="small" style="font-weight:700;display:block;margin-bottom:6px">👑 Working in Employee View</span>
-        <button type="button" class="btn sm primary block" onclick="switchToAccount({{ session['original_hr_id'] }})">
-          ↩️ Return to HR Dashboard
-        </button>
-      </div>
-      {% endif %}
-
-      <div class="profile-menu-actions">
-        <button type="button" class="profile-menu-item" onclick="openSwitchAccountModal()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>
-          <span>Switch Account</span>
-          <span class="badge sm" style="margin-left:auto;font-size:0.68rem;padding:1px 6px">Multi-User</span>
-        </button>
-        <div class="profile-menu-divider"></div>
-        <a href="{{ url_for('auth.logout') }}" class="profile-menu-item danger">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          <span>Logout Session</span>
-        </a>
-      </div>
+    <div class="user-links">
+      <a href="{{ url_for('auth.change_password') }}" class="nav-action-link" title="Change password">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Password</span>
+      </a>
+      <a href="{{ url_for('auth.logout') }}" class="nav-action-link logout" title="Sign out">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Logout</span>
+      </a>
     </div>
   </div>
 </header>
@@ -302,27 +281,6 @@
   </div>
 </div>
 
-<!-- =========================================================================
-     Multi-Account Switcher Modal
-     ========================================================================= -->
-<!-- Switch Account Modal -->
-<div id="switch-account-modal" class="modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99990;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)">
-  <div class="card" style="max-width:540px;width:100%;max-height:85vh;overflow-y:auto;border-radius:18px;border:1px solid var(--border-default);padding:1.5rem;box-shadow:var(--shadow-pop)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;border-bottom:1px solid var(--border-default);padding-bottom:0.75rem">
-      <div>
-        <h3 style="margin:0;font-size:1.15rem">🔄 Switch Account</h3>
-        <span class="muted small">Seamlessly switch into authorised workforce accounts</span>
-      </div>
-      <button type="button" class="btn sm" onclick="closeSwitchAccountModal()">&times;</button>
-    </div>
-
-    <input type="text" id="switch-account-search" placeholder="Search by employee name or code..." oninput="filterSwitchableAccounts()" style="width:100%;margin-bottom:1rem">
-
-    <div id="switchable-accounts-list" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
-      <div class="muted small center" style="padding:1.5rem 0">Loading accounts...</div>
-    </div>
-  </div>
-</div>
 
 <footer class="app-footer">
   <div class="footer-wrap">
