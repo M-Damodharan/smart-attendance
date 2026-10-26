@@ -225,51 +225,39 @@ document.addEventListener('click', (e) => {
 });
 
 function openProfileModal() {
-  const m = document.getElementById('profile-dropdown-menu');
-  if (m) m.style.display = 'none';
-  const modal = document.getElementById('profile-view-modal');
+  const modal = document.getElementById('profile-modal') || document.getElementById('profile-view-modal');
   if (modal) modal.style.display = 'flex';
 }
 function closeProfileModal() {
-  const modal = document.getElementById('profile-view-modal');
+  const modal = document.getElementById('profile-modal') || document.getElementById('profile-view-modal');
   if (modal) modal.style.display = 'none';
 }
 
-function openEditProfileModal() {
-  const m = document.getElementById('profile-dropdown-menu');
-  if (m) m.style.display = 'none';
-  const modal = document.getElementById('profile-edit-modal');
-  if (modal) modal.style.display = 'flex';
-}
-function closeEditProfileModal() {
-  const modal = document.getElementById('profile-edit-modal');
-  if (modal) modal.style.display = 'none';
-}
-
-async function handleEditProfileSubmit(e) {
+async function handleProfileUpdate(e) {
   if (e && e.preventDefault) e.preventDefault();
-  const phone = document.getElementById('edit_phone')?.value.trim();
-  const email = document.getElementById('edit_email')?.value.trim();
-  const status = document.getElementById('profile-edit-status');
+  const phone = document.getElementById('prof_phone')?.value.trim();
+  const email = document.getElementById('prof_email')?.value.trim();
+  const emergency_contact = document.getElementById('prof_emergency')?.value.trim();
+  const status = document.getElementById('profile-update-status');
   const btn = document.getElementById('btn-save-profile');
   if (btn) btn.disabled = true;
   if (status) {
     status.style.display = 'block';
     status.className = 'muted small';
-    status.textContent = 'Saving contact details...';
+    status.textContent = 'Saving details...';
   }
   try {
-    const res = await postJSON('/auth/update-profile', { phone, email });
+    const res = await postJSON('/auth/update-profile', { phone, email, emergency_contact });
     if (res && res.ok) {
       if (status) {
         status.className = 'pill ok';
-        status.textContent = '✓ Profile updated! Refreshing...';
+        status.textContent = '✓ Profile details saved successfully!';
       }
-      setTimeout(() => location.reload(), 800);
+      setTimeout(() => location.reload(), 700);
     } else {
       if (status) {
         status.className = 'pill bad';
-        status.textContent = (res && res.error) || 'Failed to update profile.';
+        status.textContent = (res && res.error) || 'Failed to update details.';
       }
       if (btn) btn.disabled = false;
     }

@@ -3267,33 +3267,44 @@ body.login-page .wrap {
   overflow: hidden;
   box-shadow: 0 16px 36px rgba(11, 31, 58, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
-/* Dynamic 3D Gear Assembly for HR & Employee Dashboards (Perevoz AI SaaS Animation) */
-.dashboard-3d-stage-compact {
+/* ==========================================================================
+   3D AI Biometric Analysis Robot Character (Perevoz AI SaaS Dribbble Design)
+   Replaces the 2D/3D gear with high-tech 3D AI Robot character (Image 2)
+   ========================================================================== */
+.clickable-chip {
+  cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+.clickable-chip:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+.dashboard-3d-stage-compact,
+.ai-analysis-stage {
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  width: 140px;
-  height: 140px;
+  width: 150px;
+  height: 150px;
   flex-shrink: 0;
-  perspective: 800px;
+  perspective: 900px;
   margin: 0.25rem 0.5rem;
 }
-.dashboard-3d-stage-compact .stage-perspective-wrap {
+
+.ai-robot-perspective-wrap {
   position: relative;
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transform: rotateX(15deg) rotateY(-12deg);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.dashboard-3d-stage-compact:hover .stage-perspective-wrap {
-  transform: rotateX(8deg) rotateY(-4deg) scale(1.05);
-}
-.dashboard-3d-stage-compact .gear-3d-assembly {
+
+.ai-robot-floating-assembly {
   position: relative;
   width: 120px;
   height: 120px;
@@ -3301,87 +3312,208 @@ body.login-page .wrap {
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: aiRobotHover 4.2s ease-in-out infinite alternate;
 }
-.dashboard-3d-stage-compact .gear-3d-ring.outer {
-  position: absolute;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  border: 3px dashed rgba(56, 189, 248, 0.85);
-  box-shadow: 0 0 25px rgba(56, 189, 248, 0.45), inset 0 0 15px rgba(56, 189, 248, 0.25);
-  animation: outcrowdGearSpin 18s linear infinite;
+
+@keyframes aiRobotHover {
+  0% {
+    transform: translateY(5px) rotateX(4deg) rotateY(-8deg) scale(0.98);
+  }
+  100% {
+    transform: translateY(-8px) rotateX(-5deg) rotateY(8deg) scale(1.02);
+  }
 }
-.dashboard-3d-stage-compact .gear-3d-ring.middle {
-  position: absolute;
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  border: 2px dotted rgba(168, 85, 247, 0.9);
-  box-shadow: 0 0 18px rgba(168, 85, 247, 0.4);
-  animation: outcrowdGearSpinReverse 12s linear infinite;
-}
-.dashboard-3d-stage-compact .gear-3d-shield {
-  position: absolute;
-  width: 66px;
-  height: 66px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.35) 0%, rgba(15, 23, 42, 0.95) 80%);
-  border: 2px solid rgba(56, 189, 248, 0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  box-shadow: 0 0 28px rgba(56, 189, 248, 0.6), inset 0 0 18px rgba(56, 189, 248, 0.5);
-  transform: translateZ(20px);
-}
-.dashboard-3d-stage-compact .radar-scan-sweep {
-  position: absolute;
-  inset: 0;
-  background: conic-gradient(from 0deg, transparent 0deg, transparent 270deg, rgba(56, 189, 248, 0.7) 360deg);
-  border-radius: 50%;
-  animation: outcrowdRadarSweep 3.5s linear infinite;
-}
-.dashboard-3d-stage-compact .radar-ring {
+
+.ai-orbit-ring {
   position: absolute;
   border-radius: 50%;
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  pointer-events: none;
 }
-.dashboard-3d-stage-compact .radar-ring.r1 { width: 22px; height: 22px; }
-.dashboard-3d-stage-compact .radar-ring.r2 { width: 44px; height: 44px; }
-.dashboard-3d-stage-compact .radar-ring.r3 { width: 58px; height: 58px; }
-.dashboard-3d-stage-compact .shield-center-core {
+
+.ai-orbit-ring.outer {
+  width: 136px;
+  height: 136px;
+  border: 2px dashed rgba(56, 189, 248, 0.75);
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
+  animation: outcrowdGearSpin 22s linear infinite;
+}
+
+.ai-orbit-ring.inner {
+  width: 112px;
+  height: 112px;
+  border: 1.5px dotted rgba(168, 85, 247, 0.85);
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.35);
+  animation: outcrowdGearSpinReverse 15s linear infinite;
+}
+
+.ai-robot-sphere {
   position: relative;
-  z-index: 2;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid rgba(56, 189, 248, 0.85);
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
+  transform: translateZ(30px);
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 24px rgba(56, 189, 248, 0.5));
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.dashboard-3d-stage-compact .shield-center-core svg {
-  width: 18px;
-  height: 18px;
+
+.ai-analysis-stage:hover .ai-robot-sphere {
+  transform: translateZ(48px) scale(1.08);
 }
-.dashboard-3d-stage-compact .gear-telemetry-badge {
+
+.ai-robot-head-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  z-index: 2;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.8), 0 0 30px rgba(56, 189, 248, 0.6);
+  animation: aiRobotPulse 3.8s ease-in-out infinite alternate;
+}
+
+@keyframes aiRobotPulse {
+  0% {
+    filter: brightness(1) drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
+  }
+  100% {
+    filter: brightness(1.1) drop-shadow(0 0 22px rgba(168, 85, 247, 0.75));
+  }
+}
+
+.ai-robot-glow-backlight {
   position: absolute;
-  bottom: -4px;
+  inset: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.6) 0%, rgba(168, 85, 247, 0.35) 50%, transparent 75%);
+  z-index: 1;
+  filter: blur(10px);
+  animation: aiBacklightDrift 4.5s ease-in-out infinite alternate;
+}
+
+@keyframes aiBacklightDrift {
+  0% { transform: scale(0.92); opacity: 0.6; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+
+.ai-analysis-badge {
+  position: absolute;
+  bottom: -6px;
   white-space: nowrap;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(56, 189, 248, 0.65);
   border-radius: var(--radius-pill);
-  padding: 2px 8px;
-  font-size: 0.65rem;
+  padding: 3px 11px;
+  font-size: 0.68rem;
   font-weight: 700;
   color: #38bdf8;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.35);
   z-index: 5;
+}
+
+/* Large Showcase Version for Login Screen */
+.ai-robot-assembly-large {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
+  animation: aiRobotHover 4.5s ease-in-out infinite alternate;
+}
+.ai-robot-sphere-large {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateZ(40px);
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 35px rgba(56, 189, 248, 0.6));
+}
+.ai-robot-head-img-large {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  z-index: 2;
+  border: 2.5px solid rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 3px 8px rgba(255, 255, 255, 0.9), 0 0 40px rgba(56, 189, 248, 0.7);
+  animation: aiRobotPulse 3.8s ease-in-out infinite alternate;
+}
+
+/* Responsive Auto-Fitting for Mobile App & Web Pages */
+@media (max-width: 768px) {
+  .dashboard-3d-hero {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 1.25rem !important;
+    padding: 1.25rem 1rem !important;
+  }
+  .dashboard-3d-hero .hero-text-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  .dashboard-3d-hero .hero-text-content > div {
+    justify-content: center;
+  }
+  .dashboard-3d-hero .hero-subtitle {
+    text-align: center;
+  }
+  .topbar {
+    padding: 0.65rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .topbar-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .profile-modal-card {
+    padding: 1.2rem !important;
+    max-height: 85vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .ai-analysis-stage {
+    width: 120px;
+    height: 120px;
+  }
+  .ai-robot-floating-assembly {
+    width: 100px;
+    height: 100px;
+  }
+  .ai-orbit-ring.outer {
+    width: 110px;
+    height: 110px;
+  }
+  .ai-orbit-ring.inner {
+    width: 90px;
+    height: 90px;
+  }
+  .ai-robot-sphere,
+  .ai-robot-head-img {
+    width: 74px;
+    height: 74px;
+  }
+  .employee-master-table th,
+  .employee-master-table td {
+    padding: 0.6rem 0.65rem;
+    font-size: 0.8rem;
+  }
 }
 
 /* Dashboard Hero Typography & High Contrast */

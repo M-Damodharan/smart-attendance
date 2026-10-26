@@ -84,7 +84,7 @@
     </div>
 
     <!-- User Chip & Direct Action Links -->
-    <div class="user-chip">
+    <div class="user-chip clickable-chip" onclick="openProfileModal()" title="View and Update Basic Details" tabindex="0" role="button">
       <span class="user-avatar" title="{{ g.user['name'] }}">{{ g.user['name'][:1]|upper }}</span>
       <div class="user-info">
         <span class="user-name">{{ g.user['name'] }}</span>
@@ -101,6 +101,10 @@
     {% endif %}
 
     <div class="user-links">
+      <button type="button" class="nav-action-link" onclick="openProfileModal()" title="View &amp; Update Basic Details">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Profile</span>
+      </button>
       <a href="{{ url_for('auth.change_password') }}" class="nav-action-link" title="Change password">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <span>Password</span>
@@ -281,6 +285,70 @@
   </div>
 </div>
 
+
+<!-- Profile & Basic Details Modal -->
+<div id="profile-modal" class="modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.68);z-index:99990;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)">
+  <div class="card profile-modal-card" style="max-width:520px;width:100%;max-height:90vh;overflow-y:auto;border-radius:20px;border:1px solid var(--border-default);padding:1.5rem;box-shadow:var(--shadow-pop);animation:popIn 0.2s ease-out">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;border-bottom:1px solid var(--border-default);padding-bottom:0.75rem">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="user-avatar" style="width:48px;height:48px;font-size:1.4rem">{{ g.user['name'][:1]|upper }}</div>
+        <div>
+          <h3 style="margin:0;font-size:1.15rem;color:var(--text-main)">{{ g.user['name'] }}</h3>
+          <span class="muted small">{{ g.user['emp_code'] }} &bull; {{ 'HR Administrator' if g.user['role']=='hr' else (g.user['category_name'] or 'Staff') }}</span>
+        </div>
+      </div>
+      <button type="button" class="btn sm" onclick="closeProfileModal()">&times;</button>
+    </div>
+
+    <!-- Basic System Details -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.84rem;margin-bottom:1.25rem">
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Workforce Tier</span>
+        <b style="color:var(--text-main)">{{ g.user['category_name'] or ('HR Admin' if g.user['role']=='hr' else 'Staff') }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Department</span>
+        <b style="color:var(--text-main)">{{ g.user['department'] or 'General' }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Assigned Shift</span>
+        <b style="color:var(--text-main)">{{ g.user['shift_name'] or 'Standard Shift' }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Biometric Face ID</span>
+        <b style="color:{% if g.user['face_registered'] %}#10b981{% else %}#f59e0b{% endif %}">
+          {{ '✓ Face ID Enrolled' if g.user['face_registered'] else '⚠️ Setup Needed' }}
+        </b>
+      </div>
+    </div>
+
+    <!-- Editable Basic Details Form -->
+    <div style="border-top:1px solid var(--border-default);padding-top:1rem;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:0.75rem">
+        <span style="font-weight:700;font-size:0.95rem;color:var(--brand-accent)">✏️ Update Basic Details</span>
+      </div>
+      <form id="profile-update-form" onsubmit="handleProfileUpdate(event)">
+        <div class="form-group" style="margin-bottom:0.9rem">
+          <label for="prof_phone" style="display:block;font-size:0.84rem;margin-bottom:4px;font-weight:600">Mobile Phone Number</label>
+          <input type="tel" id="prof_phone" name="phone" value="{{ g.user['phone'] or '' }}" placeholder="e.g. 9876543210" style="width:100%">
+        </div>
+        <div class="form-group" style="margin-bottom:0.9rem">
+          <label for="prof_email" style="display:block;font-size:0.84rem;margin-bottom:4px;font-weight:600">Email Address</label>
+          <input type="email" id="prof_email" name="email" value="{{ g.user['email'] or '' }}" placeholder="e.g. employee@sribalajigears.com" style="width:100%">
+        </div>
+        <div class="form-group" style="margin-bottom:1.1rem">
+          <label for="prof_emergency" style="display:block;font-size:0.84rem;margin-bottom:4px;font-weight:600">Emergency Contact Number</label>
+          <input type="tel" id="prof_emergency" name="emergency_contact" value="{{ g.user['emergency_contact'] or '' }}" placeholder="e.g. 9123456780" style="width:100%">
+        </div>
+        <div id="profile-update-status" style="margin-bottom:1rem;font-size:0.84rem;display:none"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="btn sm" onclick="closeProfileModal()">Cancel</button>
+          <button type="submit" class="btn sm primary" id="btn-save-profile">Save Details</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <footer class="app-footer">
   <div class="footer-wrap">
