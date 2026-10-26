@@ -2,37 +2,75 @@
 {% block title %}Employee Master · SBG{% endblock %}
 {% block wrapclass %}wide{% endblock %}
 {% block content %}
-<div class="ph"><h2>Employee master</h2><a class="btn primary" href="{{ url_for('hr.employee_form') }}">+ Add employee</a></div>
+<div class="ph">
+  <div>
+    <h2>Employee master</h2>
+    <span class="muted small">Total registered workforce across Staff, Factory, Contract, and Accounts</span>
+  </div>
+  <a class="btn primary" href="{{ url_for('hr.employee_form') }}">+ Add employee</a>
+</div>
 <section class="card tablewrap">
-<table>
-  <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Department</th><th>Shift</th><th>Office</th><th>Face ID</th><th>Role</th><th>Access</th><th></th></tr></thead>
+<table class="employee-master-table">
+  <thead>
+    <tr>
+      <th style="width:110px">Code</th>
+      <th style="min-width:180px">Employee</th>
+      <th style="width:120px">Category</th>
+      <th style="min-width:130px">Department</th>
+      <th style="min-width:150px">Shift</th>
+      <th style="min-width:170px">Office</th>
+      <th style="width:110px">Face ID</th>
+      <th style="width:90px">Role</th>
+      <th style="width:105px">Access</th>
+      <th style="width:190px;text-align:right">Actions</th>
+    </tr>
+  </thead>
   <tbody>
   {% for r in rows %}
   <tr class="{{ '' if r['active'] else 'inactive' }}">
-    <td><b>{{ r['emp_code'] }}</b></td><td>{{ r['name'] }}<br><span class="muted small">{{ r['designation'] or '' }}</span></td>
+    <td><span class="emp-code-pill">{{ r['emp_code'] }}</span></td>
+    <td>
+      <div class="emp-identity-cell">
+        <strong class="emp-name">{{ r['name'] }}</strong>
+        <span class="emp-desig">{{ r['designation'] or 'Workforce Staff' }}</span>
+      </div>
+    </td>
     <td><span class="chip" style="font-size:0.75rem">{{ r['category_name'] or 'Employees' }}</span></td>
-    <td>{{ r['department'] or '—' }}</td><td>{{ r['shift_name'] or '—' }}</td><td>{{ r['office_name'] or '—' }}</td>
+    <td><span style="font-weight:600;font-size:0.86rem">{{ r['department'] or '—' }}</span></td>
+    <td><span class="emp-shift-tag" title="{{ r['shift_name'] }}">{{ r['shift_name'] or '—' }}</span></td>
+    <td><span class="emp-office-tag" title="{{ r['office_name'] }}">{{ r['office_name'] or '—' }}</span></td>
     <td>
       {% if r['face_registered'] %}
         <span class="badge b-approved" style="font-size:0.75rem;padding:2px 8px;">✓ Bound</span>
       {% else %}
-        <span class="badge b-pending" style="font-size:0.75rem;padding:2px 8px;">⚠ Pending</span>
+        <span class="badge b-pending-dark" style="font-size:0.75rem;padding:2px 8px;">⚠️ Pending</span>
       {% endif %}
     </td>
-    <td>{{ r['role']|upper }}</td><td>{{ 'Allowed' if r['active'] else 'Blocked' }}</td>
-    <td class="nowrap" style="display:flex;gap:6px;align-items:center;">
-      <a class="btn sm" href="{{ url_for('hr.employee_form', eid=r['id']) }}">Edit</a>
-      {% if r['id'] != g.user['id'] %}
-      <form method="post" action="{{ url_for('hr.toggle_access', eid=r['id']) }}" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn sm {{ 'danger' if r['active'] else 'ok' }}">{{ 'Revoke access' if r['active'] else 'Grant access' }}</button>
-      </form>
-      <form method="post" action="{{ url_for('hr.delete_employee', eid=r['id']) }}" class="inline" onsubmit="return confirm('⚠️ PERMANENT DELETE WARNING: Are you sure you want to completely delete employee {{ r['name'] }} ({{ r['emp_code'] }})?\n\nAll attendance records, punch selfies, leaves, OD, permissions, and biometric credentials will be permanently erased.\nThis action CANNOT be undone.');">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="confirm" value="{{ r['emp_code'] }}">
-        <button class="btn sm danger" style="background:#dc2626;color:#fff;" title="Delete employee and all records">Delete</button>
-      </form>
+    <td><span class="chip" style="font-size:0.72rem;text-transform:uppercase;font-weight:700">{{ r['role'] }}</span></td>
+    <td>
+      {% if r['active'] %}
+        <span class="status-pill-active">● Active</span>
+      {% else %}
+        <span class="status-pill-blocked">⊘ Blocked</span>
       {% endif %}
+    </td>
+    <td class="emp-actions-col" style="text-align:right">
+      <div class="emp-actions-group">
+        <a class="btn sm emp-action-btn" href="{{ url_for('hr.employee_form', eid=r['id']) }}">Edit</a>
+        {% if r['id'] != g.user['id'] %}
+        <form method="post" action="{{ url_for('hr.toggle_access', eid=r['id']) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn sm emp-action-btn {{ 'btn-revoke' if r['active'] else 'btn-grant' }}" title="{{ 'Revoke access' if r['active'] else 'Grant access' }}">
+            {{ 'Revoke' if r['active'] else 'Grant' }}
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('hr.delete_employee', eid=r['id']) }}" class="inline" onsubmit="return confirm('⚠️ PERMANENT DELETE WARNING: Are you sure you want to completely delete employee {{ r['name'] }} ({{ r['emp_code'] }})?\n\nAll attendance records, punch selfies, leaves, OD, permissions, and biometric credentials will be permanently erased.\nThis action CANNOT be undone.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="confirm" value="{{ r['emp_code'] }}">
+          <button class="btn sm emp-action-btn btn-delete" title="Delete employee and all records">Delete</button>
+        </form>
+        {% endif %}
+      </div>
     </td>
   </tr>
   {% endfor %}

@@ -125,19 +125,19 @@
 
 <!-- Executive Header & 3D Telemetry Shield -->
 <section class="hero dashboard-3d-hero" style="margin-bottom:1.25rem;">
-  <div>
-    <div style="font-size:0.875rem; font-weight:700; color:var(--brand-accent); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:4px;">
+  <div class="hero-text-content">
+    <div class="hero-pretitle">
       Industrial Intelligence · Sri Balaji Gears
     </div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <h2 style="margin:0;">Executive HR Dashboard</h2>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h2 style="margin:0;color:#ffffff;">Executive HR Dashboard</h2>
       <span class="badge b-approved" style="font-size:0.75rem;">● Live Sync (IST)</span>
     </div>
-    <div class="muted small" style="margin-top:6px;">
+    <div class="hero-subtitle">
       Today: <strong>{{ today.strftime('%A, %d %B %Y') }}</strong> · Enterprise Biometric Attendance &amp; Shift Operations
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-      <button type="button" class="btn sm" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:var(--hero-gradient);color:#fff;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+      <button type="button" class="btn sm btn-ai-pulse" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg, #0284c7 0%, #4f46e5 100%);color:#fff;border-color:#38bdf8;">
         <span>🤖 Ask AI Assistant</span>
       </button>
       <a class="btn sm" href="{{ url_for('hr.face_security_audit') }}" style="border-color:#ef4444;color:#ef4444;font-weight:700">🛡️ AI Face Audit</a>
@@ -147,17 +147,27 @@
     </div>
   </div>
 
-  <!-- Compact 3D Rotating Gear Telemetry -->
+  <!-- Dynamic 3D Rotating Gear Assembly (Perevoz AI SaaS Animation) -->
   <div class="dashboard-3d-stage-compact" aria-hidden="true">
-    <div class="outcrowd-radar-sweep"></div>
-    <div class="outcrowd-gear-assembly" style="transform: scale(0.65);">
-      <div class="gear-ring outer"></div>
-      <div class="gear-ring inner"></div>
-      <div class="gear-core">
-        <span class="gear-icon">⚙️</span>
+    <div class="stage-perspective-wrap">
+      <div class="gear-3d-assembly">
+        <div class="gear-3d-ring outer"></div>
+        <div class="gear-3d-ring middle"></div>
+        <div class="gear-3d-shield">
+          <div class="radar-scan-sweep"></div>
+          <div class="radar-ring r1"></div>
+          <div class="radar-ring r2"></div>
+          <div class="radar-ring r3"></div>
+          <div class="shield-center-core">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="gear-telemetry-badge telemetry-badge-1" style="top:5px;right:0px;font-size:0.65rem;padding:2px 6px;">
+    <div class="gear-telemetry-badge">
       <span class="telemetry-dot pulse"></span> AI Telemetry Active
     </div>
   </div>
@@ -185,33 +195,33 @@
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px">
-    <div style="padding:14px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
-      <span style="display:block;font-weight:700;font-size:0.82rem;color:var(--text-main);margin-bottom:4px">💼 Staff Portal</span>
-      <b style="font-size:1.5rem;color:#3b82f6;letter-spacing:-0.01em">{{ workforce['staff'] }}</b>
-      <span class="muted small" style="display:block">General / Staff Shift</span>
+    <div class="workforce-tier-card">
+      <span class="tier-title">💼 Staff Portal</span>
+      <b class="tier-number staff">{{ workforce['staff'] }}</b>
+      <span class="tier-sub">General / Staff Shift</span>
     </div>
-    <div style="padding:14px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
-      <span style="display:block;font-weight:700;font-size:0.82rem;color:var(--text-main);margin-bottom:4px">⚙️ Employees (Rotating)</span>
-      <b style="font-size:1.5rem;color:#10b981;letter-spacing:-0.01em">{{ workforce['employees'] }}</b>
-      <span class="muted small" style="display:block">Morning / Evening Shifts</span>
+    <div class="workforce-tier-card">
+      <span class="tier-title">⚙️ Employees (Rotating)</span>
+      <b class="tier-number employees">{{ workforce['employees'] }}</b>
+      <span class="tier-sub">Morning / Evening Shifts</span>
     </div>
-    <div style="padding:14px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
-      <span style="display:block;font-weight:700;font-size:0.82rem;color:var(--text-main);margin-bottom:4px">👷 Contract Labour</span>
-      <b style="font-size:1.5rem;color:#f59e0b;letter-spacing:-0.01em">{{ workforce['contract'] }}</b>
-      <span class="muted small" style="display:block">Independent Shift Control</span>
+    <div class="workforce-tier-card">
+      <span class="tier-title">👷 Contract Labour</span>
+      <b class="tier-number contract">{{ workforce['contract'] }}</b>
+      <span class="tier-sub">Independent Shift Control</span>
     </div>
-    <div style="padding:14px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
-      <span style="display:block;font-weight:700;font-size:0.82rem;color:var(--text-main);margin-bottom:4px">📊 Accounts &amp; Finance</span>
-      <b style="font-size:1.5rem;color:#8b5cf6;letter-spacing:-0.01em">{{ workforce['accounts'] }}</b>
-      <span class="muted small" style="display:block">General Shift (09:00–18:00)</span>
+    <div class="workforce-tier-card">
+      <span class="tier-title">📊 Accounts &amp; Finance</span>
+      <b class="tier-number accounts">{{ workforce['accounts'] }}</b>
+      <span class="tier-sub">General Shift (09:00–18:00)</span>
     </div>
-    <div style="padding:14px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;box-shadow:0 3px 0 var(--border-default),0 4px 10px rgba(0,0,0,0.08);transition:transform 0.18s ease">
-      <span style="display:block;font-weight:700;font-size:0.82rem;color:var(--text-main);margin-bottom:4px">🔒 Biometric Face Binding</span>
+    <div class="workforce-tier-card">
+      <span class="tier-title">🔒 Biometric Face Binding</span>
       <div style="margin-top:2px;font-size:0.95rem">
         <span style="color:#10b981;font-weight:800">{{ face_stats['registered'] }}</span> Verified &bull;
         <span style="color:#f59e0b;font-weight:800">{{ face_stats['pending_setup'] }}</span> Pending
       </div>
-      <a href="{{ url_for('hr.employees') }}" class="muted small" style="color:var(--brand-accent);font-weight:600">View All Staff &rarr;</a>
+      <a href="{{ url_for('hr.employees') }}" class="tier-sub" style="color:var(--brand-accent);font-weight:700;margin-top:4px">View All Staff &rarr;</a>
     </div>
   </div>
 </div>
