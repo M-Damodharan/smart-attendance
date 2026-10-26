@@ -123,17 +123,35 @@ class TestEmployeeCRUD(unittest.TestCase):
         self.assertNotIn(b"Internal Server Error", res.data)
 
     def test_04_edit_and_delete_employee(self):
-        """Editing and deleting employee works and cascade cleans up related records."""
+        """Editing and deleting employee works and cascade cleans up related records and files."""
         self._login_hr()
 
         with self.app.app_context():
             db = get_db()
             emp = db.execute("SELECT id FROM employees WHERE emp_code='EMPTEST01'").fetchone()
             eid = emp["id"]
-            # Add a schedule to verify cascade cleanup
             shift_id = db.execute("SELECT id FROM shifts LIMIT 1").fetchone()[0]
+            # Create a dummy selfie file to verify disk file deletion
+            selfie_fname = f"punch_test_{eid}.jpg"
+            selfie_path = os.path.join(self.selfie_dir, selfie_fname)
+            with open(selfie_path, "wb") as f:
+                f.write(b"fake image data")
+
+            # Add dependent records across tables
             db.execute("INSERT INTO weekly_shift_schedules (emp_id, shift_id, start_date, end_date) VALUES (?, ?, '2026-10-01', '2026-10-31')",
                        (eid, shift_id))
+            db.execute("INSERT INTO attendance (emp_id, shift_id, date, check_in, in_selfie) VALUES (?, ?, '2026-10-15', '09:00', ?)",
+                       (eid, shift_id, selfie_fname))
+            db.execute("INSERT INTO permission_requests (emp_id, perm_date, reason) VALUES (?, '2026-10-16', 'Doctor visit')",
+                       (eid,))
+            db.execute("INSERT INTO od_requests (emp_id, od_date, location, purpose) VALUES (?, '2026-10-17', 'Client site', 'Inspection')",
+                       (eid,))
+            db.execute("INSERT INTO face_change_requests (emp_id, reason) VALUES (?, 'New phone biometric')",
+                       (eid,))
+            db.execute("INSERT INTO webauthn_credentials (emp_id, credential_id, public_key) VALUES (?, 'cred_123', 'pubkey')",
+                       (eid,))
+            db.execute("INSERT INTO ai_face_alerts (date, emp_id, selfie_path) VALUES ('2026-10-15', ?, ?)",
+                       (eid, selfie_fname))
             db.commit()
 
         # Edit employee
@@ -154,12 +172,20 @@ class TestEmployeeCRUD(unittest.TestCase):
         self.assertEqual(res_del.status_code, 200)
         self.assertIn(b"deleted permanently", res_del.data)
 
+        # Verify disk file was deleted
+        self.assertFalse(os.path.exists(selfie_path))
+
         with self.app.app_context():
             db = get_db()
             deleted_emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone()
             self.assertIsNone(deleted_emp)
-            schedules = db.execute("SELECT * FROM weekly_shift_schedules WHERE emp_id=?", (eid,)).fetchall()
-            self.assertEqual(len(schedules), 0)
+            self.assertEqual(len(db.execute("SELECT * FROM weekly_shift_schedules WHERE emp_id=?", (eid,)).fetchall()), 0)
+            self.assertEqual(len(db.execute("SELECT * FROM attendance WHERE emp_id=?", (eid,)).fetchall()), 0)
+            self.assertEqual(len(db.execute("SELECT * FROM permission_requests WHERE emp_id=?", (eid,)).fetchall()), 0)
+            self.assertEqual(len(db.execute("SELECT * FROM od_requests WHERE emp_id=?", (eid,)).fetchall()), 0)
+            self.assertEqual(len(db.execute("SELECT * FROM face_change_requests WHERE emp_id=?", (eid,)).fetchall()), 0)
+            self.assertEqual(len(db.execute("SELECT * FROM webauthn_credentials WHERE emp_id=?", (eid,)).fetchall()), 0)
+            self.assertEqual(len(db.execute("SELECT * FROM ai_face_alerts WHERE emp_id=? OR target_emp_id=?", (eid, eid)).fetchall()), 0)
 
     def test_05_newly_created_employee_can_login(self):
         """A newly created employee can log in with temporary password."""

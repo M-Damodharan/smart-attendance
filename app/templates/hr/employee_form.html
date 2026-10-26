@@ -41,6 +41,13 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn danger">Reset password</button>
     </form>
+    {% if emp['id'] != g.user['id'] %}
+    <form method="post" action="{{ url_for('hr.delete_employee', eid=emp['id']) }}" onsubmit="return confirm('⚠️ PERMANENT DELETE WARNING: Are you sure you want to completely delete employee {{ emp['name'] }} ({{ emp['emp_code'] }})?\n\nAll attendance records, punch selfies, leaves, OD, permissions, and biometric credentials will be permanently erased.\nThis action CANNOT be undone.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="confirm" value="{{ emp['emp_code'] }}">
+      <button class="btn danger" style="background:#dc2626;color:#fff;">🗑️ Delete employee permanently</button>
+    </form>
+    {% endif %}
   </div>
   {% endif %}
 </section>

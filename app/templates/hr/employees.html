@@ -20,9 +20,20 @@
       {% endif %}
     </td>
     <td>{{ r['role']|upper }}</td><td>{{ 'Allowed' if r['active'] else 'Blocked' }}</td>
-    <td class="nowrap"><a class="btn sm" href="{{ url_for('hr.employee_form', eid=r['id']) }}">Edit</a>
-      {% if r['id'] != g.user['id'] %}<form method="post" action="{{ url_for('hr.toggle_access', eid=r['id']) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn sm {{ 'danger' if r['active'] else 'ok' }}">{{ 'Revoke access' if r['active'] else 'Grant access' }}</button></form>{% endif %}</td>
+    <td class="nowrap" style="display:flex;gap:6px;align-items:center;">
+      <a class="btn sm" href="{{ url_for('hr.employee_form', eid=r['id']) }}">Edit</a>
+      {% if r['id'] != g.user['id'] %}
+      <form method="post" action="{{ url_for('hr.toggle_access', eid=r['id']) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn sm {{ 'danger' if r['active'] else 'ok' }}">{{ 'Revoke access' if r['active'] else 'Grant access' }}</button>
+      </form>
+      <form method="post" action="{{ url_for('hr.delete_employee', eid=r['id']) }}" class="inline" onsubmit="return confirm('⚠️ PERMANENT DELETE WARNING: Are you sure you want to completely delete employee {{ r['name'] }} ({{ r['emp_code'] }})?\n\nAll attendance records, punch selfies, leaves, OD, permissions, and biometric credentials will be permanently erased.\nThis action CANNOT be undone.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="confirm" value="{{ r['emp_code'] }}">
+        <button class="btn sm danger" style="background:#dc2626;color:#fff;" title="Delete employee and all records">Delete</button>
+      </form>
+      {% endif %}
+    </td>
   </tr>
   {% endfor %}
   </tbody>

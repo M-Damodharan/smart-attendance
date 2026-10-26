@@ -168,23 +168,17 @@ def login(login_type=None):
             (code, code)
         ).fetchone()
 
-        # Production-grade password verification: strict salted hash verification with self-healing fallback
+        # Production-grade password verification: strict salted hash verification (no hard-coded bypasses in production)
         is_pw_valid = False
         if u and pw:
             try:
                 if check_password_hash(u["password_hash"], pw) or check_password_hash(u["password_hash"], pw.strip()):
                     is_pw_valid = True
-                elif u["emp_code"] == "HR001" and pw in ("damo12345", "123456789", "admin123"):
+                elif current_app.config.get("TESTING") and (
+                    (u["emp_code"] == "HR001" and pw in ("damo12345", "123456789", "admin123")) or
+                    (u["emp_code"] in ("E0012", "EMP001", "CL001", "S197") and pw in ("123456789", "emp123", "damo12345"))
+                ):
                     is_pw_valid = True
-                    # Self-heal and synchronize password hash
-                    db.execute("UPDATE employees SET password_hash=?, must_change_pw=0 WHERE id=?",
-                               (generate_password_hash(pw), u["id"]))
-                    db.commit()
-                elif u["emp_code"] in ("E0012", "EMP001", "CL001", "S197") and pw in ("123456789", "emp123", "damo12345"):
-                    is_pw_valid = True
-                    db.execute("UPDATE employees SET password_hash=?, must_change_pw=0 WHERE id=?",
-                               (generate_password_hash(pw), u["id"]))
-                    db.commit()
             except Exception:
                 is_pw_valid = False
         elif not u and pw:

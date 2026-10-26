@@ -25,7 +25,7 @@ def _resolve_secret_key():
             f.write(new_key)
         return new_key
     except Exception:
-        return "sbg-smart-attendance-production-sec-key-7f8e9d0c1b2a3"
+        return secrets.token_hex(32)
 
 
 class Config:
