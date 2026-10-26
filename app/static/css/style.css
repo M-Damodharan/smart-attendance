@@ -2279,3 +2279,550 @@ table.grid th.wo { color: var(--status-a); }
   }
 }
 
+/* ==========================================================================
+   Outcrowd 3D Incident & Attendance Platform Design System
+   Inspired by Outcrowd's Dribbble Incident Management Platform
+   ========================================================================== */
+
+/* Ambient Glowing Background Orbs */
+.outcrowd-glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.45;
+  animation: outcrowdGlowDrift 14s ease-in-out infinite alternate;
+}
+.outcrowd-glow-orb.orb-1 {
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.5) 0%, rgba(14, 165, 233, 0) 70%);
+  top: -100px;
+  left: 5%;
+}
+.outcrowd-glow-orb.orb-2 {
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.45) 0%, rgba(99, 102, 241, 0) 70%);
+  bottom: -150px;
+  right: 5%;
+  animation-duration: 18s;
+  animation-delay: -5s;
+}
+
+/* Perspective 3D Cyber Matrix Floor Grid */
+.outcrowd-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center center;
+  mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Container Layout */
+body.login-page {
+  background: radial-gradient(circle at 50% 15%, #0d1e38 0%, #050a14 100%) !important;
+  min-height: 100vh;
+  margin: 0;
+  padding: 1.5rem 1rem !important;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body.login-page .wrap {
+  max-width: 1240px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+}
+
+.login-wrapper.outcrowd-layout {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Outcrowd Floating Glass Topbar */
+.outcrowd-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.35rem;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  margin-bottom: 2rem;
+}
+
+.outcrowd-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+.brand-badge-icon.sm {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.outcrowd-brand-title {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #ffffff;
+  display: block;
+  letter-spacing: -0.01em;
+}
+.outcrowd-brand-sub {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--brand-accent);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.outcrowd-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.outcrowd-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.status-ping {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: outcrowdPulsePing 1.8s infinite ease-in-out;
+}
+
+/* Main Outcrowd 2-Column Grid */
+.outcrowd-main-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 2.5rem;
+  align-items: center;
+}
+
+@media (max-width: 980px) {
+  .outcrowd-main-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+/* Left Hero Column */
+.outcrowd-hero-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.outcrowd-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.15), rgba(139, 92, 246, 0.15));
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  width: fit-content;
+  margin-bottom: 1rem;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
+}
+.outcrowd-hero-badge .badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.outcrowd-hero-title {
+  font-size: clamp(1.8rem, 3.2vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.18;
+  color: #ffffff;
+  letter-spacing: -0.025em;
+  margin: 0 0 1rem;
+}
+.outcrowd-hero-title .gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #38bdf8 50%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline;
+}
+
+.outcrowd-hero-desc {
+  font-size: clamp(0.9rem, 1.4vw, 1.05rem);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0 0 1.75rem;
+  max-width: 560px;
+}
+
+/* ==========================================================================
+   3D Animated Interactive Showcase Stage
+   ========================================================================== */
+.outcrowd-3d-stage {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  perspective: 1200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.5rem 0 1.75rem;
+}
+
+.stage-perspective-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateX(18deg) rotateY(-12deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.outcrowd-3d-stage:hover .stage-perspective-wrap {
+  transform: rotateX(10deg) rotateY(-5deg);
+}
+
+/* Central 3D Rotating Gear Assembly */
+.gear-3d-assembly {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Outer Gear Ring */
+.gear-3d-ring.outer {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 4px dashed rgba(56, 189, 248, 0.7);
+  box-shadow: 0 0 30px rgba(56, 189, 248, 0.3), inset 0 0 20px rgba(56, 189, 248, 0.2);
+  animation: outcrowdGearSpin 24s linear infinite;
+}
+
+/* Middle Cog Ring */
+.gear-3d-ring.middle {
+  position: absolute;
+  width: 175px;
+  height: 175px;
+  border-radius: 50%;
+  border: 2px dotted rgba(139, 92, 246, 0.8);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  animation: outcrowdGearSpinReverse 16s linear infinite;
+}
+
+/* Holographic Biometric Shield Core */
+.gear-3d-shield {
+  position: absolute;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.25) 0%, rgba(15, 23, 42, 0.85) 80%);
+  border: 2px solid rgba(56, 189, 248, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 0 35px rgba(56, 189, 248, 0.5), inset 0 0 25px rgba(56, 189, 248, 0.4);
+  transform: translateZ(25px);
+}
+
+/* Rotating Radar Sweep Laser */
+.radar-scan-sweep {
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 270deg, rgba(56, 189, 248, 0.6) 360deg);
+  border-radius: 50%;
+  animation: outcrowdRadarSweep 4s linear infinite;
+}
+
+/* Concentric Energy Waves */
+.radar-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+.radar-ring.r1 { width: 45px; height: 45px; }
+.radar-ring.r2 { width: 85px; height: 85px; }
+.radar-ring.r3 { width: 115px; height: 115px; }
+
+.shield-center-core {
+  position: relative;
+  z-index: 2;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.6);
+}
+
+/* 3D Orbiting Floating Glass Telemetry Cards */
+.orbit-card {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s;
+  cursor: default;
+  white-space: nowrap;
+}
+.orbit-card:hover {
+  transform: scale(1.06) translateZ(80px) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.4);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.orbit-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.orbit-card-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+.orbit-card-sub {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Card Positions in 3D Space */
+.card-top-left {
+  top: 15px;
+  left: 20px;
+  transform: translateZ(60px);
+  animation: outcrowdFloat3D 5.5s ease-in-out infinite alternate;
+}
+.card-top-right {
+  top: 30px;
+  right: 25px;
+  transform: translateZ(80px);
+  animation: outcrowdFloat3D 6.2s ease-in-out infinite alternate -2s;
+}
+.card-bottom-left {
+  bottom: 30px;
+  left: 30px;
+  transform: translateZ(70px);
+  animation: outcrowdFloat3D 5.8s ease-in-out infinite alternate -3.5s;
+}
+.card-bottom-right {
+  bottom: 20px;
+  right: 15px;
+  transform: translateZ(90px);
+  animation: outcrowdFloat3D 6.5s ease-in-out infinite alternate -1s;
+}
+
+/* Live Telemetry Ticker */
+.outcrowd-kpi-ticker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  max-width: 540px;
+}
+.ticker-item {
+  display: flex;
+  flex-direction: column;
+}
+.ticker-item b {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+.ticker-item span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--brand-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ticker-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Right Column: Outcrowd Glass Login Card */
+.outcrowd-glass-card {
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 28px !important;
+  box-shadow: 0 25px 65px -10px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Outcrowd Punch Page Holographic Viewfinder & Crosshairs */
+.camera-viewfinder-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.viewfinder-corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: #38bdf8;
+  border-style: solid;
+  border-width: 0;
+  filter: drop-shadow(0 0 6px #38bdf8);
+}
+.viewfinder-corner.tl { top: 16px; left: 16px; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 6px; }
+.viewfinder-corner.tr { top: 16px; right: 16px; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 6px; }
+.viewfinder-corner.bl { bottom: 16px; left: 16px; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 6px; }
+.viewfinder-corner.br { bottom: 16px; right: 16px; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 6px; }
+
+.outcrowd-laser-scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #38bdf8 30%, #a5f3fc 50%, #38bdf8 70%, transparent 100%);
+  box-shadow: 0 0 14px 2px #38bdf8, 0 0 28px 4px rgba(56, 189, 248, 0.4);
+  animation: outcrowdLaserScan 3s infinite ease-in-out;
+  pointer-events: none;
+  z-index: 4;
+}
+
+@keyframes outcrowdLaserScan {
+  0% { top: 8%; opacity: 0.4; }
+  50% { top: 88%; opacity: 1; }
+  100% { top: 8%; opacity: 0.4; }
+}
+
+/* Animations */
+@keyframes outcrowdGearSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes outcrowdGearSpinReverse {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
+}
+@keyframes outcrowdRadarSweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes outcrowdFloat3D {
+  0% { transform: translateY(0px) translateZ(60px); }
+  100% { transform: translateY(-12px) translateZ(85px); }
+}
+@keyframes outcrowdGlowDrift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(30px, 20px) scale(1.1); }
+}
+@keyframes outcrowdPulsePing {
+  0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 6px #10b981; }
+  50% { transform: scale(1.25); opacity: 0.7; box-shadow: 0 0 14px #10b981; }
+}
+
+@media (max-width: 980px) {
+  .outcrowd-3d-stage {
+    height: 300px;
+    margin-bottom: 1rem;
+  }
+  .stage-perspective-wrap {
+    transform: rotateX(10deg) rotateY(0deg) scale(0.85);
+  }
+  .outcrowd-kpi-ticker {
+    margin: 0 auto 1.5rem;
+    max-width: 100%;
+  }
+}
+@media (max-width: 600px) {
+  .outcrowd-3d-stage {
+    height: 240px;
+  }
+  .stage-perspective-wrap {
+    transform: scale(0.7);
+  }
+  .outcrowd-topbar {
+    padding: 0.6rem 0.85rem;
+    margin-bottom: 1.25rem;
+  }
+  .outcrowd-status-pill {
+    display: none;
+  }
+  .outcrowd-hero-title {
+    font-size: 1.6rem;
+  }
+  .orbit-card {
+    padding: 6px 10px;
+  }
+  .orbit-card-title {
+    font-size: 0.74rem;
+  }
+  .orbit-card-sub {
+    font-size: 0.64rem;
+  }
+}
+
