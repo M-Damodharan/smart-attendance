@@ -2,34 +2,58 @@
 {% from "_macros.html" import chip with context %}
 {% block title %}Dashboard · SBG{% endblock %}
 {% block content %}
-<section class="hero">
-  <div>
-    <div class="clock" id="clock">--:--</div>
-    <div class="date">{{ today.strftime('%A, %d %B %Y') }}</div>
-    <div class="muted small" style="margin-top:6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <span class="hero-badge">🏷️ {{ category['name'] if category else 'Standard Employee' }}</span>
-      <span class="hero-badge">🕒 {{ shift['name'] }} ({{ shift['start_time'] }}–{{ shift['end_time'] }})</span>
-      <span class="hero-badge">📍 {{ office['name'] if office else 'Department Office' }} (50m)</span>
-      <a href="{{ url_for('emp.face_change') }}" class="hero-badge-link {% if g.user['face_registered'] %}active{% else %}pending{% endif %}">
-        👤 Face ID: {{ 'Active' if g.user['face_registered'] else 'Setup Needed' }}
-      </a>
+<div class="dashboard-3d-wrapper">
+  <div class="outcrowd-glow-orb orb-1"></div>
+  <div class="outcrowd-glow-orb orb-2"></div>
+  <div class="outcrowd-bg-grid"></div>
+
+  <section class="hero dashboard-3d-hero">
+    <div>
+      <div style="font-size:0.875rem; font-weight:700; color:var(--brand-accent); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:4px;">
+        Welcome back, {{ g.user['name'] }}
+      </div>
+      <div class="clock" id="clock">--:--</div>
+      <div class="date">{{ today.strftime('%A, %d %B %Y') }}</div>
+      <div class="muted small" style="margin-top:6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span class="hero-badge">🏷️ {{ category['name'] if category else 'Standard Employee' }}</span>
+        <span class="hero-badge">🕒 {{ shift['name'] }} ({{ shift['start_time'] }}–{{ shift['end_time'] }})</span>
+        <span class="hero-badge">📍 {{ office['name'] if office else 'Department Office' }} (50m)</span>
+        <a href="{{ url_for('emp.face_change') }}" class="hero-badge-link {% if g.user['face_registered'] %}active{% else %}pending{% endif %}">
+          👤 Face ID: {{ 'Active' if g.user['face_registered'] else 'Setup Needed' }}
+        </a>
+      </div>
     </div>
-  </div>
-  <div class="today-state">
-    {% if rec and rec['check_out'] %}
-      <div class="state done">✓ Punch Out Complete</div>
-      <div class="muted small">Punch In: <b>{{ rec['check_in']|hm }}</b> · Punch Out: <b>{{ rec['check_out']|hm }}</b></div>
-      <div style="margin-top:6px;">{{ chip(rec['status']) }} {{ STATUS_LABELS.get(rec['status'],'') }}{% if rec['late'] %} · <span class="late">Late</span>{% endif %}</div>
-    {% elif rec %}
-      <div class="state working">⏱️ Checked in at {{ rec['check_in']|hm }}{% if rec['late'] %} · <span class="late" style="background:rgba(239,68,68,0.18);color:#ef4444;font-size:0.75rem;padding:2px 8px;border-radius:6px;font-weight:700;">Late</span>{% endif %}</div>
-      <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check out</a>
-    {% else %}
-      <div class="state">Not checked in today</div>
-      <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check in</a>
-      {% if od_today %}<div class="small okc">On-duty approved today ({{ od_today['location'] }}) — field check-in allowed</div>{% endif %}
-    {% endif %}
-  </div>
-</section>
+
+    <!-- Compact 3D Rotating Gear Telemetry -->
+    <div class="dashboard-3d-stage-compact" aria-hidden="true">
+      <div class="outcrowd-radar-sweep"></div>
+      <div class="outcrowd-gear-assembly" style="transform: scale(0.65);">
+        <div class="gear-ring outer"></div>
+        <div class="gear-ring inner"></div>
+        <div class="gear-core">
+          <span class="gear-icon">⚙️</span>
+        </div>
+      </div>
+      <div class="gear-telemetry-badge telemetry-badge-1" style="top:5px;right:0px;font-size:0.65rem;padding:2px 6px;">
+        <span class="telemetry-dot pulse"></span> SBG 3D Core
+      </div>
+    </div>
+
+    <div class="today-state">
+      {% if rec and rec['check_out'] %}
+        <div class="state done">✓ Punch Out Complete</div>
+        <div class="muted small">Punch In: <b>{{ rec['check_in']|hm }}</b> · Punch Out: <b>{{ rec['check_out']|hm }}</b></div>
+        <div style="margin-top:6px;">{{ chip(rec['status']) }} {{ STATUS_LABELS.get(rec['status'],'') }}{% if rec['late'] %} · <span class="late">Late</span>{% endif %}</div>
+      {% elif rec %}
+        <div class="state working">⏱️ Checked in at {{ rec['check_in']|hm }}{% if rec['late'] %} · <span class="late" style="background:rgba(239,68,68,0.18);color:#ef4444;font-size:0.75rem;padding:2px 8px;border-radius:6px;font-weight:700;">Late</span>{% endif %}</div>
+        <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check out</a>
+      {% else %}
+        <div class="state">Not checked in today</div>
+        <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check in</a>
+        {% if od_today %}<div class="small okc">On-duty approved today ({{ od_today['location'] }}) — field check-in allowed</div>{% endif %}
+      {% endif %}
+    </div>
+  </section>
 
 {% if perm_today %}
 <div class="card" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);padding:0.85rem 1.25rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;border-radius:12px">
@@ -125,6 +149,42 @@
     {% endfor %}
   </ul>
 </section>
-{% if holiday %}<p class="muted small center">Next holiday: <strong>{{ holiday['name'] }}</strong> · {{ holiday['date']|dmy }}</p>{% endif %}
+  <!-- Attendance Notes & Remarks (Requirement #9) -->
+  <section class="card" style="padding: 1.25rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.75rem;">
+      <h3 style="margin:0; font-size:1.05rem;">💬 Attendance Remarks &amp; Notes</h3>
+      <span class="muted small">Today's Log #{{ rec['id'] if rec else 'New' }}</span>
+    </div>
+    <p class="muted small" style="margin-top:0; margin-bottom:1rem;">Add notes regarding late arrival, early departure, shift handover, or field duty notes for HR review.</p>
+    
+    <div id="emp-comments-list" class="comments-list" style="margin-bottom:1rem;">
+      <div class="comments-loading">Loading notes...</div>
+    </div>
+
+    <form onsubmit="submitComment(event, 'attendance', {{ rec['id'] if rec else 0 }}, 'emp-comment-input', 'emp-comments-list', 'emp-comment-status')" style="display:flex; flex-direction:column; gap:0.5rem;">
+      <div style="position:relative;">
+        <textarea id="emp-comment-input" class="comment-textarea" placeholder="Type an attendance note or remark..." maxlength="1000" rows="2" style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-main); font-size:0.875rem; resize:vertical;"></textarea>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span id="emp-comment-status" class="muted small"></span>
+        <button type="submit" class="btn primary sm" style="padding:6px 16px; font-weight:600;">Post Remark</button>
+      </div>
+    </form>
+  </section>
+
+  {% if holiday %}<p class="muted small center">Next holiday: <strong>{{ holiday['name'] }}</strong> · {{ holiday['date']|dmy }}</p>{% endif %}
+</div>
 {% endblock %}
-{% block scripts %}<script>startClock(document.getElementById('clock'));</script>{% endblock %}
+{% block scripts %}
+<script>
+  startClock(document.getElementById('clock'));
+  {% if rec %}
+    loadComments('attendance', {{ rec['id'] }}, 'emp-comments-list');
+  {% else %}
+    var cList = document.getElementById('emp-comments-list');
+    if (cList) {
+      cList.innerHTML = '<div class="comments-empty">No punch recorded yet today. Remarks can be logged once checked in.</div>';
+    }
+  {% endif %}
+</script>
+{% endblock %}

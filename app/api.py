@@ -613,3 +613,77 @@ def selfie(name):
         if os.path.exists(os.path.join(inst_dir, safe)):
             return send_from_directory(inst_dir, safe)
     return send_from_directory(s_dir, safe)
+
+
+# ------------------------------------------------------------------ comments
+@bp.post("/comments")
+@login_required
+def add_comment():
+    data = request.get_json(silent=True) or request.form
+    entity_type = (data.get("entity_type") or "attendance").strip().lower()
+    try:
+        entity_id = int(data.get("entity_id", 0))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="Invalid entity ID"), 400
+
+    content = (data.get("content") or data.get("comment") or "").strip()
+    if not content:
+        return jsonify(ok=False, error="Comment content cannot be blank."), 400
+    if len(content) > 1000:
+        return jsonify(ok=False, error="Comment exceeds maximum length of 1000 characters."), 400
+
+    db = get_db()
+    if entity_type == "attendance":
+        if entity_id > 0:
+            rec = db.execute("SELECT emp_id FROM attendance WHERE id=?", (entity_id,)).fetchone()
+            if not rec:
+                return jsonify(ok=False, error="Attendance record not found."), 404
+            if g.user["role"] != "hr" and rec["emp_id"] != g.user["id"]:
+                abort(403)
+
+    cur_time = db.execute("SELECT datetime('now', '+5 hours', '+30 minutes')").fetchone()[0]
+    cursor = db.execute(
+        "INSERT INTO comments (entity_type, entity_id, emp_id, content, created_at) VALUES (?, ?, ?, ?, ?)",
+        (entity_type, entity_id, g.user["id"], content, cur_time)
+    )
+    db.commit()
+    comment_id = cursor.lastrowid
+    audit("ADD_COMMENT", entity_type, str(entity_id), f"comment_id={comment_id}")
+
+    return jsonify(ok=True, comment={
+        "id": comment_id,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "emp_id": g.user["id"],
+        "author_name": g.user["name"],
+        "author_code": g.user["emp_code"],
+        "author_role": g.user["role"],
+        "content": content,
+        "created_at": cur_time
+    })
+
+
+@bp.get("/comments/<entity_type>/<int:entity_id>")
+@login_required
+def get_comments(entity_type, entity_id):
+    entity_type = entity_type.strip().lower()
+    db = get_db()
+    if entity_type == "attendance":
+        if entity_id > 0:
+            rec = db.execute("SELECT emp_id FROM attendance WHERE id=?", (entity_id,)).fetchone()
+            if not rec:
+                return jsonify(ok=False, error="Attendance record not found."), 404
+            if g.user["role"] != "hr" and rec["emp_id"] != g.user["id"]:
+                abort(403)
+
+    rows = db.execute(
+        "SELECT c.*, e.name author_name, e.emp_code author_code, e.role author_role "
+        "FROM comments c "
+        "JOIN employees e ON e.id=c.emp_id "
+        "WHERE c.entity_type=? AND c.entity_id=? "
+        "ORDER BY c.created_at ASC, c.id ASC",
+        (entity_type, entity_id)
+    ).fetchall()
+
+    comments_list = [dict(r) for r in rows]
+    return jsonify(ok=True, comments=comments_list)

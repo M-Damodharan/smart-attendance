@@ -2,6 +2,11 @@
 {% block title %}HR Dashboard · SBG{% endblock %}
 {% block wrapclass %}wide{% endblock %}
 {% block content %}
+<div class="dashboard-3d-wrapper">
+  <div class="outcrowd-glow-orb orb-1"></div>
+  <div class="outcrowd-glow-orb orb-2"></div>
+  <div class="outcrowd-bg-grid"></div>
+
 {% if office_unset %}<div class="flash warn">Office location is not set yet — nobody can check in. <a href="{{ url_for('hr.settings') }}">Set it in Settings</a>.</div>{% endif %}
 
 {% if active_face_alerts %}
@@ -118,27 +123,45 @@
 </div>
 {% endif %}
 
-<!-- Executive Header -->
-<div class="ph" style="align-items:flex-start;margin-bottom:1.25rem;">
+<!-- Executive Header & 3D Telemetry Shield -->
+<section class="hero dashboard-3d-hero" style="margin-bottom:1.25rem;">
   <div>
+    <div style="font-size:0.875rem; font-weight:700; color:var(--brand-accent); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:4px;">
+      Industrial Intelligence · Sri Balaji Gears
+    </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <h2 style="margin:0;">Executive HR Dashboard</h2>
       <span class="badge b-approved" style="font-size:0.75rem;">● Live Sync (IST)</span>
     </div>
-    <div class="muted small" style="margin-top:4px;">
-      Today: <strong>{{ today.strftime('%A, %d %B %Y') }}</strong> · Sri Balaji Gears Attendance Intelligence
+    <div class="muted small" style="margin-top:6px;">
+      Today: <strong>{{ today.strftime('%A, %d %B %Y') }}</strong> · Enterprise Biometric Attendance &amp; Shift Operations
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+      <button type="button" class="btn sm" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:var(--hero-gradient);color:#fff;">
+        <span>🤖 Ask AI Assistant</span>
+      </button>
+      <a class="btn sm" href="{{ url_for('hr.face_security_audit') }}" style="border-color:#ef4444;color:#ef4444;font-weight:700">🛡️ AI Face Audit</a>
+      <a class="btn sm primary" href="{{ url_for('hr.shifts') }}">⚡ Bulk Shifts &amp; Rotation</a>
+      <a class="btn sm" href="{{ url_for('hr.corrections') }}">+ Manual Punch</a>
+      <a class="btn sm" href="{{ url_for('hr.attendance') }}">Daily Register</a>
     </div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <button type="button" class="btn sm" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:var(--hero-gradient);color:#fff;">
-      <span>🤖 Ask AI Assistant</span>
-    </button>
-    <a class="btn sm" href="{{ url_for('hr.face_security_audit') }}" style="border-color:#ef4444;color:#ef4444;font-weight:700">🛡️ AI Face Audit</a>
-    <a class="btn sm primary" href="{{ url_for('hr.shifts') }}">⚡ Bulk Shifts &amp; Rotation</a>
-    <a class="btn sm" href="{{ url_for('hr.corrections') }}">+ Manual Punch</a>
-    <a class="btn sm" href="{{ url_for('hr.attendance') }}">Daily Register</a>
+
+  <!-- Compact 3D Rotating Gear Telemetry -->
+  <div class="dashboard-3d-stage-compact" aria-hidden="true">
+    <div class="outcrowd-radar-sweep"></div>
+    <div class="outcrowd-gear-assembly" style="transform: scale(0.65);">
+      <div class="gear-ring outer"></div>
+      <div class="gear-ring inner"></div>
+      <div class="gear-core">
+        <span class="gear-icon">⚙️</span>
+      </div>
+    </div>
+    <div class="gear-telemetry-badge telemetry-badge-1" style="top:5px;right:0px;font-size:0.65rem;padding:2px 6px;">
+      <span class="telemetry-dot pulse"></span> AI Telemetry Active
+    </div>
   </div>
-</div>
+</section>
 
 <!-- Workforce Tiers & Biometric Face Security Overview -->
 <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;border-radius:12px">
@@ -368,5 +391,6 @@
     </div>
     {% endif %}
   </section>
+</div>
 </div>
 {% endblock %}

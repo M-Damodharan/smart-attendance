@@ -186,5 +186,258 @@ document.addEventListener('keydown', (e) => {
     if (modal && modal.style.display !== 'none' && modal.getAttribute('aria-hidden') === 'false') {
       toggleAIChat(false);
     }
+    closeProfileModal();
+    closeEditProfileModal();
+    closeSwitchAccountModal();
   }
 });
+
+// Auto-expand AI textarea & Enter to submit
+document.addEventListener('DOMContentLoaded', () => {
+  const aiInput = document.getElementById('ai-user-input');
+  if (aiInput) {
+    aiInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleAIChatSubmit(e);
+      }
+    });
+  }
+});
+
+// ==========================================
+// Profile Dropdown & Account Switching
+// ==========================================
+function toggleProfileMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById('profile-dropdown-menu');
+  if (!m) return;
+  const isHidden = m.style.display === 'none';
+  m.style.display = isHidden ? 'flex' : 'none';
+}
+
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('profile-dropdown-menu');
+  const trigger = document.getElementById('profile-menu-trigger');
+  if (m && m.style.display !== 'none' && trigger && !trigger.contains(e.target) && !m.contains(e.target)) {
+    m.style.display = 'none';
+  }
+});
+
+function openProfileModal() {
+  const m = document.getElementById('profile-dropdown-menu');
+  if (m) m.style.display = 'none';
+  const modal = document.getElementById('profile-view-modal');
+  if (modal) modal.style.display = 'flex';
+}
+function closeProfileModal() {
+  const modal = document.getElementById('profile-view-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function openEditProfileModal() {
+  const m = document.getElementById('profile-dropdown-menu');
+  if (m) m.style.display = 'none';
+  const modal = document.getElementById('profile-edit-modal');
+  if (modal) modal.style.display = 'flex';
+}
+function closeEditProfileModal() {
+  const modal = document.getElementById('profile-edit-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleEditProfileSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const phone = document.getElementById('edit_phone')?.value.trim();
+  const email = document.getElementById('edit_email')?.value.trim();
+  const status = document.getElementById('profile-edit-status');
+  const btn = document.getElementById('btn-save-profile');
+  if (btn) btn.disabled = true;
+  if (status) {
+    status.style.display = 'block';
+    status.className = 'muted small';
+    status.textContent = 'Saving contact details...';
+  }
+  try {
+    const res = await postJSON('/auth/update-profile', { phone, email });
+    if (res && res.ok) {
+      if (status) {
+        status.className = 'pill ok';
+        status.textContent = '✓ Profile updated! Refreshing...';
+      }
+      setTimeout(() => location.reload(), 800);
+    } else {
+      if (status) {
+        status.className = 'pill bad';
+        status.textContent = (res && res.error) || 'Failed to update profile.';
+      }
+      if (btn) btn.disabled = false;
+    }
+  } catch (err) {
+    if (status) {
+      status.className = 'pill bad';
+      status.textContent = 'Connection error. Please try again.';
+    }
+    if (btn) btn.disabled = false;
+  }
+}
+
+let switchableAccountsData = [];
+async function openSwitchAccountModal() {
+  const m = document.getElementById('profile-dropdown-menu');
+  if (m) m.style.display = 'none';
+  const modal = document.getElementById('switch-account-modal');
+  if (modal) modal.style.display = 'flex';
+  const list = document.getElementById('switchable-accounts-list');
+  if (list) list.innerHTML = '<div class="muted small center" style="padding:1.5rem 0">Loading accounts...</div>';
+  try {
+    const res = await fetch('/auth/switchable-accounts').then(r => r.json());
+    if (res && res.ok && res.accounts) {
+      switchableAccountsData = res.accounts;
+      renderSwitchableAccounts(switchableAccountsData);
+    } else {
+      if (list) list.innerHTML = '<div class="pill bad center">No switchable accounts available.</div>';
+    }
+  } catch (e) {
+    if (list) list.innerHTML = '<div class="pill bad center">Failed to load accounts.</div>';
+  }
+}
+function closeSwitchAccountModal() {
+  const modal = document.getElementById('switch-account-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderSwitchableAccounts(accs) {
+  const list = document.getElementById('switchable-accounts-list');
+  if (!list) return;
+  if (!accs.length) {
+    list.innerHTML = '<div class="muted small center" style="padding:1rem 0">No matching accounts found.</div>';
+    return;
+  }
+  list.innerHTML = accs.map(a => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:12px;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <div class="user-avatar" style="width:36px;height:36px;font-size:0.95rem;flex-shrink:0">${escapeHTML(a.name.charAt(0).toUpperCase())}</div>
+        <div style="min-width:0">
+          <strong style="display:block;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTML(a.name)}</strong>
+          <span class="muted small" style="display:block;font-size:0.75rem">${escapeHTML(a.emp_code)} &bull; ${escapeHTML(a.department || 'General')} &bull; <span class="badge sm" style="font-size:0.68rem;padding:0 5px">${a.role === 'hr' ? 'HR Admin' : (a.category_name || 'Staff')}</span></span>
+        </div>
+      </div>
+      <button type="button" class="btn sm primary" style="flex-shrink:0" onclick="confirmSwitchToAccount(${a.id}, '${escapeHTML(a.name)}')">Switch &rarr;</button>
+    </div>
+  `).join('');
+}
+
+function filterSwitchableAccounts() {
+  const q = (document.getElementById('switch-account-search')?.value || '').toLowerCase().trim();
+  if (!q) {
+    renderSwitchableAccounts(switchableAccountsData);
+    return;
+  }
+  const filtered = switchableAccountsData.filter(a => 
+    a.name.toLowerCase().includes(q) || a.emp_code.toLowerCase().includes(q) || (a.department && a.department.toLowerCase().includes(q))
+  );
+  renderSwitchableAccounts(filtered);
+}
+
+function confirmSwitchToAccount(id, name) {
+  if (confirm(`Are you sure you want to switch your active session to ${name}?`)) {
+    switchToAccount(id);
+  }
+}
+
+async function switchToAccount(targetId) {
+  try {
+    const res = await postJSON('/auth/switch-account', { target_id: targetId });
+    if (res && res.ok && res.redirect) {
+      window.location.href = res.redirect;
+    } else {
+      alert((res && res.error) || 'Failed to switch account.');
+    }
+  } catch (err) {
+    alert('Failed to connect to server for account switch.');
+  }
+}
+
+// ==========================================
+// Comments Engine (Requirement #9)
+// ==========================================
+async function loadComments(entityType, entityId, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '<div class="muted small" style="padding:0.5rem 0">Loading comments...</div>';
+  try {
+    const res = await fetch(`/api/comments/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`).then(r => r.json());
+    if (res && res.ok && res.comments) {
+      renderCommentsList(res.comments, containerId);
+    } else {
+      container.innerHTML = '<div class="muted small" style="padding:0.5rem 0">No comments yet.</div>';
+    }
+  } catch (e) {
+    container.innerHTML = '<div class="muted small" style="padding:0.5rem 0">Failed to load comments.</div>';
+  }
+}
+
+function renderCommentsList(comments, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (!comments.length) {
+    container.innerHTML = '<div class="muted small" style="padding:0.5rem 0">No comments recorded yet. Add a note or remark below.</div>';
+    return;
+  }
+  container.innerHTML = comments.map(c => `
+    <div class="comment-item" style="padding:8px 12px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:0.75rem">
+        <div>
+          <b style="color:var(--text-main)">${escapeHTML(c.author_name)}</b>
+          <span class="muted">(${escapeHTML(c.author_code)}) &bull; <span class="badge sm" style="font-size:0.65rem;padding:0 5px">${c.author_role === 'hr' ? 'HR' : 'Staff'}</span></span>
+        </div>
+        <span class="muted">${escapeHTML(c.created_at)}</span>
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-main);line-height:1.4">${escapeHTML(c.content)}</div>
+    </div>
+  `).join('');
+}
+
+async function submitComment(e, entityType, entityId, inputId, containerId, statusId) {
+  if (e && e.preventDefault) e.preventDefault();
+  const input = document.getElementById(inputId);
+  const statusEl = statusId ? document.getElementById(statusId) : null;
+  if (!input) return;
+  const content = input.value.trim();
+  if (!content) {
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.className = 'pill bad';
+      statusEl.textContent = 'Please enter comment text before submitting.';
+    }
+    return;
+  }
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.className = 'muted small';
+    statusEl.textContent = 'Posting comment...';
+  }
+  try {
+    const res = await postJSON('/api/comments', { entity_type: entityType, entity_id: entityId, content });
+    if (res && res.ok && res.comment) {
+      input.value = '';
+      if (statusEl) {
+        statusEl.className = 'pill ok';
+        statusEl.textContent = '✓ Comment posted!';
+        setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
+      }
+      loadComments(entityType, entityId, containerId);
+    } else {
+      if (statusEl) {
+        statusEl.className = 'pill bad';
+        statusEl.textContent = (res && res.error) || 'Failed to post comment.';
+      }
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.className = 'pill bad';
+      statusEl.textContent = 'Connection error. Please try again.';
+    }
+  }
+}

@@ -51,25 +51,65 @@
       <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
 
-    <div class="user-chip">
+    <!-- Profile Avatar Trigger -->
+    <div class="user-chip profile-trigger" id="profile-menu-trigger" onclick="toggleProfileMenu(event)" title="Profile & Account Settings" tabindex="0" role="button" aria-haspopup="true">
       <span class="user-avatar" title="{{ g.user['name'] }}">{{ g.user['name'][:1]|upper }}</span>
       <div class="user-info">
         <span class="user-name">{{ g.user['name'] }}</span>
         <span class="user-role-tag {% if g.user['role']=='hr' %}hr-tag{% endif %}">
-          {{ g.user['emp_code'] }} · {{ 'HR' if g.user['role']=='hr' else 'Staff' }}
+          {{ g.user['emp_code'] }} · {{ 'HR' if g.user['role']=='hr' else (g.user['category_name'] or 'Staff') }}
         </span>
       </div>
+      <svg class="profile-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
     </div>
 
-    <div class="user-links">
-      <a href="{{ url_for('auth.change_password') }}" class="nav-action-link" title="Change password">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <span>Password</span>
-      </a>
-      <a href="{{ url_for('auth.logout') }}" class="nav-action-link logout" title="Sign out">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        <span>Logout</span>
-      </a>
+    <!-- Profile Dropdown Menu -->
+    <div class="profile-dropdown-menu" id="profile-dropdown-menu" style="display:none">
+      <div class="profile-menu-header">
+        <div class="profile-avatar-lg">{{ g.user['name'][:1]|upper }}</div>
+        <div class="profile-header-info">
+          <strong class="profile-header-name">{{ g.user['name'] }}</strong>
+          <span class="profile-header-code">ID: <code>{{ g.user['emp_code'] }}</code></span>
+          <span class="profile-header-role badge {% if g.user['role']=='hr' %}b-approved{% else %}b-pending{% endif %}">
+            {{ 'HR Administrator' if g.user['role']=='hr' else (g.user['category_name'] or 'Standard Employee') }}
+          </span>
+          <span class="profile-header-email muted small">{{ g.user['email'] or 'No email registered' }}</span>
+        </div>
+      </div>
+
+      {% if session.get('original_hr_id') and g.user['role'] != 'hr' %}
+      <div class="profile-menu-notice">
+        <span class="small" style="font-weight:700;display:block;margin-bottom:6px">👑 Working in Employee View</span>
+        <button type="button" class="btn sm primary block" onclick="switchToAccount({{ session['original_hr_id'] }})">
+          ↩️ Return to HR Dashboard
+        </button>
+      </div>
+      {% endif %}
+
+      <div class="profile-menu-actions">
+        <button type="button" class="profile-menu-item" onclick="openProfileModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>View Profile</span>
+        </button>
+        <button type="button" class="profile-menu-item" onclick="openEditProfileModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span>Edit Contact Info</span>
+        </button>
+        <button type="button" class="profile-menu-item" onclick="openSwitchAccountModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>
+          <span>Switch Account</span>
+          <span class="badge sm" style="margin-left:auto;font-size:0.68rem;padding:1px 6px">Multi-User</span>
+        </button>
+        <a href="{{ url_for('auth.change_password') }}" class="profile-menu-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>Security &amp; Password</span>
+        </a>
+        <div class="profile-menu-divider"></div>
+        <a href="{{ url_for('auth.logout') }}" class="profile-menu-item danger">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span>Logout Session</span>
+        </a>
+      </div>
     </div>
   </div>
 </header>
@@ -203,19 +243,20 @@
       <span class="quick-title">Quick Questions:</span>
       <div class="quick-chips-scroll">
         {% if g.user['role'] == 'hr' %}
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('How many employees are absent today?')">📋 Absent today?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Show pending OD approvals.')">⏳ Pending OD approvals</button>
         <button type="button" class="ai-chip" onclick="sendAIPrompt('How many employees are present today?')">👥 Present today?</button>
-        <button type="button" class="ai-chip" onclick="sendAIPrompt('Show today\'s absent employees.')">📋 Absent employees?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Show today\'s absent employees.')">📋 Absent employee list</button>
         <button type="button" class="ai-chip" onclick="sendAIPrompt('Who is working right now?')">⏱️ Working right now?</button>
         <button type="button" class="ai-chip" onclick="sendAIPrompt('Who arrived late today?')">⚠️ Late arrivals?</button>
-        <button type="button" class="ai-chip" onclick="sendAIPrompt('How many hours have I worked today?')">⏳ My hours today?</button>
         <button type="button" class="ai-chip" onclick="sendAIPrompt('What are the company attendance rules?')">📌 Attendance rules</button>
         {% else %}
         <button type="button" class="ai-chip" onclick="sendAIPrompt('How many hours have I worked today?')">⏱️ Hours worked today?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('What is my attendance status?')">📋 Attendance status?</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('Show my attendance for this month.')">📅 Monthly attendance</button>
+        <button type="button" class="ai-chip" onclick="sendAIPrompt('What is my current shift?')">🕒 Current shift?</button>
         <button type="button" class="ai-chip" onclick="sendAIPrompt('What time did I punch in and punch out?')">🕒 My punch times?</button>
-        <button type="button" class="ai-chip" onclick="sendAIPrompt('Am I marked Present, Half Day or Absent today?')">📋 Today\'s status?</button>
         <button type="button" class="ai-chip" onclick="sendAIPrompt('How much overtime did I work today?')">⭐ Overtime worked?</button>
-        <button type="button" class="ai-chip" onclick="sendAIPrompt('Show my attendance history for this month.')">📅 Monthly history</button>
-        <button type="button" class="ai-chip" onclick="sendAIPrompt('What is my assigned shift?')">🕒 My shift timings</button>
         <button type="button" class="ai-chip" onclick="sendAIPrompt('What are my leave balances?')">🏖️ Leave balances</button>
         {% endif %}
       </div>
@@ -225,18 +266,124 @@
     <div class="ai-chat-messages" id="ai-chat-messages">
       <div class="ai-msg ai-bot">
         <div class="ai-bubble">
-          Hello <strong>{{ g.user['name'] }}</strong>! 👋 I'm your SBG AI Attendance Assistant. Ask me anything about your punches, work hours, overtime, assigned shift, leaves, or company rules!
+          Hello <strong>{{ g.user['name'] }}</strong>! 👋 I'm your SBG AI Attendance Assistant. Ask me anything about your attendance status, hours worked, shifts, leave approvals, or company policies!
+          <div class="ai-msg-time">Just now</div>
         </div>
       </div>
     </div>
 
     <!-- Input Box -->
     <form class="ai-chat-input-bar" id="ai-chat-form" onsubmit="handleAIChatSubmit(event)">
-      <input type="text" id="ai-user-input" placeholder="Type a question about attendance..." autocomplete="off" required>
+      <textarea id="ai-user-input" placeholder="Ask AI about attendance... (Enter to send, Shift+Enter for newline)" rows="1" required></textarea>
       <button type="submit" class="ai-send-btn" id="ai-send-btn" title="Send question">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </form>
+  </div>
+</div>
+
+<!-- =========================================================================
+     Profile & Account Switcher Modals
+     ========================================================================= -->
+<!-- 1. View Profile Details Modal -->
+<div id="profile-view-modal" class="modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99990;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)">
+  <div class="card" style="max-width:540px;width:100%;max-height:85vh;overflow-y:auto;border-radius:18px;border:1px solid var(--border-default);padding:1.5rem;box-shadow:var(--shadow-pop)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;border-bottom:1px solid var(--border-default);padding-bottom:0.75rem">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="user-avatar" style="width:48px;height:48px;font-size:1.4rem">{{ g.user['name'][:1]|upper }}</div>
+        <div>
+          <h3 style="margin:0;font-size:1.15rem">{{ g.user['name'] }}</h3>
+          <span class="muted small">{{ g.user['emp_code'] }} &bull; {{ g.user['designation'] or ('HR Admin' if g.user['role']=='hr' else 'Staff') }}</span>
+        </div>
+      </div>
+      <button type="button" class="btn sm" onclick="closeProfileModal()">&times;</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.86rem;margin-bottom:1.25rem">
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Role / Portal</span>
+        <b>{{ 'HR Administrator' if g.user['role']=='hr' else 'Employee Portal' }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Workforce Category</span>
+        <b>{{ g.user['category_name'] or 'Standard' }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Assigned Shift</span>
+        <b>{{ g.user['shift_name'] or 'Standard Shift' }} ({{ g.user['start_time'] or '08:00' }}–{{ g.user['end_time'] or '20:00' }})</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Department</span>
+        <b>{{ g.user['department'] or 'General' }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Email Address</span>
+        <b>{{ g.user['email'] or 'Not provided' }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Phone Number</span>
+        <b>{{ g.user['phone'] or 'Not provided' }}</b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Biometric Face Status</span>
+        <b style="color:{% if g.user['face_registered'] %}#10b981{% else %}#f59e0b{% endif %}">
+          {{ '✓ Face ID Enrolled' if g.user['face_registered'] else '⚠️ Setup Needed' }}
+        </b>
+      </div>
+      <div style="padding:10px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-default)">
+        <span class="muted small" style="display:block">Account Status</span>
+        <span class="pill ok" style="font-size:0.75rem">Active &bull; Verified</span>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button type="button" class="btn sm" onclick="closeProfileModal(); openEditProfileModal()">✏️ Edit Contact Info</button>
+      <button type="button" class="btn sm primary" onclick="closeProfileModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Edit Profile Modal -->
+<div id="profile-edit-modal" class="modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99990;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)">
+  <div class="card" style="max-width:440px;width:100%;border-radius:18px;border:1px solid var(--border-default);padding:1.5rem;box-shadow:var(--shadow-pop)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;border-bottom:1px solid var(--border-default);padding-bottom:0.75rem">
+      <h3 style="margin:0;font-size:1.15rem">✏️ Edit Contact Info</h3>
+      <button type="button" class="btn sm" onclick="closeEditProfileModal()">&times;</button>
+    </div>
+    <form id="profile-edit-form" onsubmit="handleEditProfileSubmit(event)">
+      <div class="form-group" style="margin-bottom:1rem">
+        <label for="edit_phone" style="display:block;font-size:0.85rem;margin-bottom:4px;font-weight:600">Mobile Phone Number</label>
+        <input type="tel" id="edit_phone" name="phone" value="{{ g.user['phone'] or '' }}" placeholder="e.g. 9876543210" style="width:100%">
+      </div>
+      <div class="form-group" style="margin-bottom:1.25rem">
+        <label for="edit_email" style="display:block;font-size:0.85rem;margin-bottom:4px;font-weight:600">Email Address</label>
+        <input type="email" id="edit_email" name="email" value="{{ g.user['email'] or '' }}" placeholder="e.g. employee@sribalajigears.com" style="width:100%">
+      </div>
+      <div id="profile-edit-status" style="margin-bottom:1rem;font-size:0.84rem;display:none"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button type="button" class="btn sm" onclick="closeEditProfileModal()">Cancel</button>
+        <button type="submit" class="btn sm primary" id="btn-save-profile">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 3. Switch Account Modal -->
+<div id="switch-account-modal" class="modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99990;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)">
+  <div class="card" style="max-width:540px;width:100%;max-height:85vh;overflow-y:auto;border-radius:18px;border:1px solid var(--border-default);padding:1.5rem;box-shadow:var(--shadow-pop)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;border-bottom:1px solid var(--border-default);padding-bottom:0.75rem">
+      <div>
+        <h3 style="margin:0;font-size:1.15rem">🔄 Switch Account</h3>
+        <span class="muted small">Seamlessly switch into authorised workforce accounts</span>
+      </div>
+      <button type="button" class="btn sm" onclick="closeSwitchAccountModal()">&times;</button>
+    </div>
+
+    <input type="text" id="switch-account-search" placeholder="Search by employee name or code..." oninput="filterSwitchableAccounts()" style="width:100%;margin-bottom:1rem">
+
+    <div id="switchable-accounts-list" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
+      <div class="muted small center" style="padding:1.5rem 0">Loading accounts...</div>
+    </div>
   </div>
 </div>
 

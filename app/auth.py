@@ -2,7 +2,7 @@ import secrets
 import time
 from functools import wraps
 
-from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_db
@@ -147,6 +147,13 @@ def login(login_type=None):
         active_type = "accounts"
     elif active_type not in ("staff", "employee", "contract", "accounts"):
         active_type = "employee"
+
+    if request.method == "GET" and g.user and not current_app.config.get("TESTING"):
+        nxt = request.args.get("next")
+        if nxt and nxt.startswith("/") and not nxt.startswith("//"):
+            if not (g.user["role"] != "hr" and nxt.startswith("/hr")):
+                return redirect(nxt)
+        return redirect(url_for("hr.dashboard" if g.user["role"] == "hr" else "emp.dashboard"))
 
     if request.method == "POST":
         # Form submission specifies login_type; if omitted (e.g. legacy test/API call to /login), check URL
@@ -400,3 +407,140 @@ def onboarding_face():
             return render_template("emp/onboarding_face.html")
 
     return render_template("emp/onboarding_face.html")
+
+
+# =============================================================================
+# Profile Menu & Authorised Account Switching
+# =============================================================================
+@bp.post("/switch-account")
+@login_required
+def switch_account():
+    data = request.get_json(silent=True) or request.form
+    target_id = data.get("target_id") or data.get("emp_id") or data.get("target_emp_id")
+    target_code = (data.get("emp_code") or "").strip().upper()
+
+    db = get_db()
+    is_returning_hr = False
+    if str(target_id).lower() == "hr_return" or target_code == "HR_RETURN":
+        orig_hr_id = session.get("original_hr_id")
+        if not orig_hr_id:
+            return jsonify(ok=False, error="No original HR session found."), 400
+        target = db.execute(
+            "SELECT e.*, c.code category_code FROM employees e "
+            "LEFT JOIN employee_categories c ON c.id=e.category_id "
+            "WHERE e.id=? AND e.active=1", (orig_hr_id,)
+        ).fetchone()
+        is_returning_hr = True
+    elif target_id:
+        target = db.execute(
+            "SELECT e.*, c.code category_code FROM employees e "
+            "LEFT JOIN employee_categories c ON c.id=e.category_id "
+            "WHERE e.id=? AND e.active=1", (target_id,)
+        ).fetchone()
+    elif target_code:
+        target = db.execute(
+            "SELECT e.*, c.code category_code FROM employees e "
+            "LEFT JOIN employee_categories c ON c.id=e.category_id "
+            "WHERE UPPER(e.emp_code)=? AND e.active=1", (target_code,)
+        ).fetchone()
+    else:
+        return jsonify(ok=False, error="Target account ID or code required."), 400
+
+    if not target:
+        return jsonify(ok=False, error="Target account not found or disabled."), 404
+
+    # Authorization enforcement:
+    # 1. HR can switch into any active employee account
+    # 2. An account originally logged in as HR (session['original_hr_id']) can switch back to HR or another account
+    # 3. An employee can switch only into accounts listed in session['authorized_accounts']
+    orig_hr_id = session.get("original_hr_id")
+    is_hr_origin = bool(orig_hr_id or g.user.get("role") == "hr")
+    auth_accounts = session.get("authorized_accounts", [])
+
+    if not is_hr_origin and target["id"] != g.user["id"] and target["id"] not in auth_accounts:
+        abort(403)
+
+    if not orig_hr_id and g.user["role"] == "hr":
+        orig_hr_id = g.user["id"]
+
+    # Clear cached user session data while preserving critical state
+    orig_hr = None if (is_returning_hr or target["role"] == "hr") else orig_hr_id
+    orig_auth = session.get("authorized_accounts", [])
+    csrf_val = session.get("csrf")
+    session.clear()
+
+    session["uid"] = target["id"]
+    session["name"] = target["name"]
+    session["role"] = target["role"]
+    session["category"] = target["category_code"]
+    session["csrf"] = csrf_val or secrets.token_hex(16)
+    if orig_hr:
+        session["original_hr_id"] = orig_hr
+    if orig_auth:
+        session["authorized_accounts"] = orig_auth
+
+    audit("SWITCH_ACCOUNT", "employee", str(target["id"]), actor=g.user, details=f"switched_to={target['emp_code']}")
+
+    dest_url = url_for("hr.dashboard" if target["role"] == "hr" else "emp.dashboard")
+    if request.is_json:
+        return jsonify(ok=True, message=f"Switched account to {target['name']}", redirect=dest_url)
+    flash(f"Switched account to {target['name']} ({target['emp_code']}).", "ok")
+    return redirect(dest_url)
+
+
+@bp.get("/switchable-accounts")
+@login_required
+def switchable_accounts():
+    db = get_db()
+    orig_hr = session.get("original_hr_id")
+    is_hr = g.user["role"] == "hr" or bool(orig_hr)
+    if is_hr:
+        emps = db.execute(
+            "SELECT e.id, e.emp_code, e.name, e.department, e.role, c.name category_name "
+            "FROM employees e "
+            "LEFT JOIN employee_categories c ON c.id=e.category_id "
+            "WHERE e.active=1 "
+            "ORDER BY CASE WHEN e.role='hr' THEN 0 ELSE 1 END, e.name ASC"
+        ).fetchall()
+        return jsonify(ok=True, accounts=[dict(r) for r in emps], is_hr_origin=True)
+    else:
+        auth_ids = session.get("authorized_accounts", [])
+        if not auth_ids:
+            return jsonify(ok=True, accounts=[], is_hr_origin=False)
+        placeholders = ",".join("?" * len(auth_ids))
+        emps = db.execute(
+            f"SELECT e.id, e.emp_code, e.name, e.department, e.role, c.name category_name "
+            f"FROM employees e "
+            f"LEFT JOIN employee_categories c ON c.id=e.category_id "
+            f"WHERE e.id IN ({placeholders}) AND e.active=1",
+            auth_ids
+        ).fetchall()
+        return jsonify(ok=True, accounts=[dict(r) for r in emps], is_hr_origin=False)
+
+
+@bp.post("/update-profile")
+@login_required
+def update_profile():
+    data = request.get_json(silent=True) or request.form
+    phone = (data.get("phone") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    emergency_contact = (data.get("emergency_contact") or "").strip()
+
+    db = get_db()
+    if email and email != (g.user.get("email") or "").lower():
+        existing = db.execute("SELECT id FROM employees WHERE LOWER(email)=? AND id!=?", (email, g.user["id"])).fetchone()
+        if existing:
+            if request.is_json:
+                return jsonify(ok=False, error="Email address already in use by another account."), 400
+            flash("Email address already in use by another account.", "err")
+            return redirect(request.referrer or url_for("auth.index"))
+
+    db.execute("UPDATE employees SET phone=?, email=?, emergency_contact=? WHERE id=?", (phone, email, emergency_contact, g.user["id"]))
+    db.commit()
+    audit("UPDATE_PROFILE", "employee", str(g.user["id"]), details=f"phone={phone}, email={email}, emergency_contact={emergency_contact}")
+
+    if request.is_json:
+        return jsonify(ok=True, message="Profile contact information updated successfully.")
+    flash("Profile contact information updated successfully.", "ok")
+    return redirect(request.referrer or url_for("auth.index"))
+

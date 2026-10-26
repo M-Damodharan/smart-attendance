@@ -113,6 +113,8 @@ def process_ai_query(user, query: str):
     # 1. Company-wide / HR restricted queries
     # -------------------------------------------------------------------------
     is_asking_present_count = any(k in q_clean for k in ["how many employees are present", "how many are present", "employees present today", "present count", "total present today", "who is present", "present employees", "present list"])
+    is_asking_absent_count = any(k in q_clean for k in ["how many employees are absent today", "how many employees are absent", "how many are absent today", "how many are absent", "how many absent", "absent count", "total absent today", "employees absent today"])
+    is_asking_od_pending = any(k in q_clean for k in ["show pending od approvals", "pending od approvals", "pending od", "od approvals", "pending on duty", "pending od requests", "show pending od"])
     is_asking_shift1 = any(k in q_clean for k in ["shift 1 present", "shift 1 list", "who is in shift 1", "shift 1 employees", "shift 1"])
     is_asking_shift2 = any(k in q_clean for k in ["shift 2 present", "shift 2 list", "who is in shift 2", "shift 2 employees", "night shift present", "shift 2"])
     is_asking_absent_list = any(k in q_clean for k in ["show todays absent employees", "show absent employees", "who is absent today", "absent employees today", "absent list", "todays absent"])
@@ -170,6 +172,48 @@ def process_ai_query(user, query: str):
                      f"• **On Duty (OD):** **{len(stats['on_od'])}** employees\n"
                      f"• **Late Arrivals:** **{len(stats['late'])}** employees",
             "type": "hr_stats"
+        }
+
+    if is_asking_absent_count:
+        if role != "hr":
+            return {
+                "reply": "🔒 **Access Restricted:** Company absence figures are restricted to HR administrators.",
+                "type": "restricted"
+            }
+        stats = _get_company_today_stats()
+        abs_cnt = len(stats["absent"])
+        tot = stats["total"]
+        return {
+            "reply": f"📋 **Today's Absence Count ({t.strftime('%A, %d %b %Y')}):**\n\n"
+                     f"• **Absent / Not Checked In:** **{abs_cnt}** of **{tot}** scheduled employees\n"
+                     f"• **Present Today:** **{len(stats['present'])}** employees\n"
+                     f"• **On Approved Leave:** **{len(stats['on_leave'])}** employees\n\n"
+                     f"💡 *Ask “Show today's absent employees” to see the full named list.*",
+            "type": "hr_absent_count"
+        }
+
+    if is_asking_od_pending:
+        if role != "hr":
+            return {
+                "reply": "🔒 **Access Restricted:** On-Duty approval requests are restricted to HR administrators.",
+                "type": "restricted"
+            }
+        pending_ods = db.execute(
+            "SELECT od.*, e.name emp_name, e.emp_code "
+            "FROM od_requests od "
+            "JOIN employees e ON e.id=od.emp_id "
+            "WHERE od.status='Pending' "
+            "ORDER BY od.created_at ASC"
+        ).fetchall()
+        if not pending_ods:
+            return {
+                "reply": "🎉 **No Pending OD Requests:** All employee On-Duty requests have been reviewed and approved or rejected.",
+                "type": "hr_od"
+            }
+        lines = [f"{i+1}. **{od['emp_name']}** (`{od['emp_code']}`) — Date: **{od['od_date']}** | Loc: *{od['location']}* | Reason: {od['purpose'] or 'Official'}" for i, od in enumerate(pending_ods)]
+        return {
+            "reply": f"⏳ **Pending On-Duty (OD) Requests ({len(pending_ods)} Total):**\n\n" + "\n".join(lines),
+            "type": "hr_od"
         }
 
     if is_asking_absent_list:
@@ -283,8 +327,8 @@ def process_ai_query(user, query: str):
                 "type": "punch_times"
             }
 
-    # 2C. "Am I marked Present, Half Day or Absent today?"
-    if any(k in q_clean for k in ["marked present half day or absent", "am i marked present", "am i present today", "am i absent today", "am i half day", "what is my status today", "my status today", "today status"]):
+    # 2C. "What is my attendance status?" / "Am I marked Present, Half Day or Absent today?"
+    if any(k in q_clean for k in ["what is my attendance status", "my attendance status", "attendance status", "marked present half day or absent", "am i marked present", "am i present today", "am i absent today", "am i half day", "what is my status today", "my status today", "today status"]):
         if not rec or not rec["check_in"]:
             cur_hm = now().strftime("%H:%M")
             is_past_end = cur_hm > shift["end_time"] and shift["end_time"] > shift["start_time"]
@@ -337,8 +381,8 @@ def process_ai_query(user, query: str):
                 "type": "overtime"
             }
 
-    # 2E. "Show my attendance history for this month."
-    if any(k in q_clean for k in ["attendance history for this month", "show my attendance history", "attendance this month", "monthly history", "my history this month", "month summary"]):
+    # 2E. "Show my attendance for this month."
+    if any(k in q_clean for k in ["show my attendance for this month", "show my attendance this month", "my attendance for this month", "attendance history for this month", "show my attendance history", "attendance this month", "monthly history", "my history this month", "month summary"]):
         start, end = month_range(t.year, t.month)
         emp_obj = db.execute("SELECT * FROM employees WHERE id=?", (uid,)).fetchone() or user
         reg = build_register([emp_obj], start, end)[uid]
@@ -359,7 +403,7 @@ def process_ai_query(user, query: str):
         }
 
     # 2F. Shift & Schedule queries
-    if any(k in q_clean for k in ["what is my shift", "my shift timings", "my schedule", "shift schedule", "shift change", "working schedule", "which shift", "my shift"]):
+    if any(k in q_clean for k in ["what is my current shift", "my current shift", "current shift", "what is my shift", "my shift timings", "my schedule", "shift schedule", "shift change", "working schedule", "which shift", "my shift"]):
         # Check weekly schedule
         sched = db.execute(
             "SELECT w.*, s.name shift_name, s.start_time, s.end_time FROM weekly_shift_schedules w "
@@ -416,12 +460,12 @@ def process_ai_query(user, query: str):
         "reply": f"Hello {name}! 👋 I am your **SBG Smart Attendance AI Assistant**.\n\n"
                  f"Here are questions you can ask me:\n"
                  f"• *“How many hours have I worked today?”*\n"
+                 f"• *“What is my attendance status?”*\n"
                  f"• *“What time did I punch in and punch out?”*\n"
-                 f"• *“Am I marked Present, Half Day or Absent today?”*\n"
+                 f"• *“Show my attendance for this month.”*\n"
+                 f"• *“What is my current shift?”*\n"
                  f"• *“How much overtime did I work today?”*\n"
-                 f"• *“Show my attendance history for this month.”*\n"
-                 f"• *“What is my assigned shift?”*\n"
-                 + (f"• *“How many employees are present today?”* *(HR only)*\n• *“Show today's absent employees.”* *(HR only)*\n" if role == "hr" else ""),
+                 + (f"• *“How many employees are absent today?”* *(HR only)*\n• *“Show pending OD approvals.”* *(HR only)*\n• *“How many employees are present today?”* *(HR only)*\n" if role == "hr" else ""),
         "type": "help"
     }
 

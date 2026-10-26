@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS employees (
     name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
+    emergency_contact TEXT,
     department TEXT,
     designation TEXT,
     role TEXT NOT NULL DEFAULT 'employee' CHECK (role IN ('employee','hr')),
@@ -237,6 +238,18 @@ CREATE INDEX IF NOT EXISTS idx_ai_alert_date ON ai_face_alerts(date);
 CREATE INDEX IF NOT EXISTS idx_ai_alert_emp ON ai_face_alerts(emp_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_emp ON webauthn_credentials(emp_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_cred ON webauthn_credentials(credential_id);
+
+CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL DEFAULT 'attendance',
+    entity_id INTEGER NOT NULL,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_comments_emp ON comments(emp_id);
 """
 
 
@@ -303,6 +316,8 @@ def init_db(app):
         con.execute("ALTER TABLE employees ADD COLUMN device_name TEXT")
     if "device_registered_at" not in emp_cols:
         con.execute("ALTER TABLE employees ADD COLUMN device_registered_at TEXT")
+    if "emergency_contact" not in emp_cols:
+        con.execute("ALTER TABLE employees ADD COLUMN emergency_contact TEXT")
 
     att_cols = [c[1] for c in con.execute("PRAGMA table_info(attendance)").fetchall()]
     if "shift_id" not in att_cols:

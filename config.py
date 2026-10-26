@@ -32,7 +32,7 @@ class Config:
     ENV_NAME = ENV
     PRODUCTION = PRODUCTION
     DEMO_DATA = os.environ.get("DEMO_DATA", "0" if PRODUCTION else "1") == "1"
-    PERMANENT_SESSION_LIFETIME = 12 * 3600          # auto logout after 12 h
+    PERMANENT_SESSION_LIFETIME = 30 * 24 * 3600     # persistent login for 30 days
     BEHIND_PROXY = os.environ.get("BEHIND_PROXY", "1" if PRODUCTION else "0") == "1"
     LOG_FILE = os.environ.get("LOG_FILE", os.path.join(BASE_DIR, "instance", "app.log"))
 

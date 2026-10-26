@@ -2350,10 +2350,13 @@ body.login-page .wrap {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 1240px;
-  margin: 0 auto;
+  max-width: min(1360px, 94vw);
+  margin: auto;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - 2.5rem);
+  padding: 1rem 0;
 }
 
 /* Outcrowd Floating Glass Topbar */
@@ -2423,15 +2426,17 @@ body.login-page .wrap {
   animation: outcrowdPulsePing 1.8s infinite ease-in-out;
 }
 
-/* Main Outcrowd 2-Column Grid */
+/* Main Outcrowd 2-Column Grid - Auto-Fitted */
 .outcrowd-main-grid {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 2.5rem;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 480px);
+  gap: clamp(1.5rem, 3.5vw, 3.5rem);
   align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .outcrowd-main-grid {
     grid-template-columns: 1fr;
     gap: 2rem;
@@ -3176,4 +3181,247 @@ body.login-page .wrap {
     font-size: 0.64rem;
   }
 }
+
+/* ==========================================================================
+   Dashboard 3D Ambient Background & Compact Hero Stage
+   ========================================================================== */
+.dashboard-3d-wrapper {
+  position: relative;
+  width: 100%;
+}
+.dashboard-3d-wrapper .outcrowd-glow-orb.orb-1 {
+  top: -80px;
+  right: -50px;
+  width: 420px;
+  height: 420px;
+}
+.dashboard-3d-wrapper .outcrowd-glow-orb.orb-2 {
+  top: 360px;
+  left: -80px;
+  width: 380px;
+  height: 380px;
+}
+.dashboard-3d-hero {
+  position: relative;
+  background: var(--hero-gradient);
+  color: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: clamp(1.25rem, 2.5vw, 1.85rem);
+  margin-bottom: 1.35rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(11, 31, 58, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.dashboard-3d-stage-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  perspective: 600px;
+}
+.dashboard-3d-stage-compact .gear-3d-assembly {
+  width: 110px;
+  height: 110px;
+}
+.dashboard-3d-stage-compact .gear-3d-ring.outer {
+  width: 110px;
+  height: 110px;
+}
+.dashboard-3d-stage-compact .gear-3d-ring.middle {
+  width: 82px;
+  height: 82px;
+}
+.dashboard-3d-stage-compact .gear-3d-shield {
+  width: 58px;
+  height: 58px;
+}
+.dashboard-3d-stage-compact .shield-center-core svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ==========================================================================
+   Profile Dropdown Menu & Account Switcher
+   ========================================================================== */
+.profile-trigger {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  transition: all 0.2s ease;
+  position: relative;
+}
+.profile-trigger:hover {
+  background: var(--bg-surface-hover);
+}
+.profile-caret {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+.profile-trigger:focus-within .profile-caret,
+.profile-trigger.active .profile-caret {
+  transform: rotate(180deg);
+}
+
+.profile-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 1.5rem;
+  width: 320px;
+  max-width: calc(100vw - 2rem);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop), 0 20px 45px rgba(0, 0, 0, 0.25);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popIn 0.2s ease-out;
+}
+.profile-menu-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+}
+.profile-avatar-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--brand-accent);
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.profile-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.profile-header-name {
+  font-size: 0.95rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-header-code code {
+  font-size: 0.75rem;
+  color: var(--brand-accent);
+  background: var(--bg-surface-hover);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.profile-header-email {
+  font-size: 0.74rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-menu-notice {
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 10px 14px;
+}
+.profile-menu-actions {
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.profile-menu-item {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  font-size: 0.86rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+.profile-menu-item:hover {
+  background: var(--bg-surface-hover);
+  color: var(--brand-accent);
+}
+.profile-menu-item.danger {
+  color: #ef4444;
+}
+.profile-menu-item.danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+.profile-menu-divider {
+  height: 1px;
+  background: var(--border-default);
+  margin: 4px 6px;
+}
+
+/* ==========================================================================
+   Comments Component Styling (Requirement #9)
+   ========================================================================== */
+.comments-widget {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-default);
+}
+.comments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.comments-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* AI Assistant Textarea Input Expansion */
+.ai-chat-input-bar textarea {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-size: 0.88rem;
+  padding: 6px 4px;
+  font-family: inherit;
+  resize: none;
+  line-height: 1.4;
+  max-height: 100px;
+}
+.ai-msg-time {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-align: right;
+}
+
 
