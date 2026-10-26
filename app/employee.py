@@ -5,7 +5,7 @@ from werkzeug.security import check_password_hash
 
 from .auth import employee_required
 from .db import get_db
-from .services import (audit, build_register, d2s, daterange, get_employee_category,
+from .services import (audit, build_register, create_notification, d2s, daterange, get_employee_category,
                        get_employee_shift_for_date, leave_balance, month_range, now, s2d, today,
                        working_days)
 
@@ -183,6 +183,14 @@ def leave():
                     "INSERT INTO leaves (emp_id, type_id, from_date, to_date, days, half_day, reason) VALUES (?,?,?,?,?,?,?)",
                     (u["id"], type_id, d2s(a), d2s(b), days, half, reason))
                 audit("LEAVE_APPLY", "leave", cur.lastrowid, f"{a}..{b} days={days}")
+                create_notification(
+                    title="New Leave Request",
+                    message=f"{u['name']} ({u['emp_code']}) applied for {days:g} day(s) leave ({a} to {b}): {reason}",
+                    kind="leave",
+                    target_role="hr",
+                    link_url=url_for("hr.approvals", tab="pending"),
+                    db=db
+                )
                 db.commit()
                 flash("Leave request sent to HR.", "ok")
         return redirect(url_for("emp.leave"))
@@ -221,12 +229,20 @@ def od():
                         (u["id"], d2s(d))).fetchone():
             flash("You already have an OD request for that date.", "err")
         else:
-            cur = db.execute(
-                "INSERT INTO od_requests (emp_id, od_date, from_time, to_time, location, purpose) VALUES (?,?,?,?,?,?)",
-                (u["id"], d2s(d), request.form.get("from_time") or None, request.form.get("to_time") or None, loc, purpose))
-            audit("OD_APPLY", "od", cur.lastrowid, f"{d} @ {loc}")
-            db.commit()
-            flash("OD request sent to HR. Once approved you can check in from the field location.", "ok")
+                cur = db.execute(
+                    "INSERT INTO od_requests (emp_id, od_date, from_time, to_time, location, purpose) VALUES (?,?,?,?,?,?)",
+                    (u["id"], d2s(d), request.form.get("from_time") or None, request.form.get("to_time") or None, loc, purpose))
+                audit("OD_APPLY", "od", cur.lastrowid, f"{d} @ {loc}")
+                create_notification(
+                    title="New On-Duty (OD) Request",
+                    message=f"{u['name']} ({u['emp_code']}) requested OD for {d} at {loc}. Purpose: {purpose or 'Field duty'}",
+                    kind="od",
+                    target_role="hr",
+                    link_url=url_for("hr.approvals", tab="pending"),
+                    db=db
+                )
+                db.commit()
+                flash("OD request sent to HR. Once approved you can check in from the field location.", "ok")
         return redirect(url_for("emp.od"))
     rows = db.execute("SELECT * FROM od_requests WHERE emp_id=? ORDER BY id DESC LIMIT 30", (u["id"],)).fetchall()
     return render_template("emp/od.html", rows=rows, today=t)
@@ -270,6 +286,14 @@ def face_change():
             (u["id"], reason)
         )
         audit("FACE_CHANGE_REQUEST", "face_change", cur.lastrowid, f"Employee {u['emp_code']}: {reason}")
+        create_notification(
+            title="New Face Change Request",
+            message=f"{u['name']} ({u['emp_code']}) requested face re-registration. Reason: {reason}",
+            kind="face_change",
+            target_role="hr",
+            link_url=url_for("hr.approvals", tab="pending"),
+            db=db
+        )
         db.commit()
         flash("Face change request submitted successfully. Once HR approves, you will be able to register your new face.", "ok")
         return redirect(url_for("emp.face_change"))
@@ -326,6 +350,14 @@ def permission():
                 (u["id"], d2s(d), perm_type, duration, from_time, to_time, reason)
             )
             audit("PERMISSION_APPLY", "permission", cur.lastrowid, f"{d} {perm_type} {duration}h: {reason}")
+            create_notification(
+                title="New Permission Request",
+                message=f"{u['name']} ({u['emp_code']}) requested {duration:g}h {perm_type} for {d}: {reason}",
+                kind="permission",
+                target_role="hr",
+                link_url=url_for("hr.approvals", tab="pending"),
+                db=db
+            )
             db.commit()
             flash(f"Late Come Permission request ({duration:g} hrs for '{reason}') sent to HR for approval.", "ok")
         return redirect(url_for("emp.permission"))

@@ -687,3 +687,58 @@ def get_comments(entity_type, entity_id):
 
     comments_list = [dict(r) for r in rows]
     return jsonify(ok=True, comments=comments_list)
+
+
+# ------------------------------------------------------------------ Real-Time Notifications & Pop Alerts
+@bp.get("/notifications")
+@login_required
+def get_notifications():
+    db = get_db()
+    role = g.user["role"]
+    uid = g.user["id"]
+
+    unread_count = db.execute(
+        "SELECT COUNT(*) FROM notifications WHERE status='unread' AND (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all')))",
+        (uid, role)
+    ).fetchone()[0]
+
+    rows = db.execute(
+        "SELECT * FROM notifications WHERE (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all'))) "
+        "ORDER BY id DESC LIMIT 25",
+        (uid, role)
+    ).fetchall()
+
+    return jsonify(
+        ok=True,
+        unread_count=unread_count,
+        notifications=[dict(r) for r in rows]
+    )
+
+
+@bp.post("/notifications/read/<int:nid>")
+@login_required
+def mark_notification_read(nid):
+    db = get_db()
+    role = g.user["role"]
+    uid = g.user["id"]
+    db.execute(
+        "UPDATE notifications SET status='read' WHERE id=? AND (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all')))",
+        (nid, uid, role)
+    )
+    db.commit()
+    return jsonify(ok=True)
+
+
+@bp.post("/notifications/read-all")
+@login_required
+def mark_all_notifications_read():
+    db = get_db()
+    role = g.user["role"]
+    uid = g.user["id"]
+    db.execute(
+        "UPDATE notifications SET status='read' WHERE status='unread' AND (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all')))",
+        (uid, role)
+    )
+    db.commit()
+    return jsonify(ok=True)
+

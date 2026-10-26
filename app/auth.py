@@ -413,6 +413,7 @@ def onboarding_face():
 # Profile Menu & Authorised Account Switching
 # =============================================================================
 @bp.post("/switch-account")
+@bp.post("/auth/switch-account")
 @login_required
 def switch_account():
     data = request.get_json(silent=True) or request.form
@@ -489,6 +490,7 @@ def switch_account():
 
 
 @bp.get("/switchable-accounts")
+@bp.get("/auth/switchable-accounts")
 @login_required
 def switchable_accounts():
     db = get_db()
@@ -519,6 +521,7 @@ def switchable_accounts():
 
 
 @bp.post("/update-profile")
+@bp.post("/auth/update-profile")
 @login_required
 def update_profile():
     data = request.get_json(silent=True) or request.form

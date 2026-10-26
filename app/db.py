@@ -250,6 +250,21 @@ CREATE TABLE IF NOT EXISTS comments (
 
 CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_comments_emp ON comments(emp_id);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES employees(id),
+    target_role TEXT,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'info',
+    status TEXT NOT NULL DEFAULT 'unread',
+    link_url TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_notif_role ON notifications(target_role, status);
 """
 
 
@@ -485,6 +500,22 @@ def init_db(app):
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_auto_block_enabled', '1')")
     con.execute("UPDATE system_settings SET value='0.58' WHERE key='face_match_threshold' AND (value='0.75' OR value='0.70')")
     con.execute("UPDATE system_settings SET value='0.60' WHERE key='ai_buddy_punch_block_threshold'")
+
+    con.execute("""
+    CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER REFERENCES employees(id),
+        target_role TEXT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'info',
+        status TEXT NOT NULL DEFAULT 'unread',
+        link_url TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+    );
+    """)
+    con.execute("CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, status);")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_notif_role ON notifications(target_role, status);")
 
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
         _seed_demo(con)

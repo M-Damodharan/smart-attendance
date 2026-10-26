@@ -114,6 +114,21 @@ def audit(action, entity=None, entity_id=None, details=None, actor=None):
     )
 
 
+def create_notification(title: str, message: str, kind: str = "info", user_id: int = None, target_role: str = None, link_url: str = None, db=None):
+    """
+    Creates a notification for a specific employee (user_id) or an entire role (target_role='hr' or 'employee').
+    """
+    if db is None:
+        db = get_db()
+    cur_time = db.execute("SELECT datetime('now', '+5 hours', '+30 minutes')").fetchone()[0]
+    cursor = db.execute(
+        "INSERT INTO notifications (user_id, target_role, title, message, kind, status, link_url, created_at) "
+        "VALUES (?, ?, ?, ?, ?, 'unread', ?, ?)",
+        (user_id, target_role, title, message, kind, link_url, cur_time)
+    )
+    return cursor.lastrowid
+
+
 # ------------------------------------------------------------------ employee categories & shift schedules
 def get_employee_shift_for_date(emp_id: int, d, fallback_shift_id: int = None):
     """Retrieve the effective shift for an employee on a given date, supporting weekly schedules."""

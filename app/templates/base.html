@@ -47,9 +47,41 @@
       <span>Live Sync (IST)</span>
     </span>
     <button type="button" class="theme-toggle-btn" id="theme-toggle" title="Toggle Light / Dark mode" aria-label="Toggle theme">
-      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
       <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
+
+    <!-- Notification Bell Trigger -->
+    <div class="notif-wrapper" style="position:relative;">
+      <button type="button" class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotificationMenu(event)" title="Notifications & Approvals" aria-label="Notifications">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
+      </button>
+
+      <!-- Notification Dropdown Panel -->
+      <div class="notif-dropdown-menu" id="notif-dropdown-menu" style="display:none;">
+        <div class="notif-dropdown-header">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:700;font-size:0.92rem;color:var(--text-main);">Notifications</span>
+            <span class="badge sm b-approved" id="notif-unread-pill" style="display:none;font-size:0.65rem;">0 unread</span>
+          </div>
+          <button type="button" class="notif-mark-all-btn" onclick="markAllNotificationsRead(event)">Mark all read</button>
+        </div>
+        <div class="notif-dropdown-list" id="notif-dropdown-list">
+          <div class="notif-empty-state">Loading notifications...</div>
+        </div>
+        <div class="notif-dropdown-footer">
+          {% if g.user['role'] == 'hr' %}
+          <a href="{{ url_for('hr.approvals') }}" class="notif-footer-link">View All Approvals &rarr;</a>
+          {% else %}
+          <a href="{{ url_for('emp.history') }}" class="notif-footer-link">View Attendance History &rarr;</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
 
     <!-- Profile Avatar Trigger -->
     <div class="user-chip profile-trigger" id="profile-menu-trigger" onclick="toggleProfileMenu(event)" title="Profile & Account Settings" tabindex="0" role="button" aria-haspopup="true">
@@ -393,6 +425,8 @@
     <p class="developer-line">Designed &amp; Developed by <strong>Damodharan</strong> &bull; Full Stack Developer | Mobile Application</p>
   </div>
 </footer>
+<!-- Real-Time Floating Pop Toast Notifications -->
+<div id="notif-toast-container" class="notif-toast-container" aria-live="polite" aria-atomic="true"></div>
 {% endif %}
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>

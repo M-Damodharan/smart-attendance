@@ -140,6 +140,60 @@ class TestRedesignFeatures(unittest.TestCase):
             self.assertEqual(resp_emp.get("type"), "restricted")
             self.assertIn("restricted", resp_emp["reply"].lower())
 
+    def test_06_request_and_approval_notifications(self):
+        """User requests notify HR, and HR approval/rejection notifies the requesting user."""
+        # 1. Employee E001 applies for OD
+        self._login(self.client, "E001", "emp123")
+        res_od = self.client.post("/od", data={
+            "od_date": "2026-10-27",
+            "location": "Client Plant A",
+            "purpose": "Machine Calibration"
+        }, follow_redirects=True)
+        self.assertEqual(res_od.status_code, 200)
+
+        # Verify HR received notification for the new request
+        self._login(self.client, "HR001", "damo12345")
+        res_hr_notif = self.client.get("/api/notifications")
+        self.assertEqual(res_hr_notif.status_code, 200)
+        data_hr = res_hr_notif.get_json()
+        self.assertTrue(data_hr["ok"])
+        self.assertGreaterEqual(data_hr["unread_count"], 1)
+        found_od_notif = any("OD" in n["title"] or "On-Duty" in n["title"] for n in data_hr["notifications"])
+        self.assertTrue(found_od_notif, "HR should receive OD request notification")
+
+        # 2. HR approves the OD request
+        with self.app.app_context():
+            db = get_db()
+            od_row = db.execute("SELECT id FROM od_requests WHERE location='Client Plant A' ORDER BY id DESC").fetchone()
+            self.assertIsNotNone(od_row)
+
+        res_decide = self.client.post(f"/hr/approvals/od/{od_row['id']}", data={
+            "decision": "Approved",
+            "remarks": "Approved for field calibration"
+        }, follow_redirects=True)
+        self.assertEqual(res_decide.status_code, 200)
+
+        # 3. Employee E001 receives the approval notification
+        self._login(self.client, "E001", "emp123")
+        res_emp_notif = self.client.get("/api/notifications")
+        self.assertEqual(res_emp_notif.status_code, 200)
+        data_emp = res_emp_notif.get_json()
+        self.assertTrue(data_emp["ok"])
+        self.assertGreaterEqual(data_emp["unread_count"], 1)
+
+        approved_notif = next((n for n in data_emp["notifications"] if "Approved" in n["title"] and n["kind"] == "od"), None)
+        self.assertIsNotNone(approved_notif, "Employee should receive OD Approved notification")
+        self.assertIn("approved by hr", approved_notif["message"].lower())
+
+        # 4. Mark notification as read
+        res_read = self.client.post(f"/api/notifications/read/{approved_notif['id']}")
+        self.assertEqual(res_read.status_code, 200)
+
+        # Verify read status
+        res_after = self.client.get("/api/notifications")
+        data_after = res_after.get_json()
+        self.assertEqual(data_after["unread_count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

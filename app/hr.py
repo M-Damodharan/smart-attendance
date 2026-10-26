@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash
 from .auth import hr_required
 from .db import get_db
 from .face_engine import register_face_for_employee, reset_face_for_employee
-from .services import (coords_from_maps_link, audit, build_register, d2s, daterange,
+from .services import (coords_from_maps_link, audit, build_register, create_notification, d2s, daterange,
                        finalize_attendance, format_duration, get_employee_category,
                        get_employee_shift_for_date, is_late, month_range, now, parse_dt,
                        resolve_employee_shift, s2d, today, DT_FMT, STATUS_LABELS)
@@ -537,10 +537,40 @@ def decide(kind, rid):
             audit("FACE_CHANGE_APPROVED", "employee", row["emp_id"], f"HR {g.user['emp_code']} approved phone face reset: {remarks}")
         elif kind == "face" and decision == "Rejected":
             audit("FACE_CHANGE_REJECTED", "employee", row["emp_id"], f"HR {g.user['emp_code']} rejected phone face change: {remarks}")
-        else:
-            audit(f"{kind.upper()}_{decision.upper()}", kind, rid, remarks)
-        db.commit()
         label = "Face change" if kind == "face" else ("Late Come Permission" if kind == "permission" else kind.title())
+        icon = "🎉" if decision == "Approved" else "❌"
+        remarks_str = f" HR Remarks: {remarks}" if remarks else ""
+
+        if kind == "face" and decision == "Approved":
+            notif_msg = f"Your Face Change request has been approved by HR! Please proceed to re-register your face template.{remarks_str}"
+            notif_link = url_for("auth.onboarding_face")
+        elif kind == "face":
+            notif_msg = f"Your Face Change request was rejected by HR.{remarks_str}"
+            notif_link = url_for("emp.face_change")
+        elif kind == "leave":
+            notif_msg = f"Your Leave request has been {decision.lower()} by HR.{remarks_str}"
+            notif_link = url_for("emp.leave")
+        elif kind == "od":
+            notif_msg = f"Your On-Duty (OD) request has been {decision.lower()} by HR.{remarks_str}"
+            notif_link = url_for("emp.od")
+        elif kind == "permission":
+            notif_msg = f"Your Late Come Permission request has been {decision.lower()} by HR.{remarks_str}"
+            notif_link = url_for("emp.permission")
+        else:
+            notif_msg = f"Your request has been {decision.lower()} by HR.{remarks_str}"
+            notif_link = url_for("emp.dashboard")
+
+        create_notification(
+            title=f"{icon} {label} Request {decision}",
+            message=notif_msg,
+            kind=kind,
+            user_id=row["emp_id"],
+            target_role="employee",
+            link_url=notif_link,
+            db=db
+        )
+
+        db.commit()
         flash(f"{label} request {decision.lower()}.", "ok")
     return redirect(url_for("hr.approvals", tab=request.args.get("tab", "pending")))
 
