@@ -1,6 +1,8 @@
 """Business rules: geofence, status calculation, register building, audit log."""
 import calendar
 import math
+import time
+import threading
 from datetime import date, datetime, timedelta, timezone
 
 from flask import current_app, request, session
@@ -180,15 +182,43 @@ def determine_shift_from_punch(cin, db=None):
     return shift
 
 
+_CACHE_LOCK = threading.Lock()
+_SHARED_CACHE = {}
+
+
+def get_shared_cache(key: str, ttl: float = 60.0):
+    now_ts = time.time()
+    with _CACHE_LOCK:
+        item = _SHARED_CACHE.get(key)
+        if item and (now_ts - item["ts"] < ttl):
+            return item["data"]
+    return None
+
+
+def set_shared_cache(key: str, data):
+    with _CACHE_LOCK:
+        _SHARED_CACHE[key] = {"data": data, "ts": time.time()}
+
+
+def clear_shared_cache(key: str = None):
+    with _CACHE_LOCK:
+        if key:
+            _SHARED_CACHE.pop(key, None)
+        else:
+            _SHARED_CACHE.clear()
+
+
 def get_all_shifts_cached(db=None):
+    cached = get_shared_cache("shifts", ttl=60.0)
+    if cached is not None:
+        return cached
     db = db or get_db()
-    from flask import g
     try:
-        if "cached_shifts" not in g or not g.cached_shifts:
-            g.cached_shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
-        return g.cached_shifts
+        rows = [dict(r) for r in db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()]
+        set_shared_cache("shifts", rows)
+        return rows
     except Exception:
-        return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+        return [dict(r) for r in db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()]
 
 
 def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback_shift_id=None, emp_obj=None, emp_schedules=None):
@@ -276,14 +306,43 @@ def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback
 
 
 def get_all_categories_cached(db=None):
+    cached = get_shared_cache("categories", ttl=60.0)
+    if cached is not None:
+        return cached
     db = db or get_db()
-    from flask import g
     try:
-        if "cached_categories" not in g or not g.cached_categories:
-            g.cached_categories = db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()
-        return g.cached_categories
+        rows = [dict(r) for r in db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()]
+        set_shared_cache("categories", rows)
+        return rows
     except Exception:
-        return db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()
+        return [dict(r) for r in db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()]
+
+
+def get_all_offices_cached(db=None):
+    cached = get_shared_cache("offices", ttl=60.0)
+    if cached is not None:
+        return cached
+    db = db or get_db()
+    try:
+        rows = [dict(r) for r in db.execute("SELECT * FROM offices WHERE active=1 ORDER BY id").fetchall()]
+        set_shared_cache("offices", rows)
+        return rows
+    except Exception:
+        return [dict(r) for r in db.execute("SELECT * FROM offices WHERE active=1 ORDER BY id").fetchall()]
+
+
+def get_system_settings_cached(db=None):
+    cached = get_shared_cache("system_settings", ttl=60.0)
+    if cached is not None:
+        return cached
+    db = db or get_db()
+    try:
+        rows = db.execute("SELECT key, value FROM system_settings").fetchall()
+        settings = {r["key"]: r["value"] for r in rows if r}
+        set_shared_cache("system_settings", settings)
+        return settings
+    except Exception:
+        return {}
 
 
 def get_employee_category(emp_id, db=None):

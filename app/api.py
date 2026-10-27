@@ -65,16 +65,21 @@ def get_department_office(db, user):
     3. Contract Labour (Contract Operations, Logistics)
     4. Accounts & Finance
     """
+    from .services import get_all_categories_cached, get_all_offices_cached
+    cats = get_all_categories_cached(db)
+    offices = get_all_offices_cached(db)
+
     user_keys = user.keys() if hasattr(user, "keys") else []
     user_dept = (user["department"] if "department" in user_keys and user["department"] else "").strip().lower()
     cat_id = user["category_id"] if "category_id" in user_keys else None
     cat_code = ""
     cat_name = ""
     if cat_id:
-        c = db.execute("SELECT name, code FROM employee_categories WHERE id=?", (cat_id,)).fetchone()
-        if c:
-            cat_name = (c["name"] or "").strip().lower()
-            cat_code = (c["code"] or "").strip().lower()
+        for c in cats:
+            if c["id"] == cat_id:
+                cat_name = (c.get("name") or "").strip().lower()
+                cat_code = (c.get("code") or "").strip().lower()
+                break
 
     target_dept = None
     if "account" in user_dept or "finance" in user_dept or "account" in cat_name or "finance" in cat_name or cat_code == "accounts_finance":
@@ -88,21 +93,20 @@ def get_department_office(db, user):
 
     # 1. Prioritize the department-separated marked location point
     if target_dept:
-        dept_off = db.execute(
-            "SELECT * FROM offices WHERE active=1 AND (LOWER(department)=LOWER(?) OR LOWER(name) LIKE LOWER(?)) ORDER BY id LIMIT 1",
-            (target_dept, f"%{target_dept[:5]}%")
-        ).fetchone()
-        if dept_off:
-            return dept_off
+        t_low = target_dept.lower()
+        t_sub = t_low[:5]
+        for off in offices:
+            if (off.get("department") or "").lower() == t_low or t_sub in (off.get("name") or "").lower():
+                return off
 
     # 2. Check if employee's assigned office is valid and active
     if "office_id" in user_keys and user["office_id"]:
-        off = db.execute("SELECT * FROM offices WHERE id=? AND active=1", (user["office_id"],)).fetchone()
-        if off:
-            return off
+        for off in offices:
+            if off.get("id") == user["office_id"]:
+                return off
 
     # 3. Fallback to first active office
-    return db.execute("SELECT * FROM offices WHERE active=1 ORDER BY id LIMIT 1").fetchone()
+    return offices[0] if offices else None
 
 
 def evaluate_geo(user, lat, lng, acc):
@@ -116,13 +120,9 @@ def evaluate_geo(user, lat, lng, acc):
         return {"ok": False, "error": "Location not available. Enable GPS and try again."}
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         return {"ok": False, "error": "Invalid GPS coordinates."}
-    max_acc = current_app.config["MAX_GPS_ACCURACY_M"]
-    try:
-        row = db.execute("SELECT value FROM system_settings WHERE key='max_gps_accuracy_m'").fetchone()
-        if row and row[0]:
-            max_acc = float(row[0])
-    except Exception:
-        pass
+    from .services import get_system_settings_cached
+    sys_settings = get_system_settings_cached(db)
+    max_acc = float(sys_settings.get("max_gps_accuracy_m") or current_app.config["MAX_GPS_ACCURACY_M"])
 
     if acc > max_acc:
         return {"ok": False, "error": f"GPS accuracy too low (±{int(acc)} m). Move to an open area or ask HR to adjust GPS threshold in Settings."}

@@ -20,8 +20,8 @@ def _get_session() -> requests.Session:
     if _SESSION_POOL is None:
         s = requests.Session()
         adapter = HTTPAdapter(
-            pool_connections=10,
-            pool_maxsize=30,
+            pool_connections=20,
+            pool_maxsize=100,
             max_retries=Retry(total=2, backoff_factor=0.2, status_forcelist=[502, 503, 504])
         )
         s.mount("https://", adapter)

@@ -99,6 +99,8 @@ def create_app(test_config=None):
         dl_dir = os.path.join(app.static_folder, "downloads")
         return send_from_directory(dl_dir, "SBG.apk", as_attachment=True, download_name="SBG.apk", mimetype="application/vnd.android.package-archive")
 
+    import gzip
+
     @app.after_request
     def headers(resp):
         resp.headers["X-Content-Type-Options"] = "nosniff"
@@ -107,6 +109,28 @@ def create_app(test_config=None):
         resp.headers["Permissions-Policy"] = "camera=(self), geolocation=(self)"
         if request.path.startswith("/static/"):
             resp.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
+
+        # Multi-user concurrency optimization: Gzip compression for HTML, JSON, and JS
+        accept_encoding = request.headers.get("Accept-Encoding", "")
+        if (
+            "gzip" in accept_encoding.lower()
+            and 200 <= resp.status_code < 300
+            and "Content-Encoding" not in resp.headers
+            and not getattr(resp, "direct_passthrough", False)
+        ):
+            ctype = resp.headers.get("Content-Type", "").lower()
+            if any(t in ctype for t in ("text/", "application/json", "application/javascript")):
+                try:
+                    data = resp.get_data()
+                    if len(data) >= 500:
+                        compressed = gzip.compress(data, compresslevel=6)
+                        resp.set_data(compressed)
+                        resp.headers["Content-Encoding"] = "gzip"
+                        resp.headers["Content-Length"] = len(compressed)
+                        resp.headers["Vary"] = "Accept-Encoding"
+                except Exception:
+                    pass
+
         return resp
 
     @app.route("/healthz")

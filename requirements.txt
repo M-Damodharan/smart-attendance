@@ -6,3 +6,4 @@ gunicorn>=22.0
 waitress>=3.0
 cryptography>=42.0
 cbor2>=5.6.0
+requests>=2.31.0

@@ -9,8 +9,9 @@ from .auth import hr_required
 from .db import get_db
 from .face_engine import register_face_for_employee, reset_face_for_employee
 from .maintenance import safe_clean_cache, get_cache_status
-from .services import (coords_from_maps_link, audit, build_register, create_notification, d2s, daterange,
-                       finalize_attendance, format_duration, get_employee_category,
+from .services import (coords_from_maps_link, audit, build_register, clear_shared_cache,
+                       create_notification, d2s, daterange,
+                       finalize_attendance, format_duration, get_all_shifts_cached, get_employee_category,
                        get_employee_shift_for_date, is_late, month_range, now, parse_dt,
                        resolve_employee_shift, s2d, today, DT_FMT, STATUS_LABELS)
 
@@ -338,7 +339,14 @@ def attendance():
         d = today()
     emps = _employees()
     reg = build_register(emps, d, d)
-    shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+    shifts = get_all_shifts_cached(db)
+    emp_shift_ids = {}
+    for e in emps:
+        rec = reg[e["id"]]["recs"].get(d)
+        rec_d = dict(rec) if rec else {}
+        eff_shift = resolve_employee_shift(e["id"], d, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"), emp_obj=e)
+        emp_shift_ids[e["id"]] = eff_shift["id"] if eff_shift else e["shift_id"]
+
     groups = []
     total_present = 0
     total_not_in = 0
@@ -346,15 +354,11 @@ def attendance():
     for s in shifts:
         rows = []
         for e in emps:
-            r = reg[e["id"]]
-            rec = r["recs"].get(d)
-            rec_d = dict(rec) if rec else {}
-            eff_shift = resolve_employee_shift(e["id"], d, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"))
-            eff_shift_id = eff_shift["id"] if eff_shift else e["shift_id"]
-
-            if eff_shift_id != s["id"]:
+            if emp_shift_ids.get(e["id"]) != s["id"]:
                 continue
 
+            r = reg[e["id"]]
+            rec = r["recs"].get(d)
             code = r["days"][d]
             is_present = code in ("P", "OT", "HD", "IN", "MP")
             is_not_in = code == "-"
@@ -503,6 +507,7 @@ def bulk_assign_shifts():
         audit("BULK_WEEKLY_SHIFT_ROTATION", "shift", shift_id,
               f"Scheduled {count} employees to {target_shift['name']} from {start_date} to {end_date}")
         db.commit()
+        clear_shared_cache()
         flash(f"Successfully scheduled weekly rotation to '{target_shift['name']}' ({start_date} to {end_date}) for {count} employee(s).", "ok")
 
     else:
@@ -517,6 +522,7 @@ def bulk_assign_shifts():
         audit("BULK_SHIFT_ASSIGNMENT", "shift", shift_id,
               f"Assigned {target_shift['name']} to {count} employees as default shift")
         db.commit()
+        clear_shared_cache()
         flash(f"Successfully updated default shift to '{target_shift['name']}' for {count} employee(s).", "ok")
 
     return redirect(url_for("hr.shifts"))
@@ -893,6 +899,7 @@ def settings():
                 session["maintenance_result"] = res
                 return redirect(url_for("hr.settings") + "#maintenance")
             db.commit()
+            clear_shared_cache()
             flash("Saved successfully.", "ok")
         except (KeyError, ValueError, sqlite3.IntegrityError):
             flash("Please check the values you entered.", "err")
@@ -1131,9 +1138,15 @@ def face_security_audit():
         ORDER BY a.id DESC LIMIT 100
     """).fetchall()
 
-    blocked_count = db.execute("SELECT COUNT(*) FROM employees WHERE active=0 AND block_reason IS NOT NULL").fetchone()[0]
-    total_alerts = db.execute("SELECT COUNT(*) FROM ai_face_alerts").fetchone()[0]
-    resolved_count = db.execute("SELECT COUNT(*) FROM ai_face_alerts WHERE status='RESOLVED_UNLOCKED'").fetchone()[0]
+    audit_counts = db.execute("""
+        SELECT
+            (SELECT COUNT(*) FROM employees WHERE active=0 AND block_reason IS NOT NULL) as blocked_count,
+            (SELECT COUNT(*) FROM ai_face_alerts) as total_alerts,
+            (SELECT COUNT(*) FROM ai_face_alerts WHERE status='RESOLVED_UNLOCKED') as resolved_count
+    """).fetchone()
+    blocked_count = (audit_counts["blocked_count"] if audit_counts else 0) or 0
+    total_alerts = (audit_counts["total_alerts"] if audit_counts else 0) or 0
+    resolved_count = (audit_counts["resolved_count"] if audit_counts else 0) or 0
 
     return render_template(
         "hr/face_security_audit.html",
