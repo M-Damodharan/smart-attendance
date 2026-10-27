@@ -3,115 +3,214 @@
 {% block bodyclass %}login-page{% endblock %}
 {% block content %}
 <div class="login-wrapper">
+  <!-- Top Header Utility Bar -->
   <div class="login-header-tools">
+    <span class="login-header-status-pill">
+      <span class="status-ping"></span>
+      <span>Live Sync (IST)</span>
+    </span>
     <button type="button" class="theme-toggle-btn" id="theme-toggle-login" title="Switch theme" aria-label="Switch theme">
-      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
       <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
   </div>
 
-  <section class="login-card">
-    <div class="login-brand">
-      <div class="brand-badge-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          <path d="M9 12l2 2 4-4"/>
-        </svg>
-      </div>
-      <div class="brand-text">
-        <h1>SBG</h1>
-        <span class="enterprise-tag">SRI BALAJI GEARS &bull; SMART ATTENDANCE</span>
-      </div>
-    </div>
-    <p class="login-subtitle">Secure biometric &amp; GPS verified attendance system</p>
+  <!-- 3D Card Scene & Flipper Container -->
+  <div class="card-3d-scene" id="card3dScene">
+    <div class="card-3d-flipper" id="card3dFlipper">
 
-    <!-- 4-Category Login Architecture Selector -->
-    <div class="login-type-tabs four-tabs">
-      <a href="{{ url_for('auth.login', login_type='staff') }}"
-         class="login-tab-btn {% if active_type == 'staff' %}active{% endif %}">
-        💼 <span>Staff</span>
-      </a>
-      <a href="{{ url_for('auth.login', login_type='employee') }}"
-         class="login-tab-btn {% if active_type == 'employee' %}active{% endif %}">
-        ⚙️ <span>Employee</span>
-      </a>
-      <a href="{{ url_for('auth.login', login_type='contract') }}"
-         class="login-tab-btn {% if active_type == 'contract' %}active{% endif %}">
-        👷 <span>Contract</span>
-      </a>
-      <a href="{{ url_for('auth.login', login_type='accounts') }}"
-         class="login-tab-btn {% if active_type in ('accounts', 'finance', 'accounts_finance') %}active{% endif %}">
-        💳 <span>Accounts</span>
-      </a>
-    </div>
-
-    <div class="login-portal-badge {% if active_type == 'staff' %}badge-staff{% elif active_type == 'contract' %}badge-contract{% elif active_type in ('accounts', 'finance', 'accounts_finance') %}badge-accounts{% else %}badge-employee{% endif %}">
-      {% if active_type == 'staff' %}
-        💼 Staff Portal &bull; Office, HR &amp; Administrative Staff
-      {% elif active_type == 'contract' %}
-        👷 Contract Labour Portal &bull; Third-Party &amp; Contract Workforce
-      {% elif active_type in ('accounts', 'finance', 'accounts_finance') %}
-        💳 Accounts &amp; Finance Portal &bull; Accounting, Billing &amp; Finance Team
-      {% else %}
-        ⚙️ Employee Portal &bull; Regular Production &amp; Technical Staff
-      {% endif %}
-    </div>
-
-    <form method="post" class="stack login-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="login_type" value="{{ active_type or 'employee' }}">
-      <div class="form-group">
-        <label for="emp_code">Employee Code or Email</label>
-        <div class="input-with-icon">
-          <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <input id="emp_code" name="emp_code" autocomplete="username" autocapitalize="characters" required autofocus placeholder="Enter your employee code or email">
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label for="password">Password</label>
-        <div class="input-with-icon">
-          <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input id="password" type="password" name="password" autocomplete="current-password" required placeholder="Enter your password">
-          <button type="button" class="pw-toggle-btn" id="pw-toggle" aria-label="Toggle password visibility" title="Show password">
-            <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            <svg class="eye-closed" style="display:none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+      <!-- ========================================================
+           FRONT FACE: Primary Sign-In Form (Faces User by Default)
+           ======================================================== -->
+      <section class="login-card outcrowd-glass-card card-face card-front" id="loginCardFront" aria-label="Sign In Card">
+        <div class="login-card-top-row">
+          <div class="login-brand">
+            <div class="brand-badge-icon">
+              <img src="{{ url_for('static', filename='img/ai_robot_3d.png') }}" alt="AI Biometric Intelligence" class="login-brand-robot-avatar">
+            </div>
+            <div class="brand-text">
+              <h1>SBG</h1>
+              <span class="enterprise-tag">SRI BALAJI GEARS &bull; SMART ATTENDANCE</span>
+            </div>
+          </div>
+          <button type="button" class="btn-flip-trigger" id="flip-to-back-btn" title="View 3D AI Biometric Architecture & System Specs" aria-label="Platform Info">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>3D AI Specs</span>
           </button>
         </div>
-      </div>
 
-      <button class="btn primary block btn-login" type="submit">
-        <span>Sign in to Dashboard</span>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>
+        <p class="login-subtitle">Secure biometric &amp; GPS verified attendance system</p>
 
-      <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:6px">
-        <a href="{{ url_for('download_apk') }}" class="btn sm" style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--bg-surface);border:1px solid var(--border-default);padding:0.6rem;font-weight:600;border-radius:10px">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-          <span>Android App: Download APK</span>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </a>
-        <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;padding:4px">
-          🍎 <b>iPhone / iOS:</b> Open in Safari &bull; Tap Share <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> &bull; Tap <b>"Add to Home Screen"</b>
+        <!-- 4-Category Login Architecture Selector -->
+        <div class="login-type-tabs four-tabs">
+          <a href="{{ url_for('auth.login', login_type='staff') }}"
+             class="login-tab-btn {% if active_type == 'staff' %}active{% endif %}">
+            💼 <span>Staff</span>
+          </a>
+          <a href="{{ url_for('auth.login', login_type='employee') }}"
+             class="login-tab-btn {% if active_type == 'employee' %}active{% endif %}">
+            ⚙️ <span>Employee</span>
+          </a>
+          <a href="{{ url_for('auth.login', login_type='contract') }}"
+             class="login-tab-btn {% if active_type == 'contract' %}active{% endif %}">
+            👷 <span>Contract</span>
+          </a>
+          <a href="{{ url_for('auth.login', login_type='accounts') }}"
+             class="login-tab-btn {% if active_type in ('accounts', 'finance', 'accounts_finance') %}active{% endif %}">
+            💳 <span>Accounts</span>
+          </a>
         </div>
-      </div>
-    </form>
 
-    <div class="login-footer-credits">
-      <div class="login-footer-security">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <span>Hardware Anti-Spoof Liveness &amp; Geofence Verification</span>
-      </div>
-      <div class="developer-tag">
-        <p class="copy-line">&copy; 2026 <strong>SBG (Sri Balaji Gears)</strong>. All rights reserved.</p>
-        <p class="author-line">Designed &amp; Developed by <strong>Damodharan</strong> &bull; Full Stack Developer | Mobile Application</p>
-      </div>
+        <div class="login-portal-badge {% if active_type == 'staff' %}badge-staff{% elif active_type == 'contract' %}badge-contract{% elif active_type in ('accounts', 'finance', 'accounts_finance') %}badge-accounts{% else %}badge-employee{% endif %}">
+          {% if active_type == 'staff' %}
+            💼 Staff Portal &bull; Office, HR &amp; Administrative Staff
+          {% elif active_type == 'contract' %}
+            👷 Contract Labour Portal &bull; Third-Party &amp; Contract Workforce
+          {% elif active_type in ('accounts', 'finance', 'accounts_finance') %}
+            💳 Accounts &amp; Finance Portal &bull; Accounting, Billing &amp; Finance Team
+          {% else %}
+            ⚙️ Employee Portal &bull; Regular Production &amp; Technical Staff
+          {% endif %}
+        </div>
+
+        <form method="post" class="stack login-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="login_type" value="{{ active_type or 'employee' }}">
+          <div class="form-group">
+            <label for="emp_code">Employee Code or Email</label>
+            <div class="input-with-icon">
+              <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <input id="emp_code" name="emp_code" autocomplete="username" autocapitalize="characters" required autofocus placeholder="Enter your employee code or email">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="password">Password</label>
+            <div class="input-with-icon">
+              <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input id="password" type="password" name="password" autocomplete="current-password" required placeholder="Enter your password">
+              <button type="button" class="pw-toggle-btn" id="pw-toggle" aria-label="Toggle password visibility" title="Show password">
+                <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-closed" style="display:none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <button class="btn primary block btn-login" type="submit">
+            <span>Sign in to Dashboard</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+
+          <div class="login-app-links">
+            <a href="{{ url_for('download_apk') }}" class="btn sm btn-apk-download">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              <span>Android App: Download APK</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </a>
+            <div class="ios-install-hint">
+              🍎 <b>iPhone / iOS:</b> Open in Safari &bull; Tap Share <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> &bull; Tap <b>"Add to Home Screen"</b>
+            </div>
+          </div>
+        </form>
+
+        <div class="login-footer-credits">
+          <div class="login-footer-security">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Hardware Anti-Spoof Liveness &amp; Geofence Verification</span>
+          </div>
+          <div class="developer-tag">
+            <p class="copy-line">&copy; 2026 <strong>SBG (Sri Balaji Gears)</strong>. All rights reserved.</p>
+            <p class="author-line">Designed &amp; Developed by <strong>Damodharan</strong> &bull; Full Stack Developer | Mobile Application</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================
+           BACK FACE: 3D AI Biometric Architecture & System Specs
+           (Aligned Exactly to the Same Center; Visible on Click)
+           ======================================================== -->
+      <section class="login-card outcrowd-glass-card card-face card-back" id="loginCardBack" aria-label="3D AI Architecture Card">
+        <div class="back-card-header">
+          <div class="back-brand-row">
+            <div>
+              <span class="back-badge-tag">AI BIOMETRIC CORE &bull; V2.0</span>
+              <h2 class="back-card-title">Intelligence Architecture</h2>
+            </div>
+            <button type="button" class="btn-flip-back" id="flip-to-front-btn" title="Return to Sign In" aria-label="Return to Sign In">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              <span>Sign In</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3D AI Robot Stage (Perevoz AI SaaS Dribbble Design) -->
+        <div class="back-card-robot-stage">
+          <div class="ai-robot-floating-assembly">
+            <div class="ai-orbit-ring outer"></div>
+            <div class="ai-orbit-ring inner"></div>
+            <div class="ai-robot-sphere">
+              <img src="{{ url_for('static', filename='img/ai_robot_3d.png') }}" alt="AI Biometric Intelligence Core" class="ai-robot-head-img">
+              <div class="ai-robot-glow-backlight"></div>
+            </div>
+          </div>
+          <div class="ai-analysis-badge">
+            <span class="telemetry-dot pulse"></span> AI Biometric Core Active
+          </div>
+        </div>
+
+        <!-- Security & Architecture Specifications Grid -->
+        <div class="back-specs-list">
+          <div class="spec-tile">
+            <span class="spec-icon">🛡️</span>
+            <div class="spec-info">
+              <b>Hardware Anti-Spoof Liveness</b>
+              <span>Deep-texture multi-frame facial verification &bull; Photo &amp; video replay rejection</span>
+            </div>
+          </div>
+
+          <div class="spec-tile">
+            <span class="spec-icon">📍</span>
+            <div class="spec-info">
+              <b>Strict 50m Department Geofencing</b>
+              <span>Autonomous GPS polygon verification with Haversine spherical validation</span>
+            </div>
+          </div>
+
+          <div class="spec-tile">
+            <span class="spec-icon">⚡</span>
+            <div class="spec-info">
+              <b>Zero Buddy-Punching Defense</b>
+              <span>One-Face-to-One-Account cryptographic biometric binding &bull; Auto lock breach alert</span>
+            </div>
+          </div>
+
+          <div class="spec-tile">
+            <span class="spec-icon">👥</span>
+            <div class="spec-info">
+              <b>4-Tier Workforce Architecture</b>
+              <span>Segregated portals: Staff, Production Employees, Contract Labour, and Accounts</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="back-card-footer">
+          <button type="button" class="btn primary block btn-flip-return" id="flip-return-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            <span>Return to Sign In</span>
+          </button>
+          <div class="back-footer-sub">
+            &copy; 2026 Sri Balaji Gears &bull; Engineered by <strong>Damodharan</strong>
+          </div>
+        </div>
+      </section>
+
     </div>
-  </section>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
+  // Password visibility toggle
   const pwInput = document.getElementById('password');
   const pwToggle = document.getElementById('pw-toggle');
   if (pwToggle && pwInput) {
@@ -122,6 +221,31 @@
       pwToggle.querySelector('.eye-closed').style.display = isPw ? 'block' : 'none';
       pwToggle.title = isPw ? 'Hide password' : 'Show password';
     });
+  }
+
+  // 3D Card Flip Animation (Strictly user-initiated, never automatic)
+  const cardScene = document.getElementById('card3dScene');
+  const flipToBackBtn = document.getElementById('flip-to-back-btn');
+  const flipToFrontBtn = document.getElementById('flip-to-front-btn');
+  const flipReturnBtn = document.getElementById('flip-return-btn');
+
+  function flipCard(toBack) {
+    if (!cardScene) return;
+    if (toBack) {
+      cardScene.classList.add('is-flipped');
+    } else {
+      cardScene.classList.remove('is-flipped');
+    }
+  }
+
+  if (flipToBackBtn) {
+    flipToBackBtn.addEventListener('click', () => flipCard(true));
+  }
+  if (flipToFrontBtn) {
+    flipToFrontBtn.addEventListener('click', () => flipCard(false));
+  }
+  if (flipReturnBtn) {
+    flipReturnBtn.addEventListener('click', () => flipCard(false));
   }
 </script>
 {% endblock %}
