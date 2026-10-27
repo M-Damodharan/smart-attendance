@@ -132,6 +132,7 @@ class TestAutoBackupPersistence(unittest.TestCase):
             missing_db = os.path.join(test_dir, "missing.db")
             app_recovery = create_app()
             app_recovery.config["TESTING"] = True
+            app_recovery.config["FORCE_RECOVERY_TEST"] = True
             app_recovery.config["DATABASE"] = missing_db
             app_recovery.config["SELFIE_DIR"] = os.path.join(test_dir, "selfies")
 

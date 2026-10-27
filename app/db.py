@@ -312,7 +312,10 @@ def init_db(app):
     latest_backup_db = os.path.join(BASE_DIR, "backups", "latest", "attendance.db")
     seed_db = os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
 
-    if not os.path.exists(db_file) or os.path.getsize(db_file) == 0:
+    is_test_env = app.config.get("TESTING") or app.config.get("DEMO_DATA")
+    should_auto_restore = (not is_test_env) or app.config.get("FORCE_RECOVERY_TEST")
+
+    if (not os.path.exists(db_file) or os.path.getsize(db_file) == 0) and should_auto_restore:
         if os.path.exists(latest_backup_db) and os.path.getsize(latest_backup_db) > 0:
             try:
                 shutil.copy2(latest_backup_db, db_file)
@@ -327,18 +330,19 @@ def init_db(app):
                 print(f"[setup] Warning: could not restore seed database: {e}")
 
     # Copy seed/backup selfies if missing in target selfie_dir
-    latest_selfies = os.path.join(BASE_DIR, "backups", "latest", "selfies")
-    seed_selfies = os.path.join(BASE_DIR, "app", "seed_data", "selfies")
-    for s_dir in (latest_selfies, seed_selfies):
-        if os.path.exists(s_dir):
-            try:
-                for fname in os.listdir(s_dir):
-                    src_f = os.path.join(s_dir, fname)
-                    dst_f = os.path.join(selfie_dir, fname)
-                    if os.path.isfile(src_f) and not os.path.exists(dst_f):
-                        shutil.copy2(src_f, dst_f)
-            except Exception as e:
-                print(f"[setup] Warning: could not restore selfies from {s_dir}: {e}")
+    if should_auto_restore:
+        latest_selfies = os.path.join(BASE_DIR, "backups", "latest", "selfies")
+        seed_selfies = os.path.join(BASE_DIR, "app", "seed_data", "selfies")
+        for s_dir in (latest_selfies, seed_selfies):
+            if os.path.exists(s_dir):
+                try:
+                    for fname in os.listdir(s_dir):
+                        src_f = os.path.join(s_dir, fname)
+                        dst_f = os.path.join(selfie_dir, fname)
+                        if os.path.isfile(src_f) and not os.path.exists(dst_f):
+                            shutil.copy2(src_f, dst_f)
+                except Exception as e:
+                    print(f"[setup] Warning: could not restore selfies from {s_dir}: {e}")
 
     con = sqlite3.connect(db_file)
     con.execute("PRAGMA journal_mode = WAL")          # concurrent readers while writing
