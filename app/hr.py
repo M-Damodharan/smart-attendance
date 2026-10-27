@@ -17,11 +17,14 @@ from .services import (coords_from_maps_link, audit, build_register, create_noti
 bp = Blueprint("hr", __name__, url_prefix="/hr")
 
 
-def _employees(only_active=True, shift_id=None, dept=None, category_id=None):
+def _employees(only_active=True, shift_id=None, dept=None, category_id=None, include_hr=True):
     q = ("SELECT e.*, s.name shift_name, c.name category_name, c.work_hours category_work_hours, c.code category_code FROM employees e "
          "LEFT JOIN shifts s ON s.id=e.shift_id "
-         "LEFT JOIN employee_categories c ON c.id=e.category_id "
-         "WHERE e.role='employee'")
+         "LEFT JOIN employee_categories c ON c.id=e.category_id ")
+    if not include_hr:
+        q += "WHERE e.role='employee'"
+    else:
+        q += "WHERE e.role IN ('employee', 'hr')"
     args = []
     if only_active:
         q += " AND e.active=1"
@@ -34,7 +37,7 @@ def _employees(only_active=True, shift_id=None, dept=None, category_id=None):
     if category_id:
         q += " AND e.category_id=?"
         args.append(category_id)
-    return get_db().execute(q + " ORDER BY e.emp_code", args).fetchall()
+    return get_db().execute(q + " ORDER BY e.role DESC, e.emp_code", args).fetchall()
 
 
 # ------------------------------------------------------------------ dashboard

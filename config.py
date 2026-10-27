@@ -59,8 +59,8 @@ class Config:
     if DATABASE_URL and (DATABASE_URL.startswith("libsql://") or "turso.io" in DATABASE_URL):
         TURSO_DATABASE_URL = DATABASE_URL
 
-    # Cloud persistence is active in production or when explicitly enabled
-    USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN) if PRODUCTION else (os.environ.get("USE_TURSO") == "1")
+    # Cloud persistence is active whenever Turso cloud credentials are configured
+    USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN) and not (os.environ.get("TESTING") == "1")
 
 
 

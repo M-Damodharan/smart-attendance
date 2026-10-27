@@ -443,6 +443,11 @@ def init_db(app):
     con.execute("UPDATE employee_categories SET code='ACCOUNTS_FINANCE' WHERE name LIKE '%Accounts%' AND (code IS NULL OR code='' OR code='ACCOUNTS')")
     con.execute("UPDATE employee_categories SET half_day_min_hours=2.0 WHERE half_day_min_hours > 2.0")
 
+    # Clean up any leftover test dummy employees and orphaned records
+    con.execute("DELETE FROM employees WHERE emp_code IN ('AUDITEMP01', 'LOCALTEST01', 'TESTGEN01', 'TEST001', 'TEST002')")
+    con.execute("DELETE FROM attendance WHERE emp_id NOT IN (SELECT id FROM employees)")
+    con.execute("DELETE FROM audit_log WHERE entity_id NOT IN (SELECT id FROM employees) AND entity='employee'")
+
     # Ensure Permission leave type exists
     con.execute("INSERT OR IGNORE INTO leave_types (code, name, annual_quota) VALUES ('PERM', 'Permission (Late Come / Early Go)', 24)")
 

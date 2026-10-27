@@ -44,8 +44,8 @@ def employee_required(view):
     @wraps(view)
     @login_required
     def wrapped(*a, **kw):
-        if g.user["role"] != "employee":
-            return redirect(url_for("hr.dashboard"))
+        if g.user["role"] not in ("employee", "hr"):
+            return redirect(url_for("auth.login"))
         return view(*a, **kw)
     return wrapped
 
