@@ -6,7 +6,7 @@ from werkzeug.security import check_password_hash
 from .auth import employee_required
 from .db import get_db
 from .services import (audit, build_register, create_notification, d2s, daterange, get_employee_category,
-                       get_employee_shift_for_date, leave_balance, month_range, now, s2d, today,
+                       get_employee_shift_for_date, get_upcoming_holiday_cached, leave_balance, month_range, now, s2d, today,
                        working_days)
 
 bp = Blueprint("emp", __name__)
@@ -48,7 +48,7 @@ def dashboard():
     """, (u["id"], u["id"], u["id"])).fetchone()
     pend = ((pend_row["pend_l"] if pend_row else 0) or 0) + ((pend_row["pend_o"] if pend_row else 0) or 0) + ((pend_row["pend_p"] if pend_row else 0) or 0)
 
-    holiday = db.execute("SELECT * FROM holidays WHERE date>=? ORDER BY date LIMIT 1", (d2s(t),)).fetchone()
+    holiday = get_upcoming_holiday_cached(db)
     od_today = db.execute("SELECT * FROM od_requests WHERE emp_id=? AND od_date=? AND status='Approved'",
                           (u["id"], d2s(t))).fetchone()
     perm_today = db.execute("SELECT * FROM permission_requests WHERE emp_id=? AND perm_date=? AND status='Approved'",

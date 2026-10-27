@@ -55,7 +55,7 @@ _USER_SESSION_CACHE = {}
 _USER_CACHE_LOCK = threading.Lock()
 
 
-def get_cached_user(uid: int, ttl: float = 8.0):
+def get_cached_user(uid: int, ttl: float = 30.0):
     now_ts = time.time()
     with _USER_CACHE_LOCK:
         item = _USER_SESSION_CACHE.get(uid)
@@ -83,7 +83,7 @@ def load_user():
         return
     uid = session.get("uid")
     if uid:
-        cached_u = get_cached_user(uid, ttl=8.0)
+        cached_u = get_cached_user(uid, ttl=30.0)
         if cached_u:
             g.user = cached_u
             return

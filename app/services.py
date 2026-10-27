@@ -221,6 +221,20 @@ def get_all_shifts_cached(db=None):
         return [dict(r) for r in db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()]
 
 
+def get_upcoming_holiday_cached(db=None):
+    cached = get_shared_cache("upcoming_holiday", ttl=300.0)
+    if cached is not None:
+        return cached
+    db = db or get_db()
+    try:
+        row = db.execute("SELECT * FROM holidays WHERE date>=? ORDER BY date LIMIT 1", (d2s(today()),)).fetchone()
+        row_dict = dict(row) if row else None
+        set_shared_cache("upcoming_holiday", row_dict)
+        return row_dict
+    except Exception:
+        return None
+
+
 def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback_shift_id=None, emp_obj=None, emp_schedules=None):
     """
     Intelligent Shift Allocation Engine with in-memory caching for sub-millisecond execution.

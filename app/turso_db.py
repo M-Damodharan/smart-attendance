@@ -16,10 +16,10 @@ from urllib3.util.retry import Retry
 # Global reusable HTTP Keep-Alive session pool
 _SESSION_POOL = None
 
-# Micro-caching for near-instant repeat query resolution (4.0s TTL)
+# Micro-caching for near-instant repeat query resolution (30.0s TTL)
 _READ_CACHE_LOCK = threading.Lock()
 _READ_CACHE = {}
-_READ_CACHE_TTL = 4.0  # seconds
+_READ_CACHE_TTL = 30.0  # seconds
 
 
 def clear_turso_cache():

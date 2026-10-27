@@ -4239,4 +4239,34 @@ table.grid th.wo { color: var(--status-a); }
   }
 }
 
+/* ==========================================================================
+   Instant Navigation Bar & Page Transition Styles
+   ========================================================================== */
+#instant-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #10b981, #06b6d4, #2563eb);
+  z-index: 9999999;
+  width: 0%;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.85);
+  transition: width 0.18s cubic-bezier(0.1, 0.9, 0.2, 1), opacity 0.2s ease;
+}
+
+#instant-progress-bar.active {
+  opacity: 1;
+}
+
+main.wrap {
+  transition: opacity 0.12s ease-in-out;
+}
+
+main.wrap.instant-loading {
+  opacity: 0.65;
+}
+
+
 

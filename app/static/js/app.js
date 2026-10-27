@@ -651,3 +651,230 @@ if (document.readyState === 'loading') {
   fetchNotifications(false);
   setInterval(() => fetchNotifications(false), 12000);
 }
+
+// ==========================================================================
+// Instant Navigation & Link Prefetching Engine (Sub-Millisecond Page Clicks)
+// ==========================================================================
+(function() {
+  const prefetchCache = new Map();
+  let progressBar = null;
+  let progressTimer = null;
+
+  function getProgressBar() {
+    if (!progressBar) {
+      progressBar = document.getElementById('instant-progress-bar');
+      if (!progressBar) {
+        progressBar = document.createElement('div');
+        progressBar.id = 'instant-progress-bar';
+        document.body.appendChild(progressBar);
+      }
+    }
+    return progressBar;
+  }
+
+  function startProgress() {
+    const bar = getProgressBar();
+    if (progressTimer) clearInterval(progressTimer);
+    bar.classList.add('active');
+    bar.style.width = '25%';
+
+    let w = 25;
+    progressTimer = setInterval(() => {
+      w += (90 - w) * 0.2;
+      bar.style.width = `${Math.min(w, 88)}%`;
+    }, 100);
+  }
+
+  function finishProgress() {
+    const bar = getProgressBar();
+    if (progressTimer) {
+      clearInterval(progressTimer);
+      progressTimer = null;
+    }
+    bar.style.width = '100%';
+    setTimeout(() => {
+      bar.classList.remove('active');
+      setTimeout(() => {
+        bar.style.width = '0%';
+      }, 200);
+    }, 150);
+  }
+
+  function isValidPrefetchUrl(urlStr) {
+    if (!urlStr || urlStr.startsWith('#') || urlStr.startsWith('javascript:') || urlStr.startsWith('tel:') || urlStr.startsWith('mailto:')) {
+      return false;
+    }
+    try {
+      const u = new URL(urlStr, window.location.origin);
+      if (u.origin !== window.location.origin) return false;
+      const p = u.pathname;
+      if (p.startsWith('/logout') || p.startsWith('/login') || p.includes('/download') || p.includes('/api/') || p === '/change-password') {
+        return false;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function prefetchUrl(urlStr) {
+    if (!isValidPrefetchUrl(urlStr)) return;
+    try {
+      const u = new URL(urlStr, window.location.origin);
+      const cleanUrl = u.pathname + u.search;
+      if (cleanUrl === window.location.pathname + window.location.search) return;
+
+      const cached = prefetchCache.get(cleanUrl);
+      if (cached && (Date.now() - cached.ts < 30000)) return;
+
+      const fetchPromise = fetch(cleanUrl, {
+        priority: 'low',
+        headers: { 'X-Requested-With': 'InstantNav' }
+      }).then(r => r.ok ? r.text() : null).catch(() => null);
+
+      prefetchCache.set(cleanUrl, { promise: fetchPromise, ts: Date.now() });
+    } catch (e) {}
+  }
+
+  // Pre-warm primary navigation links 800ms after initial page load
+  function prewarmNav() {
+    document.querySelectorAll('nav.nav a[href], .brand[href]').forEach(a => {
+      prefetchUrl(a.getAttribute('href'));
+    });
+  }
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(prewarmNav, { timeout: 2500 });
+  } else {
+    setTimeout(prewarmNav, 900);
+  }
+
+  // Prefetch on hover (desktop) or touchstart (mobile / Android WebView)
+  document.addEventListener('pointerenter', function(e) {
+    const a = e.target.closest('a');
+    if (a && a.href) prefetchUrl(a.getAttribute('href'));
+  }, true);
+
+  document.addEventListener('touchstart', function(e) {
+    const a = e.target.closest('a');
+    if (a && a.href) prefetchUrl(a.getAttribute('href'));
+  }, { passive: true, capture: true });
+
+  // Instant SPA Navigation
+  async function navigateInstant(url, push = true) {
+    startProgress();
+    const mainWrap = document.querySelector('main.wrap');
+    if (mainWrap) mainWrap.classList.add('instant-loading');
+
+    const u = new URL(url, window.location.origin);
+    const cleanUrl = u.pathname + u.search;
+
+    let html = null;
+    const cached = prefetchCache.get(cleanUrl);
+    if (cached && (Date.now() - cached.ts < 30000)) {
+      html = await cached.promise;
+    }
+
+    if (!html) {
+      try {
+        const resp = await fetch(cleanUrl, { headers: { 'X-Requested-With': 'InstantNav' } });
+        if (!resp.ok) {
+          window.location.href = url;
+          return;
+        }
+        html = await resp.text();
+      } catch (err) {
+        window.location.href = url;
+        return;
+      }
+    }
+
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const newMain = doc.querySelector('main.wrap');
+      const oldMain = document.querySelector('main.wrap');
+
+      if (!newMain || !oldMain) {
+        window.location.href = url;
+        return;
+      }
+
+      // Update content and title
+      oldMain.innerHTML = newMain.innerHTML;
+      oldMain.className = newMain.className;
+      document.title = doc.title;
+
+      // Update active navigation state
+      const currentPath = u.pathname;
+      document.querySelectorAll('nav.nav a').forEach(a => {
+        const aHref = a.getAttribute('href');
+        if (aHref) {
+          const aPath = new URL(aHref, window.location.origin).pathname;
+          if (aPath === currentPath) {
+            a.classList.add('on');
+          } else {
+            a.classList.remove('on');
+          }
+        }
+      });
+
+      if (push) {
+        window.history.pushState({ url }, '', url);
+      }
+
+      window.scrollTo({ top: 0, behavior: 'instant' });
+
+      // Run any page-specific inline scripts in new content
+      newMain.querySelectorAll('script').forEach(s => {
+        const scr = document.createElement('script');
+        if (s.src) {
+          scr.src = s.src;
+        } else {
+          scr.textContent = s.textContent;
+        }
+        document.body.appendChild(scr);
+      });
+
+      // Reinitialize theme toggle & dynamic components
+      initTheme();
+      if (typeof fetchNotifications === 'function') fetchNotifications(false);
+
+      if (mainWrap) mainWrap.classList.remove('instant-loading');
+      finishProgress();
+    } catch (e) {
+      window.location.href = url;
+    }
+  }
+
+  // Intercept clicks on links for instant response
+  document.addEventListener('click', function(e) {
+    const link = e.target.closest('a');
+    if (!link || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (link.getAttribute('target') || link.getAttribute('download') !== null) return;
+
+    const href = link.getAttribute('href');
+    if (!isValidPrefetchUrl(href)) return;
+
+    const targetUrl = new URL(href, window.location.origin);
+
+    // Let hardware/biometric camera pages navigate natively with immediate visual feedback
+    if (targetUrl.pathname === '/punch' || targetUrl.pathname === '/face-change' || targetUrl.pathname.includes('/onboarding-face')) {
+      startProgress();
+      return;
+    }
+
+    e.preventDefault();
+    navigateInstant(targetUrl.href);
+  });
+
+  // Handle browser Back / Forward navigation
+  window.addEventListener('popstate', function(e) {
+    if (e.state && e.state.url) {
+      navigateInstant(e.state.url, false);
+    } else {
+      navigateInstant(window.location.href, false);
+    }
+  });
+})();
+
