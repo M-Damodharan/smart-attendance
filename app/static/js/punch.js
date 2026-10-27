@@ -167,13 +167,13 @@
 
       let reason = 'OK';
       if (isBacklit) {
-        reason = 'Face not clear: Face is in deep shadow or backlit. Facial features are not visible. Please face the light and try again.';
+        reason = 'Face not clear: Face is in deep shadow or backlit. Facial features are not visible. Please go to a brighter place and face the light directly, then try again.';
       } else if (isShadowed || isTooDark) {
-        reason = 'Face not clear: Face is too dark or in shadow (brightness: ' + Math.round(faceMean) + '/255). Please ensure good lighting and try again.';
+        reason = 'Face not clear: Face is too dark or in shadow (brightness: ' + Math.round(faceMean) + '/255). Please go to a brighter place with good lighting, and try again.';
       } else if (isBlank) {
-        reason = 'Face not clear: Camera screen is blank. No facial features visible.';
+        reason = 'Face not clear: Camera screen is blank. Please go to a brighter place, face the camera, and try again.';
       } else if (isBlurry) {
-        reason = 'Face not clear: Photo is blurry or out of focus. Please hold phone steady.';
+        reason = 'Face not clear: Photo is blurry or out of focus. Please go to a brighter place, hold phone steady, and try again.';
       }
 
       return { isClear, isTooDark, isBlank, isBlurry, mean, faceMean, bgMean, stdDev, sharpness, reason };
@@ -187,7 +187,10 @@
     const msgEl = $('face-not-clear-msg');
     if (modal) {
       if (msgEl && msg) {
-        msgEl.innerHTML = `<b>${msg}</b><br><span style="font-size:0.84rem;color:var(--text-muted);display:block;margin-top:6px">Attendance punch was NOT recorded. Please position your face clearly in bright light and try again.</span>`;
+        const cleanMsg = msg.replace(/^Face not clear:\s*/i, '');
+        msgEl.innerHTML = `<span style="font-size:1.02rem;font-weight:800;color:#ef4444;display:block;margin-bottom:6px">⚠️ ${cleanMsg}</span>` +
+          `<b style="font-size:0.96rem;color:var(--text-main);display:block;margin-bottom:4px">Please go to a brighter place with good lighting.</b>` +
+          `<div style="color:var(--text-muted);font-size:0.83rem">Attendance punch was NOT recorded.</div>`;
       }
       modal.style.display = 'flex';
     }
@@ -342,7 +345,8 @@
     } catch (e) {
       promptEl.textContent = '';
       countEl.textContent = '';
-      if (e.face_not_clear || (e.message && (e.message.toLowerCase().includes('face not clear') || e.message.toLowerCase().includes('black or too dark') || e.message.toLowerCase().includes('blurry')))) {
+      const lowerErr = (e.message || '').toLowerCase();
+      if (e.face_not_clear || lowerErr.includes('face not clear') || lowerErr.includes('black or too dark') || lowerErr.includes('blurry') || lowerErr.includes('brighter place') || lowerErr.includes('shadow') || lowerErr.includes('backlit') || lowerErr.includes('lighting')) {
         showFaceNotClearModal(e.message);
       }
       result.className = 'result bad';

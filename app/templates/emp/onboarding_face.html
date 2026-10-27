@@ -120,6 +120,32 @@
       🛡️ Bank-Grade Biometric Vector Defense &bull; Strict One Face, One Employee Account
     </div>
   </div>
+
+  <!-- Face Not Clear / Go to Brighter Place Pop-up Modal -->
+  <div id="face-not-clear-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:99999;align-items:center;justify-content:center;padding:1.25rem;backdrop-filter:blur(10px)">
+    <div style="background:var(--bg-card);border:2.5px solid #ef4444;border-radius:24px;max-width:420px;width:100%;padding:1.85rem;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,0.6), 0 0 35px rgba(239,68,68,0.25), inset 0 1px 0 rgba(255,255,255,0.18);color:var(--text-main);animation:popIn 0.25s ease-out">
+      <div style="width:76px;height:76px;margin:0 auto 14px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;font-size:2.5rem;border:2px solid #ef4444;box-shadow:0 0 24px rgba(239,68,68,0.4)">
+        ☀️
+      </div>
+      <h3 id="face-not-clear-title" style="margin:0 0 8px;font-size:1.35rem;color:#ef4444;font-weight:800;letter-spacing:-0.01em">Face Not Clear</h3>
+      <div id="face-not-clear-msg" style="margin:0 0 16px;font-size:0.92rem;line-height:1.5;color:var(--text-main)">
+        <span style="font-size:1.02rem;font-weight:800;color:#ef4444;display:block;margin-bottom:6px">⚠️ Lighting is too dark or face in shadow</span>
+        <b>Please go to a brighter place with good lighting.</b>
+        <div style="color:var(--text-muted);font-size:0.82rem;margin-top:6px">Face registration requires clear facial lighting.</div>
+      </div>
+
+      <div style="background:rgba(239,68,68,0.08);border:1px dashed rgba(239,68,68,0.45);border-radius:14px;padding:12px 14px;margin-bottom:18px;font-size:0.86rem;text-align:left;color:var(--text-secondary);line-height:1.55">
+        <div style="font-weight:800;color:#ef4444;margin-bottom:6px;font-size:0.9rem">💡 How to fix:</div>
+        <div>☀️ <b>Go to a brighter place:</b> Move under room lights or face towards natural sunlight.</div>
+        <div>👤 <b>Face the light directly:</b> Avoid having lights or bright windows behind you.</div>
+        <div>📸 <b>Uncover camera:</b> Clean your camera lens and hold your phone steady.</div>
+      </div>
+
+      <button type="button" id="btn-face-try-again" class="btn primary big block" style="font-weight:800;background:linear-gradient(180deg,#ef4444 0%,#dc2626 100%);border-color:#ef4444;box-shadow:0 4px 0 #991b1b,0 8px 20px rgba(239,68,68,0.4);padding:0.85rem 1rem;font-size:1rem;border-radius:12px">
+        🔄 Go to Brighter Place &amp; Try Again
+      </button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -132,6 +158,72 @@
   const camStatus = document.getElementById('camStatus');
   const submitBtn = document.getElementById('submitBtn');
   const valAlert = document.getElementById('validationAlert');
+  const modal = document.getElementById('face-not-clear-modal');
+  const btnTryAgain = document.getElementById('btn-face-try-again');
+
+  if (btnTryAgain && modal) {
+    btnTryAgain.addEventListener('click', () => {
+      modal.style.display = 'none';
+      if (video && video.paused) {
+        try { video.play(); } catch(e){}
+      }
+    });
+  }
+
+  function showFaceNotClearModal(msg) {
+    if (modal) {
+      const msgEl = document.getElementById('face-not-clear-msg');
+      if (msgEl && msg) {
+        const cleanMsg = msg.replace(/^Face not clear:\s*/i, '');
+        msgEl.innerHTML = `<span style="font-size:1.02rem;font-weight:800;color:#ef4444;display:block;margin-bottom:6px">⚠️ ${cleanMsg}</span>` +
+          `<b style="font-size:0.96rem;color:var(--text-main);display:block;margin-bottom:4px">Please go to a brighter place with good lighting.</b>` +
+          `<div style="color:var(--text-muted);font-size:0.83rem">Face registration requires clear facial lighting.</div>`;
+      }
+      modal.style.display = 'flex';
+    }
+  }
+
+  function checkCanvasClarity(c) {
+    try {
+      const ctx = c.getContext('2d');
+      const w = c.width, h = c.height;
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const d = imgData.data;
+
+      let sum = 0, sumSq = 0, count = 0;
+      for (let i = 0; i < d.length; i += 16) {
+        const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        sum += lum;
+        sumSq += lum * lum;
+        count++;
+      }
+      const mean = count > 0 ? (sum / count) : 0;
+      const variance = count > 0 ? (sumSq / count - mean * mean) : 0;
+      const stdDev = Math.sqrt(Math.max(0, variance));
+
+      let faceSum = 0, faceCount = 0;
+      const xMin = Math.floor(w * 0.35), xMax = Math.floor(w * 0.65);
+      const yMin = Math.floor(h * 0.25), yMax = Math.floor(h * 0.65);
+      for (let y = yMin; y < yMax; y += 4) {
+        for (let x = xMin; x < xMax; x += 4) {
+          const idx = (y * w + x) * 4;
+          faceSum += 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+          faceCount++;
+        }
+      }
+      const faceMean = faceCount > 0 ? (faceSum / faceCount) : mean;
+
+      if (mean < 16.0 || faceMean < 22.0) {
+        return { isClear: false, reason: 'Face not clear: Face is too dark or in shadow (brightness: ' + Math.round(faceMean) + '/255). Please go to a brighter place with good lighting and try again.' };
+      }
+      if (stdDev < 6.0) {
+        return { isClear: false, reason: 'Face not clear: Camera screen is blank. Please go to a brighter place, face the camera, and try again.' };
+      }
+      return { isClear: true };
+    } catch(e) {
+      return { isClear: true };
+    }
+  }
 
   const inPhoto1 = document.getElementById('face_camera_photo1');
   const inPhoto2 = document.getElementById('face_camera_photo2');
@@ -171,7 +263,6 @@
     slotData[slot] = dataUrl;
     const preview = document.getElementById('imgPreview' + slot);
     const placeholder = document.getElementById('textPlaceholder' + slot);
-    const badge = document.getElementById('badgePhoto1');
     const card = document.getElementById('cardPhoto' + slot);
 
     preview.src = dataUrl;
@@ -202,6 +293,13 @@
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const clarity = checkCanvasClarity(canvas);
+    if (!clarity.isClear) {
+      showFaceNotClearModal(clarity.reason);
+      return;
+    }
+
     const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
     setSlotImage(slot, dataUrl);
   };
@@ -236,13 +334,39 @@
 
     const reader = new FileReader();
     reader.onload = function(e) {
-      setSlotImage(slot, e.target.result);
+      const tempImg = new Image();
+      tempImg.onload = function() {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = tempImg.naturalWidth || 640;
+        tempCanvas.height = tempImg.naturalHeight || 480;
+        const tCtx = tempCanvas.getContext('2d');
+        tCtx.drawImage(tempImg, 0, 0, tempCanvas.width, tempCanvas.height);
+        const clarity = checkCanvasClarity(tempCanvas);
+        if (!clarity.isClear) {
+          showFaceNotClearModal(clarity.reason);
+          inputEl.value = '';
+          return;
+        }
+        setSlotImage(slot, e.target.result);
+      };
+      tempImg.src = e.target.result;
     };
     reader.onerror = function() {
       alert('Failed to read image file. Please retry.');
     };
     reader.readAsDataURL(file);
   };
+
+  // Inspect page for flash messages related to face clarity on load
+  document.addEventListener('DOMContentLoaded', () => {
+    const flashEls = document.querySelectorAll('.flash.err, .flash.bad, .alert-danger');
+    flashEls.forEach(el => {
+      const txt = (el.textContent || '').toLowerCase();
+      if (txt.includes('face not clear') || txt.includes('too dark') || txt.includes('shadow') || txt.includes('brighter place')) {
+        showFaceNotClearModal(el.textContent.trim());
+      }
+    });
+  });
 
   // 1-Tap Native Phone Face ID Binding
   const btnEnrollPhoneFaceId = document.getElementById('btnEnrollPhoneFaceId');
