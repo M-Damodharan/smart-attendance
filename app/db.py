@@ -270,10 +270,18 @@ CREATE INDEX IF NOT EXISTS idx_notif_role ON notifications(target_role, status);
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DATABASE"])
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
-        g.db.execute("PRAGMA busy_timeout = 8000")
+        use_turso = current_app.config.get("USE_TURSO") and not current_app.config.get("TESTING")
+        if use_turso:
+            from app.turso_db import connect_turso
+            g.db = connect_turso(
+                current_app.config["TURSO_DATABASE_URL"],
+                current_app.config["TURSO_AUTH_TOKEN"]
+            )
+        else:
+            g.db = sqlite3.connect(current_app.config["DATABASE"])
+            g.db.row_factory = sqlite3.Row
+            g.db.execute("PRAGMA foreign_keys = ON")
+            g.db.execute("PRAGMA busy_timeout = 8000")
     return g.db
 
 
@@ -281,6 +289,7 @@ def close_db(_exc=None):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+
 
 
 def _seed_categories(con):
@@ -314,6 +323,16 @@ def init_db(app):
 
     is_test_env = app.config.get("TESTING") or app.config.get("DEMO_DATA")
     should_auto_restore = (not is_test_env) or app.config.get("FORCE_RECOVERY_TEST")
+
+    if app.config.get("USE_TURSO") and not is_test_env:
+        try:
+            from app.turso_db import connect_turso
+            t_db = connect_turso(app.config["TURSO_DATABASE_URL"], app.config["TURSO_AUTH_TOKEN"])
+            cnt = t_db.execute("SELECT COUNT(*) FROM employees").fetchone()
+            print(f"[setup] Connected to 24/7 Turso Cloud Database: {cnt[0]} active employees online.")
+        except Exception as e:
+            print(f"[setup] Warning checking Turso Cloud connection: {e}")
+
 
     if (not os.path.exists(db_file) or os.path.getsize(db_file) == 0) and should_auto_restore:
         if os.path.exists(latest_backup_db) and os.path.getsize(latest_backup_db) > 0:

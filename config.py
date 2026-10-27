@@ -47,6 +47,18 @@ class Config:
     # ---- Storage --------------------------------------------------------
     DATABASE = os.environ.get("DATABASE", os.path.join(BASE_DIR, "instance", "attendance.db"))
     SELFIE_DIR = os.environ.get("SELFIE_DIR", os.path.join(BASE_DIR, "instance", "selfies"))
+    TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "sbg-attendance-m-damodharan.aws-ap-south-1.turso.io" if PRODUCTION else None)
+    TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+    if not TURSO_AUTH_TOKEN:
+        token_file = os.path.join(BASE_DIR, "instance", ".turso_token")
+        if os.path.exists(token_file):
+            try:
+                with open(token_file, "r") as f:
+                    TURSO_AUTH_TOKEN = f.read().strip()
+            except Exception:
+                pass
+    USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
+
 
     # ---- Attendance rules -----------------------------------------------
     WEEKLY_OFF = (6,)            # Monday=0 ... Sunday=6

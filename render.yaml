@@ -17,3 +17,8 @@ services:
         value: "damo12345"
       - key: WEB_CONCURRENCY
         value: "2"
+      - key: TURSO_DATABASE_URL
+        value: "sbg-attendance-m-damodharan.aws-ap-south-1.turso.io"
+      - key: TURSO_AUTH_TOKEN
+        value: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMwODYwOTcsImlkIjoiMDFhMTdjNDItNDEwMS03ZjA0LWE2OWUtODgyYTgyYjRiYTQ3Iiwia2lkIjoiOE5CcW9uNmNDMmZHR1ZMM2NLZ3FNd2pqZzd6NWJOaWFUTGRaei0tTlZXWSIsInJpZCI6IjI3OGU4NGU1LTliNmMtNDU5NC1hYjJkLTcxM2VlYjU5ZjZmZSJ9.dplC14DykiOUJ12lI07b6owuv3pdxGmyMRK_nedKJbSGXzcjePrXJtT6N-8c2U1yO7b3hcNclZ569nbkiMkiAA"
+
