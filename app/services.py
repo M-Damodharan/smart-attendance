@@ -562,7 +562,7 @@ def build_register(emp_rows, start: date, end: date):
     t = today()
     result = {}
     for emp in emp_rows:
-        days, recs = {}, {}
+        days, recs, shifts = {}, {}, {}
         summ = dict.fromkeys(["P", "OT", "HD", "A", "L", "HL", "OD", "H", "WO", "MP", "IN", "late", "hours", "ot_hours"], 0)
         emp_dict = dict(emp) if emp else {}
         joined = s2d(emp_dict["joined_on"]) if emp_dict.get("joined_on") else date(2000, 1, 1)
@@ -577,6 +577,7 @@ def build_register(emp_rows, start: date, end: date):
                 emp_obj=emp_dict,
                 emp_schedules=emp_scheds
             )
+            shifts[d] = shift
             code = day_code(d, rec, leave_map.get(k), ods.get(k), hols.get(d2s(d)), t, joined, shift)
             days[d] = code
             if rec:
@@ -591,7 +592,7 @@ def build_register(emp_rows, start: date, end: date):
         # Payable days: worked + paid leave/OD/holiday/weekly-off, half-days count 0.5
         summ["payable"] = (summ["P"] + summ["OT"] + summ["OD"] + summ["L"] + summ["H"] + summ["WO"]
                            + 0.5 * summ["HD"] + 0.5 * summ["HL"])
-        result[emp["id"]] = {"days": days, "recs": recs, "summary": summ}
+        result[emp["id"]] = {"days": days, "recs": recs, "summary": summ, "shifts": shifts}
     return result
 
 

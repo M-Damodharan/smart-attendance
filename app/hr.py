@@ -57,7 +57,7 @@ def dashboard():
         rec = reg[e["id"]]["recs"].get(t)
         present = code in ("P", "OT", "HD", "IN", "MP")
         rec_d = dict(rec) if rec else {}
-        eff_shift = resolve_employee_shift(e["id"], t, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"), emp_obj=e)
+        eff_shift = reg[e["id"]].get("shifts", {}).get(t) or resolve_employee_shift(e["id"], t, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"), emp_obj=e)
         eff_shift_id = eff_shift["id"] if eff_shift else e["shift_id"]
 
         bs = by_shift.get(eff_shift_id)
@@ -344,7 +344,7 @@ def attendance():
     for e in emps:
         rec = reg[e["id"]]["recs"].get(d)
         rec_d = dict(rec) if rec else {}
-        eff_shift = resolve_employee_shift(e["id"], d, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"), emp_obj=e)
+        eff_shift = reg[e["id"]].get("shifts", {}).get(d) or resolve_employee_shift(e["id"], d, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"), emp_obj=e)
         emp_shift_ids[e["id"]] = eff_shift["id"] if eff_shift else e["shift_id"]
 
     groups = []
