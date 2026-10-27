@@ -13,3 +13,6 @@ android-sbg/local.properties
 app/static/downloads/SBG.apk
 cloudflared.exe
 scratch/
+.idea/
+*.pyc
+*.pyo

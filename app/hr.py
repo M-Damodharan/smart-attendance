@@ -2,12 +2,13 @@ import io
 import sqlite3
 from datetime import datetime, timedelta
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.security import generate_password_hash
 
 from .auth import hr_required
 from .db import get_db
 from .face_engine import register_face_for_employee, reset_face_for_employee
+from .maintenance import safe_clean_cache, get_cache_status
 from .services import (coords_from_maps_link, audit, build_register, create_notification, d2s, daterange,
                        finalize_attendance, format_duration, get_employee_category,
                        get_employee_shift_for_date, is_late, month_range, now, parse_dt,
@@ -851,6 +852,18 @@ def settings():
                 db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('require_face_match', ?)", (req_face,))
                 db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('face_match_threshold', ?)", (str(face_thresh),))
                 audit("SETTINGS_SAVE", "system_settings", 1, f"max_gps_accuracy_m={max_acc}, geofence_tolerance_m={tol}, require_face={req_face}, thresh={face_thresh}")
+            elif act == "clear_cache":
+                res = safe_clean_cache(db, user_id=g.user["id"])
+                freed_msg = res.get("bytes_freed_formatted", "0 B")
+                pyc_cnt = res.get("pyc_files_removed", 0)
+                ch_cnt = res.get("expired_challenges_cleared", 0)
+                flash(
+                    f"Safe cache cleanup complete: {pyc_cnt} bytecode files ({freed_msg}) and {ch_cnt} expired challenge tokens cleared. "
+                    "All employee records, biometric data, and attendance history remain 100% intact.",
+                    "ok"
+                )
+                session["maintenance_result"] = res
+                return redirect(url_for("hr.settings") + "#maintenance")
             db.commit()
             flash("Saved successfully.", "ok")
         except (KeyError, ValueError, sqlite3.IntegrityError):
@@ -864,6 +877,8 @@ def settings():
         "ORDER BY w.start_date DESC LIMIT 50"
     ).fetchall()
     all_employees = db.execute("SELECT id, emp_code, name FROM employees WHERE active=1 ORDER BY emp_code").fetchall()
+    maintenance_result = session.pop("maintenance_result", None)
+    cache_status = get_cache_status()
     return render_template("hr/settings.html",
                            offices=db.execute("SELECT * FROM offices").fetchall(),
                            shifts=db.execute("SELECT * FROM shifts").fetchall(),
@@ -872,7 +887,28 @@ def settings():
                            all_employees=all_employees,
                            holidays=db.execute("SELECT * FROM holidays ORDER BY date").fetchall(),
                            ltypes=db.execute("SELECT * FROM leave_types").fetchall(),
-                           sys_settings=sys_settings)
+                           sys_settings=sys_settings,
+                           cache_status=cache_status,
+                           maintenance_result=maintenance_result)
+
+
+@bp.route("/maintenance/clear-cache", methods=["POST"])
+@hr_required
+def maintenance_clear_cache():
+    db = get_db()
+    res = safe_clean_cache(db, user_id=g.user["id"])
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.is_json:
+        return jsonify(res)
+    freed_msg = res.get("bytes_freed_formatted", "0 B")
+    pyc_cnt = res.get("pyc_files_removed", 0)
+    ch_cnt = res.get("expired_challenges_cleared", 0)
+    flash(
+        f"Safe cache cleanup complete: {pyc_cnt} bytecode files ({freed_msg}) and {ch_cnt} expired challenge tokens cleared. "
+        "All employee records, biometric data, and attendance history remain 100% intact.",
+        "ok"
+    )
+    session["maintenance_result"] = res
+    return redirect(url_for("hr.settings") + "#maintenance")
 
 
 # ------------------------------------------------------------------ user access control
