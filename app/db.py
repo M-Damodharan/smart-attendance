@@ -322,17 +322,10 @@ def init_db(app):
     seed_db = os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
 
     is_test_env = app.config.get("TESTING") or app.config.get("DEMO_DATA")
-    should_auto_restore = (not is_test_env) or app.config.get("FORCE_RECOVERY_TEST")
+    use_turso = bool(app.config.get("USE_TURSO")) and not is_test_env
 
-    if app.config.get("USE_TURSO") and not is_test_env:
-        try:
-            from app.turso_db import connect_turso
-            t_db = connect_turso(app.config["TURSO_DATABASE_URL"], app.config["TURSO_AUTH_TOKEN"])
-            cnt = t_db.execute("SELECT COUNT(*) FROM employees").fetchone()
-            print(f"[setup] Connected to 24/7 Turso Cloud Database: {cnt[0]} active employees online.")
-        except Exception as e:
-            print(f"[setup] Warning checking Turso Cloud connection: {e}")
-
+    # CRITICAL: In production using 24/7 Cloud Database, NEVER overwrite data with old seed files!
+    should_auto_restore = ((not is_test_env) or app.config.get("FORCE_RECOVERY_TEST")) and (not use_turso)
 
     if (not os.path.exists(db_file) or os.path.getsize(db_file) == 0) and should_auto_restore:
         if os.path.exists(latest_backup_db) and os.path.getsize(latest_backup_db) > 0:
@@ -349,23 +342,29 @@ def init_db(app):
                 print(f"[setup] Warning: could not restore seed database: {e}")
 
     # Copy seed/backup selfies if missing in target selfie_dir
-    if should_auto_restore:
-        latest_selfies = os.path.join(BASE_DIR, "backups", "latest", "selfies")
-        seed_selfies = os.path.join(BASE_DIR, "app", "seed_data", "selfies")
-        for s_dir in (latest_selfies, seed_selfies):
-            if os.path.exists(s_dir):
-                try:
-                    for fname in os.listdir(s_dir):
-                        src_f = os.path.join(s_dir, fname)
-                        dst_f = os.path.join(selfie_dir, fname)
-                        if os.path.isfile(src_f) and not os.path.exists(dst_f):
-                            shutil.copy2(src_f, dst_f)
-                except Exception as e:
-                    print(f"[setup] Warning: could not restore selfies from {s_dir}: {e}")
+    latest_selfies = os.path.join(BASE_DIR, "backups", "latest", "selfies")
+    seed_selfies = os.path.join(BASE_DIR, "app", "seed_data", "selfies")
+    for s_dir in (latest_selfies, seed_selfies):
+        if os.path.exists(s_dir):
+            try:
+                for fname in os.listdir(s_dir):
+                    src_f = os.path.join(s_dir, fname)
+                    dst_f = os.path.join(selfie_dir, fname)
+                    if os.path.isfile(src_f) and not os.path.exists(dst_f):
+                        shutil.copy2(src_f, dst_f)
+            except Exception as e:
+                print(f"[setup] Warning: could not restore selfies from {s_dir}: {e}")
 
-    con = sqlite3.connect(db_file)
-    con.execute("PRAGMA journal_mode = WAL")          # concurrent readers while writing
+    if use_turso:
+        from app.turso_db import connect_turso
+        con = connect_turso(app.config["TURSO_DATABASE_URL"], app.config["TURSO_AUTH_TOKEN"])
+        print("[setup] Active 24/7 Turso Cloud Database connected in AWS Mumbai.")
+    else:
+        con = sqlite3.connect(db_file)
+        con.execute("PRAGMA journal_mode = WAL")          # concurrent readers while writing
+
     con.executescript(SCHEMA)
+
 
     # Migrations for existing DB instances
     emp_cols = [c[1] for c in con.execute("PRAGMA table_info(employees)").fetchall()]

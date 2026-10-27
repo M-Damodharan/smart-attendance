@@ -4,8 +4,9 @@ import secrets
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
-ENV = os.environ.get("APP_ENV", "development")
-PRODUCTION = ENV == "production"
+ENV = os.environ.get("APP_ENV", "production" if os.environ.get("RENDER") else "development")
+PRODUCTION = (ENV == "production") or bool(os.environ.get("RENDER"))
+
 
 
 def _resolve_secret_key():
@@ -47,17 +48,20 @@ class Config:
     # ---- Storage --------------------------------------------------------
     DATABASE = os.environ.get("DATABASE", os.path.join(BASE_DIR, "instance", "attendance.db"))
     SELFIE_DIR = os.environ.get("SELFIE_DIR", os.path.join(BASE_DIR, "instance", "selfies"))
-    TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "sbg-attendance-m-damodharan.aws-ap-south-1.turso.io" if PRODUCTION else None)
-    TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
-    if not TURSO_AUTH_TOKEN:
-        token_file = os.path.join(BASE_DIR, "instance", ".turso_token")
-        if os.path.exists(token_file):
-            try:
-                with open(token_file, "r") as f:
-                    TURSO_AUTH_TOKEN = f.read().strip()
-            except Exception:
-                pass
-    USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
+
+    # Permanent 24/7 Cloud Database (Turso LibSQL in AWS Mumbai)
+    TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "sbg-attendance-m-damodharan.aws-ap-south-1.turso.io")
+    TURSO_AUTH_TOKEN = os.environ.get(
+        "TURSO_AUTH_TOKEN",
+        "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMwODYwOTcsImlkIjoiMDFhMTdjNDItNDEwMS03ZjA0LWE2OWUtODgyYTgyYjRiYTQ3Iiwia2lkIjoiOE5CcW9uNmNDMmZHR1ZMM2NLZ3FNd2pqZzd6NWJOaWFUTGRaei0tTlZXWSIsInJpZCI6IjI3OGU4NGU1LTliNmMtNDU5NC1hYjJkLTcxM2VlYjU5ZjZmZSJ9.dplC14DykiOUJ12lI07b6owuv3pdxGmyMRK_nedKJbSGXzcjePrXJtT6N-8c2U1yO7b3hcNclZ569nbkiMkiAA"
+    )
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+    if DATABASE_URL and (DATABASE_URL.startswith("libsql://") or "turso.io" in DATABASE_URL):
+        TURSO_DATABASE_URL = DATABASE_URL
+
+    # Cloud persistence is active in production or when explicitly enabled
+    USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN) if PRODUCTION else (os.environ.get("USE_TURSO") == "1")
+
 
 
     # ---- Attendance rules -----------------------------------------------
