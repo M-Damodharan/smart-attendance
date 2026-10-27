@@ -113,8 +113,9 @@
       const variance = count > 0 ? (sumSq / count - mean * mean) : 0;
       const stdDev = Math.sqrt(Math.max(0, variance));
 
-      // Calculate edge gradient sharpness
-      let edgeSum = 0, edgeCount = 0;
+      // Calculate edge gradient sharpness & structure
+      let edgeSum = 0, edgeMax = 0, edgeCount = 0;
+      let edgeValues = [];
       const stride = w * 4;
       for (let y = 1; y < h - 1; y += 4) {
         for (let x = 1; x < w - 1; x += 4) {
@@ -122,11 +123,23 @@
           const center = 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
           const right = 0.299 * d[idx + 4] + 0.587 * d[idx + 5] + 0.114 * d[idx + 6];
           const down = 0.299 * d[idx + stride] + 0.587 * d[idx + stride + 1] + 0.114 * d[idx + stride + 2];
-          edgeSum += Math.abs(center - right) + Math.abs(center - down);
+          const g = Math.abs(center - right) + Math.abs(center - down);
+          edgeSum += g;
+          if (g > edgeMax) edgeMax = g;
+          edgeValues.push(g);
           edgeCount++;
         }
       }
       const sharpness = edgeCount > 0 ? (edgeSum / edgeCount) : 0;
+      let edgeStd = 0;
+      if (edgeCount > 0) {
+        let sumSq = 0;
+        for (let i = 0; i < edgeValues.length; i++) {
+          const diff = edgeValues[i] - sharpness;
+          sumSq += diff * diff;
+        }
+        edgeStd = Math.sqrt(sumSq / edgeCount);
+      }
 
       // Center face region vs background flanks (Backlight & Shadow Detection)
       let faceSum = 0, faceCount = 0;
@@ -162,11 +175,14 @@
       const isBacklit = (faceMean < 36.0 && bgMean > 65.0 && (faceMean / (bgMean + 0.001) < 0.40));
       const isTooDark = mean < 16.0 || isShadowed || isBacklit;
       const isBlank = stdDev < 6.0;
-      const isBlurry = sharpness < 2.0;
-      const isClear = !isTooDark && !isBlank && !isBlurry;
+      const isCoveredOrClosed = (sharpness < 2.8 && edgeMax < 24.0) || (sharpness < 2.2 && edgeStd < 2.0);
+      const isBlurry = sharpness < 2.0 || isCoveredOrClosed;
+      const isClear = !isTooDark && !isBlank && !isBlurry && !isCoveredOrClosed;
 
       let reason = 'OK';
-      if (isBacklit) {
+      if (isCoveredOrClosed) {
+        reason = 'Face not clear: Camera lens appears covered or closed. No clear human face detected. Please uncover your camera lens, face good lighting, and try again.';
+      } else if (isBacklit) {
         reason = 'Face not clear: Face is in deep shadow or backlit. Facial features are not visible. Please go to a brighter place and face the light directly, then try again.';
       } else if (isShadowed || isTooDark) {
         reason = 'Face not clear: Face is too dark or in shadow (brightness: ' + Math.round(faceMean) + '/255). Please go to a brighter place with good lighting, and try again.';
@@ -176,7 +192,7 @@
         reason = 'Face not clear: Photo is blurry or out of focus. Please go to a brighter place, hold phone steady, and try again.';
       }
 
-      return { isClear, isTooDark, isBlank, isBlurry, mean, faceMean, bgMean, stdDev, sharpness, reason };
+      return { isClear, isTooDark, isBlank, isBlurry, isCoveredOrClosed, mean, faceMean, bgMean, stdDev, sharpness, reason };
     } catch (e) {
       return { isClear: true, reason: 'OK' };
     }
@@ -346,7 +362,7 @@
       promptEl.textContent = '';
       countEl.textContent = '';
       const lowerErr = (e.message || '').toLowerCase();
-      if (e.face_not_clear || lowerErr.includes('face not clear') || lowerErr.includes('black or too dark') || lowerErr.includes('blurry') || lowerErr.includes('brighter place') || lowerErr.includes('shadow') || lowerErr.includes('backlit') || lowerErr.includes('lighting')) {
+      if (e.face_not_clear || lowerErr.includes('face not clear') || lowerErr.includes('black or too dark') || lowerErr.includes('blurry') || lowerErr.includes('brighter place') || lowerErr.includes('shadow') || lowerErr.includes('backlit') || lowerErr.includes('lighting') || lowerErr.includes('covered') || lowerErr.includes('closed')) {
         showFaceNotClearModal(e.message);
       }
       result.className = 'result bad';

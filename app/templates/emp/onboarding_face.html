@@ -213,11 +213,42 @@
       }
       const faceMean = faceCount > 0 ? (faceSum / faceCount) : mean;
 
+      // Edge sharpness and structure
+      let edgeSum = 0, edgeMax = 0, edgeCount = 0;
+      let edgeValues = [];
+      const stride = w * 4;
+      for (let y = 1; y < h - 1; y += 4) {
+        for (let x = 1; x < w - 1; x += 4) {
+          const idx = (y * w + x) * 4;
+          const center = 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+          const right = 0.299 * d[idx + 4] + 0.587 * d[idx + 5] + 0.114 * d[idx + 6];
+          const down = 0.299 * d[idx + stride] + 0.587 * d[idx + stride + 1] + 0.114 * d[idx + stride + 2];
+          const g = Math.abs(center - right) + Math.abs(center - down);
+          edgeSum += g;
+          if (g > edgeMax) edgeMax = g;
+          edgeValues.push(g);
+          edgeCount++;
+        }
+      }
+      const sharpness = edgeCount > 0 ? (edgeSum / edgeCount) : 0;
+      let edgeStd = 0;
+      if (edgeCount > 0) {
+        let sumSq = 0;
+        for (let i = 0; i < edgeValues.length; i++) {
+          const diff = edgeValues[i] - sharpness;
+          sumSq += diff * diff;
+        }
+        edgeStd = Math.sqrt(sumSq / edgeCount);
+      }
+
       if (mean < 16.0 || faceMean < 22.0) {
         return { isClear: false, reason: 'Face not clear: Face is too dark or in shadow (brightness: ' + Math.round(faceMean) + '/255). Please go to a brighter place with good lighting and try again.' };
       }
       if (stdDev < 6.0) {
         return { isClear: false, reason: 'Face not clear: Camera screen is blank. Please go to a brighter place, face the camera, and try again.' };
+      }
+      if ((sharpness < 2.8 && edgeMax < 24.0) || (sharpness < 2.2 && edgeStd < 2.0)) {
+        return { isClear: false, reason: 'Face not clear: Camera lens appears covered or closed. No clear human face detected. Please uncover your camera lens, face good lighting, and try again.' };
       }
       return { isClear: true };
     } catch(e) {
@@ -362,7 +393,7 @@
     const flashEls = document.querySelectorAll('.flash.err, .flash.bad, .alert-danger');
     flashEls.forEach(el => {
       const txt = (el.textContent || '').toLowerCase();
-      if (txt.includes('face not clear') || txt.includes('too dark') || txt.includes('shadow') || txt.includes('brighter place')) {
+      if (txt.includes('face not clear') || txt.includes('too dark') || txt.includes('shadow') || txt.includes('brighter place') || txt.includes('covered') || txt.includes('closed')) {
         showFaceNotClearModal(el.textContent.trim());
       }
     });

@@ -525,3 +525,50 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
             # Verify every department location has strict 50m radius
             for o in offices:
                 self.assertLessEqual(o["radius_m"], 50)
+
+    def test_14_user_covered_closed_camera_rejected_without_punch(self):
+        """14. Covered camera lens or closed camera photo is strictly rejected: Face Not Clear modal triggered and punch blocked."""
+        sample_path = r"C:/Users/ddamo/.gemini/antigravity/brain/1562887f-095c-4913-9c3b-4742010ba294/.user_uploaded/media_1793078720388_f1bfac9a.jpg"
+        if not os.path.exists(sample_path):
+            self.skipTest("Sample covered image file not found in local artifacts")
+
+        c = self.app.test_client()
+        with self.app.app_context():
+            db = get_db()
+            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
+            db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
+            db.commit()
+
+        self._login(c, "E0012", "123456789")
+        ch_res = c.get("/api/android-biometric/challenge")
+        ch_data = ch_res.get_json()
+
+        with open(sample_path, "rb") as f:
+            covered_b64 = "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
+
+        res = c.post("/api/punch", json={
+            "kind": "in",
+            "selfie": covered_b64,
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "accuracy": 10,
+            "android_biometric_assertion": {
+                "id": "android_hw_device_001_test",
+                "type": "android_biometric",
+                "signature": "sig_test_hardware_signature",
+                "challenge": ch_data["challenge"]
+            }
+        })
+        data = res.get_json()
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(data["ok"])
+        self.assertTrue(data.get("face_not_clear"))
+        self.assertIn("face not clear", data["error"].lower())
+        self.assertIn("covered or closed", data["error"].lower())
+
+        # Verify punch was NOT recorded in database
+        with self.app.app_context():
+            db = get_db()
+            att = db.execute("SELECT id FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')").fetchone()
+            self.assertIsNone(att)
+

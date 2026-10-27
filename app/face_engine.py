@@ -102,14 +102,37 @@ def check_selfie_image_quality(img_input):
             if core_mean < 36.0 and bg_mean > 65.0 and (core_mean / (bg_mean + 1e-5)) < 0.40:
                 return False, f"Face not clear: Face is in deep shadow or backlit (face brightness: {core_mean:.1f}, background: {bg_mean:.1f}). Please go to a brighter place and face the light directly so your face is clearly visible, and try again.", core_mean
 
+        # Covered camera lens / closed camera / finger or palm over lens detection:
+        # A human face in front of the camera contains distinct contours (eyes, nose, mouth, hair).
+        # A covered lens or closed camera produces flat blurry light without human facial structure.
+        if w >= 20 and h >= 20:
+            core_crop_struct = gray.crop((int(w * 0.25), int(h * 0.20), int(w * 0.75), int(h * 0.80)))
+            blurred_crop = core_crop_struct.filter(ImageFilter.GaussianBlur(radius=2))
+            if np is not None:
+                arr_c = np.asarray(core_crop_struct, dtype=np.float32)
+                arr_b = np.asarray(blurred_crop, dtype=np.float32)
+                c_struct = arr_c - arr_b
+                c_std = float(np.std(c_struct))
+                c_max = float(np.max(np.abs(c_struct)))
+            else:
+                p_c = list(core_crop_struct.getdata())
+                p_b = list(blurred_crop.getdata())
+                c_diff = [float(x) - float(y) for x, y in zip(p_c, p_b)]
+                c_mean = sum(c_diff) / len(c_diff)
+                c_std = math.sqrt(sum((x - c_mean) ** 2 for x in c_diff) / len(c_diff))
+                c_max = max(abs(x) for x in c_diff)
+
+            if c_std < 2.0 or c_max < 16.0:
+                return False, f"Face not clear: Camera lens appears covered or closed (structural clarity: {c_std:.1f}). No clear human face detected. Please ensure your camera lens is uncovered, go to a brighter place, and try again.", mean_val
+
         # Blur / lack of clarity detection
         try:
             import cv2
-            import numpy as np
-            gray_arr = np.array(gray)
-            lap_var = float(cv2.Laplacian(gray_arr, cv2.CV_64F).var())
-            if lap_var < 8.0:
-                return False, f"Face not clear: Camera photo is blurry or out of focus (sharpness: {lap_var:.1f}). Please go to a brighter place, hold your phone steady, and try again.", mean_val
+            if np is not None:
+                gray_arr = np.array(gray)
+                lap_var = float(cv2.Laplacian(gray_arr, cv2.CV_64F).var())
+                if lap_var < 8.0:
+                    return False, f"Face not clear: Camera photo is blurry or out of focus (sharpness: {lap_var:.1f}). Please go to a brighter place, hold your phone steady, and try again.", mean_val
         except Exception:
             pass
 
