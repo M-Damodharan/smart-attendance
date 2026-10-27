@@ -594,48 +594,38 @@ def init_db(app):
             con.execute("UPDATE employees SET password_hash=?, must_change_pw=0, active=1 WHERE role='hr' AND emp_code=?",
                         (generate_password_hash(pw), code))
 
-    # Ensure baseline accounts for all 3 categories: Staff (E0012), Employees (EMP001), Contract Labour (CL001)
-    emp_pw = generate_password_hash("123456789")
-    contract_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='CONTRACT'").fetchone()[0]
-
-    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='EMP001'").fetchone()[0] == 0:
-        con.execute(
-            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
-            "VALUES ('EMP001', 'Employee Staff', 'staff@sribalajigears.com', 'Production', 'Operator', 'employee', "
-            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
-            (emp_cat_id, emp_pw))
-        print("[setup] Baseline employee EMP001 created with active login.")
-    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='E0012'").fetchone()[0] == 0:
-        con.execute(
-            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
-            "VALUES ('E0012', 'Damodharan M', 'damodharan@sribalajigears.com', 'Engineering', 'Developer', 'employee', "
-            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
-            (staff_id, emp_pw))
-        print("[setup] Baseline employee E0012 (Damodharan M) created with active login.")
-    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='CL001'").fetchone()[0] == 0:
-        con.execute(
-            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
-            "VALUES ('CL001', 'Ramesh Kumar', 'ramesh@sribalajigears.com', 'Contract Operations', 'Contract Labour', 'employee', "
-            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
-            (contract_cat_id, emp_pw))
-        print("[setup] Baseline contract labour employee CL001 created with active login.")
-    accounts_cat_row = con.execute("SELECT id FROM employee_categories WHERE code='ACCOUNTS_FINANCE'").fetchone()
-    if accounts_cat_row:
-        acc_id = accounts_cat_row[0]
-        if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='S197'").fetchone()[0] == 0:
+    # In automated test mode ONLY, populate baseline test fixtures for unit tests
+    if is_test_env:
+        emp_pw = generate_password_hash("123456789")
+        contract_cat_id = con.execute("SELECT id FROM employee_categories WHERE code='CONTRACT'").fetchone()[0]
+        if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='EMP001'").fetchone()[0] == 0:
             con.execute(
                 "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
-                "VALUES ('S197', 'Accounts Executive', 'accounts@sribalajigears.com', 'Accounts & Finance', 'Accountant', 'employee', "
+                "VALUES ('EMP001', 'Employee Staff', 'staff@sribalajigears.com', 'Production', 'Operator', 'employee', "
                 "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
-                (acc_id, emp_pw))
-            print("[setup] Baseline accounts employee S197 created with active login.")
-    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='SBG001'").fetchone()[0] == 0:
-        con.execute(
-            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
-            "VALUES ('SBG001', 'Damodharan', 'damodharan390@gmail.com', 'IT', 'Software Engineer', 'employee', "
-            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, '2026-10-15')",
-            (staff_id, generate_password_hash("damo12345")))
-        print("[setup] Baseline employee SBG001 (Damodharan) created with active login.")
+                (emp_cat_id, emp_pw))
+        if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='E0012'").fetchone()[0] == 0:
+            con.execute(
+                "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+                "VALUES ('E0012', 'Damodharan M', 'damodharan@sribalajigears.com', 'Engineering', 'Developer', 'employee', "
+                "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+                (staff_id, emp_pw))
+        if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='CL001'").fetchone()[0] == 0:
+            con.execute(
+                "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+                "VALUES ('CL001', 'Ramesh Kumar', 'ramesh@sribalajigears.com', 'Contract Operations', 'Contract Labour', 'employee', "
+                "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+                (contract_cat_id, emp_pw))
+        accounts_cat_row = con.execute("SELECT id FROM employee_categories WHERE code='ACCOUNTS_FINANCE'").fetchone()
+        if accounts_cat_row:
+            acc_id = accounts_cat_row[0]
+            if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='S197'").fetchone()[0] == 0:
+                con.execute(
+                    "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+                    "VALUES ('S197', 'Accounts Executive', 'accounts@sribalajigears.com', 'Accounts & Finance', 'Accountant', 'employee', "
+                    "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
+                    (acc_id, emp_pw))
+
     con.commit()
     con.close()
 
