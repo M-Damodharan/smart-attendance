@@ -23,6 +23,7 @@ BACKUP_DIR = os.path.realpath(os.path.join(BASE_DIR, "backups"))
 VENV_DIR = os.path.realpath(os.path.join(BASE_DIR, "venv"))
 GIT_DIR = os.path.realpath(os.path.join(BASE_DIR, ".git"))
 ANDROID_DIR = os.path.realpath(os.path.join(BASE_DIR, "android-sbg"))
+SEED_DIR = os.path.realpath(os.path.join(BASE_DIR, "app", "seed_data"))
 
 PROTECTED_DIRECTORIES = (
     INSTANCE_DIR,
@@ -30,6 +31,7 @@ PROTECTED_DIRECTORIES = (
     VENV_DIR,
     GIT_DIR,
     ANDROID_DIR,
+    SEED_DIR,
 )
 
 PROTECTED_EXTENSIONS = (

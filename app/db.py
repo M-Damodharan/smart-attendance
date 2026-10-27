@@ -301,9 +301,35 @@ def _seed_categories(con):
 
 
 def init_db(app):
-    os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
-    os.makedirs(app.config["SELFIE_DIR"], exist_ok=True)
-    con = sqlite3.connect(app.config["DATABASE"])
+    db_file = app.config["DATABASE"]
+    selfie_dir = app.config["SELFIE_DIR"]
+    os.makedirs(os.path.dirname(db_file), exist_ok=True)
+    os.makedirs(selfie_dir, exist_ok=True)
+
+    # Automatically restore from persistent seed data if database does not exist or is empty
+    from config import BASE_DIR
+    import shutil
+    seed_db = os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
+    if (not os.path.exists(db_file) or os.path.getsize(db_file) == 0) and os.path.exists(seed_db):
+        try:
+            shutil.copy2(seed_db, db_file)
+            print(f"[setup] Restored database from seed data at {seed_db}")
+        except Exception as e:
+            print(f"[setup] Warning: could not restore seed database: {e}")
+
+    # Copy seed selfies if missing in target selfie_dir
+    seed_selfies = os.path.join(BASE_DIR, "app", "seed_data", "selfies")
+    if os.path.exists(seed_selfies):
+        try:
+            for fname in os.listdir(seed_selfies):
+                src_f = os.path.join(seed_selfies, fname)
+                dst_f = os.path.join(selfie_dir, fname)
+                if os.path.isfile(src_f) and not os.path.exists(dst_f):
+                    shutil.copy2(src_f, dst_f)
+        except Exception as e:
+            print(f"[setup] Warning: could not restore seed selfies: {e}")
+
+    con = sqlite3.connect(db_file)
     con.execute("PRAGMA journal_mode = WAL")          # concurrent readers while writing
     con.executescript(SCHEMA)
 
@@ -565,6 +591,13 @@ def init_db(app):
                 "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, date('now'))",
                 (acc_id, emp_pw))
             print("[setup] Baseline accounts employee S197 created with active login.")
+    if con.execute("SELECT COUNT(*) FROM employees WHERE emp_code='SBG001'").fetchone()[0] == 0:
+        con.execute(
+            "INSERT INTO employees (emp_code, name, email, department, designation, role, shift_id, office_id, category_id, password_hash, must_change_pw, joined_on) "
+            "VALUES ('SBG001', 'Damodharan', 'damodharan390@gmail.com', 'IT', 'Software Engineer', 'employee', "
+            "(SELECT MIN(id) FROM shifts), (SELECT MIN(id) FROM offices), ?, ?, 0, '2026-10-15')",
+            (staff_id, generate_password_hash("damo12345")))
+        print("[setup] Baseline employee SBG001 (Damodharan) created with active login.")
     con.commit()
     con.close()
 
