@@ -136,9 +136,13 @@ class TursoConnection:
         is_select = clean_sql.upper().startswith("SELECT")
         is_write = any(clean_sql.upper().startswith(w) for w in ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "DROP", "ALTER"))
 
-        # Invalidate read cache immediately on any write operation
+        # Invalidate read cache only on write operations to core business tables
+        # Telemetry/log tables (audit_log, login_attempts, notifications) DO NOT invalidate business data
         if is_write:
-            clear_turso_cache()
+            sql_upper = clean_sql.upper()
+            is_telemetry = any(t in sql_upper for t in ("AUDIT_LOG", "LOGIN_ATTEMPTS", "NOTIFICATIONS")) and not any(t in sql_upper for t in ("EMPLOYEES", "ATTENDANCE", "SHIFTS", "LEAVES", "OD_REQUESTS", "PERMISSION_REQUESTS", "FACE_CHANGE_REQUESTS", "OFFICES", "SETTINGS"))
+            if not is_telemetry:
+                clear_turso_cache()
 
         # Check in-memory read cache for repeat SELECT queries
         cache_key = None

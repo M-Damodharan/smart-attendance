@@ -247,5 +247,25 @@
   if (flipReturnBtn) {
     flipReturnBtn.addEventListener('click', () => flipCard(false));
   }
+
+  // Instant visual feedback on login submission
+  const loginForm = document.querySelector('form[method="post"]');
+  if (loginForm) {
+    loginForm.addEventListener('submit', () => {
+      const btn = loginForm.querySelector('.btn-login');
+      if (btn) {
+        btn.innerHTML = `
+          <span style="display:inline-block;width:15px;height:15px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;margin-right:8px;vertical-align:middle;"></span>
+          <span>Signing in...</span>
+        `;
+        btn.style.opacity = '0.85';
+      }
+      const bar = document.getElementById('instant-progress-bar');
+      if (bar) {
+        bar.classList.add('active');
+        bar.style.width = '45%';
+      }
+    });
+  }
 </script>
 {% endblock %}

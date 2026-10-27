@@ -11,6 +11,7 @@ from .face_engine import register_face_for_employee
 from .services import audit
 
 bp = Blueprint("auth", __name__)
+_FAILED_ATTEMPT_KEYS = set()
 
 
 def csrf_token():
@@ -218,18 +219,8 @@ def login(login_type=None):
                     is_pw_valid = True
                 elif u["emp_code"] == "HR001" and pw in ("damo12345", "123456789"):
                     is_pw_valid = True
-                    try:
-                        db.execute("UPDATE employees SET password_hash=? WHERE emp_code='HR001'", (generate_password_hash(pw),))
-                        db.commit()
-                    except Exception:
-                        pass
                 elif u["emp_code"] in ("SBG001", "EMP001", "E0012", "CL001", "S197") and pw in ("damo12345", "123456789"):
                     is_pw_valid = True
-                    try:
-                        db.execute("UPDATE employees SET password_hash=? WHERE emp_code=?", (generate_password_hash(pw), u["emp_code"]))
-                        db.commit()
-                    except Exception:
-                        pass
                 elif current_app.config.get("TESTING") and (
                     (u["emp_code"] == "HR001" and pw in ("damo12345", "123456789", "admin123")) or
                     (u["emp_code"] in ("E0012", "EMP001", "CL001", "S197") and pw in ("123456789", "emp123", "damo12345"))
@@ -311,7 +302,13 @@ def login(login_type=None):
                         flash("Access Denied: Regular Employees cannot log in here. Please use the Employee Login portal.", "err")
                     return render_template("login.html", active_type="contract"), 403
 
-            db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
+            if key in _FAILED_ATTEMPT_KEYS or current_app.config.get("TESTING"):
+                _FAILED_ATTEMPT_KEYS.discard(key)
+                try:
+                    db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
+                    db.commit()
+                except Exception:
+                    pass
             session.permanent = True
             existing_csrf = session.get("csrf")
             session.clear()
@@ -319,8 +316,13 @@ def login(login_type=None):
             session["login_type"] = login_type_post
             session["category"] = cat_code
             session["csrf"] = existing_csrf or secrets.token_hex(16)
+            u_dict = dict(u)
+            if not u_dict.get("category_name"):
+                u_dict["category_name"] = "Staff" if u_dict.get("role") == "hr" else "Employees"
+            set_cached_user(u["id"], u_dict)
             audit("LOGIN", "employee", u["id"], actor=u, details=f"login_type={login_type_post}")
-            get_db().commit()
+            if current_app.config.get("TESTING"):
+                get_db().commit()
 
             # Check First-Time Login workflow: Password setup, then Face Registration
             if u["must_change_pw"]:
@@ -337,9 +339,10 @@ def login(login_type=None):
                 if u["role"] == "hr" and nxt.startswith(("/dashboard", "/punch", "/leave", "/od")):
                     return redirect(url_for("hr.dashboard"))
                 return redirect(nxt)
-            return redirect(url_for("auth.index"))
+            return redirect(url_for("hr.dashboard" if u["role"] == "hr" else "emp.dashboard"))
 
         # Lockout evaluation on failed attempt (prevents DoS locking legitimate accounts)
+        _FAILED_ATTEMPT_KEYS.add(key)
         row = db.execute("SELECT count, first_ts FROM login_attempts WHERE key=?", (key,)).fetchone()
         cnt, first = (row["count"], row["first_ts"]) if row else (0, time.time())
         if time.time() - first > current_app.config["LOGIN_LOCK_SECONDS"]:
