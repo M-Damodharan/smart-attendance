@@ -47,6 +47,13 @@ def _resolve_secret_key():
         return secrets.token_hex(32)
 
 
+DEFAULT_TURSO_TOKEN = (
+    "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9."
+    "eyJhIjoicnciLCJpYXQiOjE3OTMwODYwOTcsImlkIjoiMDFhMTdjNDItNDEwMS03ZjA0LWE2OWUtODgyYTgyYjRiYTQ3Iiwia2lkIjoiOE5CcW9uNmNDMmZHR1ZMM2NLZ3FNd2pqZzd6NWJOaWFUTGRaei0tTlZXWSIsInJpZCI6IjI3OGU4NGU1LTliNmMtNDU5NC1hYjJkLTcxM2VlYjU5ZjZmZSJ9."
+    "dplC14DykiOUJ12lI07b6owuv3pdxGmyMRK_nedKJbSGXzcjePrXJtT6N-8c2U1yO7b3hcNclZ569nbkiMkiAA"
+)
+
+
 def _resolve_turso_token():
     tok = os.environ.get("TURSO_AUTH_TOKEN")
     if tok and tok.strip():
@@ -60,7 +67,7 @@ def _resolve_turso_token():
                     return t
         except Exception:
             pass
-    return None
+    return DEFAULT_TURSO_TOKEN
 
 
 class Config:
