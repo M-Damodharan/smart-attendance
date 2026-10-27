@@ -7,12 +7,13 @@ import random
 import secrets
 import time
 
-from flask import Blueprint, abort, current_app, g, jsonify, request, send_from_directory, session
+from flask import Blueprint, abort, current_app, g, jsonify, request, send_file, send_from_directory, session
 from PIL import Image, ImageChops, ImageStat
 
 from .auth import employee_required, login_required
 from .db import get_db
 from .face_engine import verify_face_for_employee, FACE_MATCH_THRESHOLD
+from .photo_storage import get_photo_path, save_photo
 from .services import (approved_od_for, approved_permission_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
                        get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s, parse_dt,
                        resolve_employee_shift)
@@ -153,7 +154,7 @@ def evaluate_geo(user, lat, lng, acc):
 def _save_selfie(im, user, kind):
     im.thumbnail((640, 640))
     name = f"{user['emp_code']}_{today():%Y%m%d}_{kind}_{now():%H%M%S}.jpg"
-    im.save(os.path.join(current_app.config["SELFIE_DIR"], name), "JPEG", quality=82)  # re-encode strips EXIF
+    save_photo(im, name, user["emp_code"])
     return name
 
 
@@ -607,12 +608,10 @@ def selfie(name):
     )
     if not is_hr and not is_owner:
         abort(403)
-    s_dir = current_app.config.get("SELFIE_DIR")
-    if not s_dir or not os.path.exists(os.path.join(s_dir, safe)):
-        inst_dir = os.path.join(current_app.instance_path, "selfies")
-        if os.path.exists(os.path.join(inst_dir, safe)):
-            return send_from_directory(inst_dir, safe)
-    return send_from_directory(s_dir, safe)
+    photo_path = get_photo_path(safe, emp_code=emp_code)
+    if not photo_path or not os.path.exists(photo_path):
+        abort(404)
+    return send_file(photo_path, mimetype="image/jpeg")
 
 
 # ------------------------------------------------------------------ comments

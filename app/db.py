@@ -263,8 +263,15 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, status);
-CREATE INDEX IF NOT EXISTS idx_notif_role ON notifications(target_role, status);
+CREATE TABLE IF NOT EXISTS durable_photos (
+    filename TEXT PRIMARY KEY,
+    emp_code TEXT,
+    photo_data TEXT,
+    mime_type TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_durable_photos_emp ON durable_photos(emp_code);
 """
 
 

@@ -664,30 +664,29 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
                 f"'{other_emp['name']}' ({other_emp['emp_code']}). One face cannot be registered to multiple accounts."
             ), other_emp
 
-    # Save reference photo(s) to disk
+    # Save reference photo(s) to durable storage
+    from app.photo_storage import save_photo, delete_photo
     now_ts = now()
     face_filename = f"face_{user['emp_code']}_{now_ts.strftime('%Y%m%d_%H%M%S')}.jpg"
     photo1_filename = face_filename
     photo2_filename = None
-    selfie_dir = current_app.config.get("SELFIE_DIR")
-    if selfie_dir:
-        os.makedirs(selfie_dir, exist_ok=True)
-        if isinstance(img_input, dict) and "photo1" in img_input and img_input["photo1"]:
-            photo1_filename = face_filename
-            im1 = _load_image(img_input["photo1"])
-            im1.thumbnail((640, 640))
-            im1.save(os.path.join(selfie_dir, photo1_filename), "JPEG", quality=85)
-        elif primary_img:
-            photo1_filename = face_filename
-            im = _load_image(primary_img)
-            im.thumbnail((640, 640))
-            im.save(os.path.join(selfie_dir, photo1_filename), "JPEG", quality=85)
 
-        if isinstance(img_input, dict) and "photo2" in img_input and img_input["photo2"]:
-            photo2_filename = f"face_{user['emp_code']}_p2_{now_ts.strftime('%Y%m%d_%H%M%S')}.jpg"
-            im2 = _load_image(img_input["photo2"])
-            im2.thumbnail((640, 640))
-            im2.save(os.path.join(selfie_dir, photo2_filename), "JPEG", quality=85)
+    if isinstance(img_input, dict) and "photo1" in img_input and img_input["photo1"]:
+        photo1_filename = face_filename
+        im1 = _load_image(img_input["photo1"])
+        im1.thumbnail((640, 640))
+        save_photo(im1, photo1_filename, user["emp_code"])
+    elif primary_img:
+        photo1_filename = face_filename
+        im = _load_image(primary_img)
+        im.thumbnail((640, 640))
+        save_photo(im, photo1_filename, user["emp_code"])
+
+    if isinstance(img_input, dict) and "photo2" in img_input and img_input["photo2"]:
+        photo2_filename = f"face_{user['emp_code']}_p2_{now_ts.strftime('%Y%m%d_%H%M%S')}.jpg"
+        im2 = _load_image(img_input["photo2"])
+        im2.thumbnail((640, 640))
+        save_photo(im2, photo2_filename, user["emp_code"])
 
     template_payload = json.dumps({
         "vector": primary_embedding,
@@ -718,6 +717,7 @@ def register_face_for_employee(db, emp_id: int, img_input, registered_by_id: int
 
 def reset_face_for_employee(db, emp_id: int, reset_by_id: int = None, reason: str = ""):
     """HR-assisted face reset and recovery."""
+    from app.photo_storage import delete_photo
     user = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not user:
         return False
@@ -729,14 +729,8 @@ def reset_face_for_employee(db, emp_id: int, reset_by_id: int = None, reason: st
         (emp_id,)
     )
 
-    selfie_dir = current_app.config.get("SELFIE_DIR")
-    if selfie_dir and old_img:
-        old_path = os.path.join(selfie_dir, old_img)
-        if os.path.exists(old_path):
-            try:
-                os.remove(old_path)
-            except Exception:
-                pass
+    if old_img:
+        delete_photo(old_img)
 
     details = f"Face registration reset for {user['emp_code']} ({user['name']}) by ID {reset_by_id or 'admin'}"
     if reason:

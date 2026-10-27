@@ -4,9 +4,27 @@ import secrets
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
+def _load_env_file():
+    env_path = os.path.join(BASE_DIR, ".env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+
+_load_env_file()
+
 ENV = os.environ.get("APP_ENV", "production" if os.environ.get("RENDER") else "development")
 PRODUCTION = (ENV == "production") or bool(os.environ.get("RENDER"))
-
 
 
 def _resolve_secret_key():
@@ -27,6 +45,22 @@ def _resolve_secret_key():
         return new_key
     except Exception:
         return secrets.token_hex(32)
+
+
+def _resolve_turso_token():
+    tok = os.environ.get("TURSO_AUTH_TOKEN")
+    if tok and tok.strip():
+        return tok.strip()
+    token_file = os.path.join(BASE_DIR, "instance", ".turso_token")
+    if os.path.exists(token_file):
+        try:
+            with open(token_file, "r", encoding="utf-8") as f:
+                t = f.read().strip()
+                if t:
+                    return t
+        except Exception:
+            pass
+    return None
 
 
 class Config:
@@ -51,13 +85,19 @@ class Config:
 
     # Permanent 24/7 Cloud Database (Turso LibSQL in AWS Mumbai)
     TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "sbg-attendance-m-damodharan.aws-ap-south-1.turso.io")
-    TURSO_AUTH_TOKEN = os.environ.get(
-        "TURSO_AUTH_TOKEN",
-        "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMwODYwOTcsImlkIjoiMDFhMTdjNDItNDEwMS03ZjA0LWE2OWUtODgyYTgyYjRiYTQ3Iiwia2lkIjoiOE5CcW9uNmNDMmZHR1ZMM2NLZ3FNd2pqZzd6NWJOaWFUTGRaei0tTlZXWSIsInJpZCI6IjI3OGU4NGU1LTliNmMtNDU5NC1hYjJkLTcxM2VlYjU5ZjZmZSJ9.dplC14DykiOUJ12lI07b6owuv3pdxGmyMRK_nedKJbSGXzcjePrXJtT6N-8c2U1yO7b3hcNclZ569nbkiMkiAA"
-    )
+    TURSO_AUTH_TOKEN = _resolve_turso_token()
     DATABASE_URL = os.environ.get("DATABASE_URL")
     if DATABASE_URL and (DATABASE_URL.startswith("libsql://") or "turso.io" in DATABASE_URL):
         TURSO_DATABASE_URL = DATABASE_URL
+
+    # Prevent silent fallback to local SQLite in production:
+    if PRODUCTION and not (os.environ.get("TESTING") == "1"):
+        if not (TURSO_DATABASE_URL and TURSO_AUTH_TOKEN):
+            raise RuntimeError(
+                "CRITICAL PRODUCTION CONFIG ERROR: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN "
+                "must be provided in Render environment variables. Silent fallback to local SQLite "
+                "is strictly prohibited in production to prevent data loss across restarts."
+            )
 
     # Cloud persistence is active whenever Turso cloud credentials are configured
     USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN) and not (os.environ.get("TESTING") == "1")

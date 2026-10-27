@@ -33,12 +33,14 @@ class TursoRow(dict):
 
 
 class TursoCursor:
-    def __init__(self, conn, rows: List[TursoRow], last_insert_rowid: Optional[int], affected_row_count: int):
+    def __init__(self, conn, rows: List[TursoRow], last_insert_rowid: Optional[int], affected_row_count: int, cols: Optional[List[str]] = None):
         self._conn = conn
         self._rows = rows
         self._index = 0
         self.lastrowid = last_insert_rowid
         self.rowcount = affected_row_count
+        self.columns = cols or (rows[0].keys() if rows else [])
+        self.description = tuple((c, None, None, None, None, None, None) for c in self.columns) if self.columns else None
 
     def fetchone(self) -> Optional[TursoRow]:
         if self._index < len(self._rows):
@@ -146,7 +148,7 @@ class TursoConnection:
 
         last_id = result_obj.get("last_insert_rowid")
         affected = result_obj.get("affected_row_count", 0)
-        return TursoCursor(self, parsed_rows, int(last_id) if last_id is not None else None, affected)
+        return TursoCursor(self, parsed_rows, int(last_id) if last_id is not None else None, affected, cols=cols)
 
     def executescript(self, script: str):
         statements = [s.strip() for s in script.split(";") if s.strip()]

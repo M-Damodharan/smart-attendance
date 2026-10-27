@@ -1179,3 +1179,98 @@ def scan_daily_face_audit():
         flash(f"AI 4-Department Audit for {target_date}: 0 buddy punch violations found across 400 analyzed images in all 4 departments. All daily punch faces verified clean.", "ok")
     return redirect(url_for("hr.face_security_audit", date=target_date))
 
+
+# ------------------------------------------------------------------ HR Cloud Backup & Live Sync
+@bp.route("/cloud-backup-sync")
+@hr_required
+def cloud_backup_sync():
+    from .cloud_backup import get_cloud_telemetry, list_cloud_backups
+    telemetry = get_cloud_telemetry()
+    backups = list_cloud_backups()
+    return render_template(
+        "hr/cloud_backup_sync.html",
+        telemetry=telemetry,
+        backups=backups
+    )
+
+
+@bp.get("/cloud-backup-sync/api/telemetry")
+@hr_required
+def cloud_backup_sync_telemetry():
+    from .cloud_backup import get_cloud_telemetry
+    return jsonify(get_cloud_telemetry())
+
+
+@bp.post("/cloud-backup-sync/api/sync")
+@hr_required
+def cloud_backup_sync_run():
+    from .cloud_backup import sync_all_data
+    try:
+        res = sync_all_data(actor_id=g.user["id"], actor_name=g.user["name"])
+        return jsonify(res)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@bp.post("/cloud-backup-sync/api/backup")
+@hr_required
+def cloud_backup_create_run():
+    from .cloud_backup import create_cloud_backup
+    data = request.get_json(silent=True) or request.form
+    reason = (data.get("reason") or "Manual HR Cloud Backup").strip()
+    try:
+        res = create_cloud_backup(actor_id=g.user["id"], actor_name=g.user["name"], reason=reason)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@bp.get("/cloud-backup-sync/api/verify/<backup_id>")
+@hr_required
+def cloud_backup_verify_run(backup_id):
+    from .cloud_backup import verify_cloud_backup
+    res = verify_cloud_backup(backup_id)
+    return jsonify(res)
+
+
+@bp.post("/cloud-backup-sync/api/restore/stage")
+@hr_required
+def cloud_backup_restore_stage():
+    from .cloud_backup import stage_restore_from_backup
+    data = request.get_json(silent=True) or request.form
+    backup_id = (data.get("backup_id") or "").strip()
+    if not backup_id:
+        return jsonify(ok=False, error="Backup ID is required for staging restore."), 400
+    res = stage_restore_from_backup(backup_id, actor_id=g.user["id"])
+    return jsonify(res)
+
+
+@bp.post("/cloud-backup-sync/api/restore/confirm")
+@hr_required
+def cloud_backup_restore_confirm():
+    from .cloud_backup import apply_staged_restore
+    data = request.get_json(silent=True) or request.form
+    staging_token = (data.get("staging_token") or "").strip()
+    confirmation_code = (data.get("confirmation_code") or "").strip()
+    res = apply_staged_restore(
+        staging_token,
+        confirmation_code,
+        actor_id=g.user["id"],
+        actor_name=g.user["name"]
+    )
+    return jsonify(res)
+
+
+@bp.get("/cloud-backup-sync/download/<backup_id>")
+@hr_required
+def cloud_backup_download(backup_id):
+    import os
+    from flask import current_app
+    safe_bid = os.path.basename(backup_id).replace(".json", "")
+    base = current_app.config.get("BASE_DIR") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    filepath = os.path.join(base, "backups", "cloud_snapshots", f"{safe_bid}.json")
+    if not os.path.exists(filepath):
+        abort(404)
+    return send_file(filepath, as_attachment=True, download_name=f"{safe_bid}.json", mimetype="application/json")
+
+

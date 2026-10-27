@@ -1,0 +1,602 @@
+{% extends "base.html" %}
+{% block title %}Cloud Backup & Sync · HR Dashboard{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+
+{% block content %}
+<style>
+  .sync-3d-wrap {
+    perspective: 1200px;
+    margin-bottom: 2rem;
+  }
+  .card-3d {
+    background: var(--bg-card, #1e293b);
+    border: 1px solid var(--border-default, #334155);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .card-3d:hover {
+    transform: translateY(-3px) rotateX(1deg);
+    box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.45), 0 0 16px rgba(59, 130, 246, 0.15);
+  }
+  .telemetry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1.25rem;
+  }
+  .telemetry-box {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .telemetry-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted, #94a3b8);
+    margin-bottom: 0.35rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .telemetry-val {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: var(--text-main, #f8fafc);
+  }
+  .telemetry-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+    margin-top: 0.35rem;
+  }
+  .pulse-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    background: #10b981;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: pulseGlow 1.8s infinite;
+  }
+  @keyframes pulseGlow {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+  .actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 1.5rem;
+  }
+  .btn-3d {
+    font-weight: 700;
+    padding: 10px 20px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+  .btn-3d:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  }
+  .btn-blue { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; }
+  .btn-emerald { background: linear-gradient(135deg, #059669, #10b981); color: #fff; }
+  .btn-indigo { background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff; }
+  .btn-amber { background: linear-gradient(135deg, #d97706, #f59e0b); color: #fff; }
+  .btn-red { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
+
+  .live-console {
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.82rem;
+    color: #38bdf8;
+    max-height: 180px;
+    overflow-y: auto;
+    margin-top: 1.25rem;
+  }
+  .console-line { margin: 3px 0; }
+  .console-time { color: #64748b; margin-right: 8px; }
+  .console-ok { color: #34d399; }
+  .console-warn { color: #fbbf24; }
+  .console-err { color: #f87171; }
+
+  /* Modal Backdrop */
+  .custom-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 16px;
+    backdrop-filter: blur(4px);
+  }
+  .modal-dialog-3d {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 600px;
+    padding: 24px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+  }
+</style>
+
+<div class="sync-3d-wrap">
+  <div class="card-3d">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+      <div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <h2 style="margin:0; font-size:1.6rem; font-weight:800; letter-spacing:-0.5px;">
+            ☁️ Cloud Database & Live Sync
+          </h2>
+          <span class="pulse-dot" title="Connection Active"></span>
+          <span style="font-size:0.75rem; background:rgba(16,185,129,0.15); color:#10b981; border:1px solid #10b981; padding:2px 8px; border-radius:20px; font-weight:700;">
+            LIVE CONNECTED
+          </span>
+        </div>
+        <p class="muted small" style="margin:6px 0 0;">
+          Authoritative Turso LibSQL Cloud engine in AWS Mumbai. All website pages & Android APIs share permanent live synchronization.
+        </p>
+      </div>
+      <div>
+        <button type="button" class="btn-3d btn-indigo" onclick="refreshTelemetry()" style="padding:6px 14px; font-size:0.8rem;">
+          🔄 Refresh Telemetry
+        </button>
+      </div>
+    </div>
+
+    <!-- Telemetry Metric Cards -->
+    <div class="telemetry-grid">
+      <div class="telemetry-box">
+        <div class="telemetry-title">⚡ Database Provider</div>
+        <div class="telemetry-val" style="font-size:1.1rem; line-height:1.3;" id="dbProvider">
+          {{ telemetry.database_type }}
+        </div>
+        <div class="telemetry-sub">
+          Ping Latency: <b id="pingMs" style="color:#10b981;">{{ telemetry.ping_ms }} ms</b>
+        </div>
+      </div>
+
+      <div class="telemetry-box">
+        <div class="telemetry-title">👥 Active Employees</div>
+        <div class="telemetry-val" id="empCount" style="color:#38bdf8;">
+          {{ telemetry.active_employees }}
+        </div>
+        <div class="telemetry-sub">
+          Shifts Configured: <b>{{ telemetry.total_shifts }}</b>
+        </div>
+      </div>
+
+      <div class="telemetry-box">
+        <div class="telemetry-title">📅 Total Attendance Punches</div>
+        <div class="telemetry-val" id="attCount" style="color:#a855f7;">
+          {{ telemetry.total_attendance }}
+        </div>
+        <div class="telemetry-sub">
+          Leaves Tracked: <b>{{ telemetry.total_leaves }}</b>
+        </div>
+      </div>
+
+      <div class="telemetry-box">
+        <div class="telemetry-title">⏱️ Latest Punch Recorded</div>
+        <div class="telemetry-val" style="font-size:1rem;" id="latestPunch">
+          {{ telemetry.latest_punch }}
+        </div>
+        <div class="telemetry-sub">
+          Checked: {{ telemetry.checked_at }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Backup & Sync Audit Timestamps -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1rem; margin-top:1.25rem;">
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px 16px;">
+        <div style="font-size:0.75rem; text-transform:uppercase; color:#94a3b8; font-weight:700;">
+          🕒 Last Successful Cloud Backup
+        </div>
+        <div id="lastBackupTs" style="font-size:1.05rem; font-weight:800; color:#f8fafc; margin-top:4px;">
+          {{ telemetry.last_backup_ts }}
+        </div>
+        <div style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">
+          Full snapshot of employees, attendance, shifts, leave records, and audit trail.
+        </div>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px 16px;">
+        <div style="font-size:0.75rem; text-transform:uppercase; color:#94a3b8; font-weight:700;">
+          🔄 Last Successful Cloud Synchronization
+        </div>
+        <div id="lastSyncTs" style="font-size:1.05rem; font-weight:800; color:#34d399; margin-top:4px;">
+          {{ telemetry.last_sync_ts }}
+        </div>
+        <div id="lastSyncResult" style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">
+          {{ telemetry.last_sync_result }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons Panel -->
+    <div class="actions-row">
+      <button type="button" class="btn-3d btn-emerald" onclick="triggerSyncAll()" id="btnSyncAll">
+        <span>🔄</span> Sync All Data
+      </button>
+
+      <button type="button" class="btn-3d btn-blue" onclick="triggerCloudBackup()" id="btnCreateBackup">
+        <span>💾</span> Backup All Data
+      </button>
+
+      <button type="button" class="btn-3d btn-indigo" onclick="verifyLatestBackup()" id="btnVerifyBackup">
+        <span>🛡️</span> Verify Cloud Backup
+      </button>
+
+      <a href="#historyTable" class="btn-3d btn-amber">
+        <span>📜</span> View Backup History
+      </a>
+    </div>
+
+    <!-- Live Execution Console -->
+    <div class="live-console" id="liveConsole">
+      <div class="console-line">
+        <span class="console-time">[{{ telemetry.checked_at }}]</span>
+        <span class="console-ok">System initialized. Connected to {{ telemetry.database_type }}. Ready for HR operations.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Backup History Section -->
+<div class="card-3d" id="historyTable" style="margin-top:2rem;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:8px;">
+    <div>
+      <h3 style="margin:0; font-size:1.25rem; font-weight:800;">
+        📜 Cloud Backup History & Verification Log
+      </h3>
+      <p class="muted small" style="margin:2px 0 0;">
+        Cryptographically signed SHA-256 backup snapshots stored safely in cloud storage.
+      </p>
+    </div>
+    <span class="pill ok" style="font-size:0.8rem; font-weight:700;">
+      {{ backups|length }} Snapshot(s) Available
+    </span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Backup ID</th>
+          <th>Created (IST)</th>
+          <th>Created By</th>
+          <th>Records</th>
+          <th>File Size</th>
+          <th>SHA-256 Checksum</th>
+          <th>Status</th>
+          <th style="text-align:right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="backupListBody">
+        {% for b in backups %}
+        <tr>
+          <td><code style="font-weight:700; color:#38bdf8;">{{ b.backup_id }}</code></td>
+          <td>{{ b.created_at }}</td>
+          <td>{{ b.created_by }}</td>
+          <td><b>{{ b.record_count }}</b> rows</td>
+          <td>{{ (b.file_size / 1024)|round(1) }} KB</td>
+          <td><code style="font-size:0.75rem;" title="{{ b.sha256_hash }}">{{ b.sha256_hash[:16] }}...</code></td>
+          <td>
+            <span class="pill ok" style="font-size:0.7rem; font-weight:700;">
+              ✓ {{ b.status }}
+            </span>
+          </td>
+          <td style="text-align:right; white-space:nowrap;">
+            <a href="{{ url_for('hr.cloud_backup_download', backup_id=b.backup_id) }}" class="btn sm" style="padding:3px 8px; font-size:0.75rem;">
+              ⬇️ Download
+            </a>
+            <button type="button" class="btn sm info" onclick="verifyBackupItem('{{ b.backup_id }}')" style="padding:3px 8px; font-size:0.75rem;">
+              🔍 Verify
+            </button>
+            <button type="button" class="btn sm bad" onclick="stageRestoreModal('{{ b.backup_id }}')" style="padding:3px 8px; font-size:0.75rem;">
+              ⚠️ Restore
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="muted" style="text-align:center; padding:2rem;">
+            No backups created yet. Click "Backup All Data" above to generate your first verified cloud snapshot.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Restore Staging Modal -->
+<div id="restoreModal" class="custom-modal-backdrop">
+  <div class="modal-dialog-3d">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px; margin-bottom:16px;">
+      <h3 style="margin:0; color:#f87171; font-size:1.2rem; font-weight:800; display:flex; align-items:center; gap:8px;">
+        ⚠️ High-Risk Action: Restore Database Backup
+      </h3>
+      <button type="button" onclick="closeRestoreModal()" style="background:none; border:none; color:#fff; font-size:1.5rem; cursor:pointer;">&times;</button>
+    </div>
+
+    <div id="restoreModalBody">
+      <p style="font-size:0.88rem; color:#cbd5e1;">Loading restore sandbox inspection...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  function logConsole(msg, type = 'info') {
+    const con = document.getElementById('liveConsole');
+    if (!con) return;
+    const timeStr = new Date().toLocaleTimeString();
+    const div = document.createElement('div');
+    div.className = 'console-line';
+    let cls = 'console-ok';
+    if (type === 'err') cls = 'console-err';
+    if (type === 'warn') cls = 'console-warn';
+    div.innerHTML = `<span class="console-time">[${timeStr}]</span> <span class="${cls}">${msg}</span>`;
+    con.appendChild(div);
+    con.scrollTop = con.scrollHeight;
+  }
+
+  async function refreshTelemetry() {
+    logConsole("Querying live cloud telemetry from Turso LibSQL...", "info");
+    try {
+      const resp = await fetch("{{ url_for('hr.cloud_backup_sync_telemetry') }}");
+      const d = await resp.json();
+      if (d.ok) {
+        document.getElementById('dbProvider').textContent = d.database_type;
+        document.getElementById('pingMs').textContent = d.ping_ms + " ms";
+        document.getElementById('empCount').textContent = d.active_employees;
+        document.getElementById('attCount').textContent = d.total_attendance;
+        document.getElementById('latestPunch').textContent = d.latest_punch;
+        document.getElementById('lastBackupTs').textContent = d.last_backup_ts;
+        document.getElementById('lastSyncTs').textContent = d.last_sync_ts;
+        document.getElementById('lastSyncResult').textContent = d.last_sync_result;
+        logConsole(`Telemetry updated: Ping=${d.ping_ms}ms, Active Employees=${d.active_employees}, Attendance Punches=${d.total_attendance}.`, "ok");
+      } else {
+        logConsole("Failed to retrieve telemetry.", "err");
+      }
+    } catch (err) {
+      logConsole("Error updating telemetry: " + err.message, "err");
+    }
+  }
+
+  async function triggerSyncAll() {
+    const btn = document.getElementById('btnSyncAll');
+    btn.disabled = true;
+    btn.innerHTML = "<span>⏳</span> Synchronizing...";
+    logConsole("Starting authoritative cloud synchronization...", "info");
+
+    try {
+      const resp = await fetch("{{ url_for('hr.cloud_backup_sync_run') }}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+      const d = await resp.json();
+      if (d.ok) {
+        logConsole(`Sync SUCCESS: ${d.message}`, "ok");
+        alert("✅ Cloud Sync Complete!\n\n" + d.message);
+        refreshTelemetry();
+      } else {
+        logConsole(`Sync FAILED: ${d.error || 'Unknown error'}`, "err");
+        alert("❌ Sync Error: " + (d.error || 'Failed to sync with cloud database.'));
+      }
+    } catch (err) {
+      logConsole("Network error during sync: " + err.message, "err");
+      alert("❌ Network Error: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = "<span>🔄</span> Sync All Data";
+    }
+  }
+
+  async function triggerCloudBackup() {
+    const btn = document.getElementById('btnCreateBackup');
+    btn.disabled = true;
+    btn.innerHTML = "<span>⏳</span> Creating Snapshot...";
+    logConsole("Capturing consistent cloud snapshot of all business tables...", "info");
+
+    try {
+      const resp = await fetch("{{ url_for('hr.cloud_backup_create_run') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Manual HR Dashboard Backup" })
+      });
+      const d = await resp.json();
+      if (d.ok) {
+        logConsole(`Backup SUCCESS: ${d.backup_id} created (${d.record_count} records). SHA256: ${d.sha256_hash.substring(0, 16)}...`, "ok");
+        alert("✅ Cloud Backup Created Successfully!\n\nBackup ID: " + d.backup_id + "\nRecords Backed Up: " + d.record_count + "\nSHA-256 Checksum: " + d.sha256_hash);
+        location.reload();
+      } else {
+        logConsole(`Backup FAILED: ${d.error}`, "err");
+        alert("❌ Backup Error: " + d.error);
+      }
+    } catch (err) {
+      logConsole("Network error during backup: " + err.message, "err");
+      alert("❌ Network Error: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = "<span>💾</span> Backup All Data";
+    }
+  }
+
+  async function verifyBackupItem(backupId) {
+    logConsole(`Verifying integrity of backup snapshot '${backupId}'...`, "info");
+    try {
+      const resp = await fetch("{{ url_for('hr.cloud_backup_sync') }}/api/verify/" + backupId);
+      const d = await resp.json();
+      if (d.valid) {
+        logConsole(`Backup ${backupId} is 100% VALID. SHA-256 matches perfectly (${d.sha256.substring(0, 16)}...). Total records: ${d.total_records}`, "ok");
+        alert(`✅ Backup Verified & Cryptographically Valid!\n\nBackup ID: ${d.backup_id}\nCreated: ${d.created_at}\nTotal Records: ${d.total_records}\nSHA-256: ${d.sha256}`);
+      } else {
+        logConsole(`Backup verification FAILED for ${backupId}: ${d.error || 'Checksum mismatch'}`, "err");
+        alert(`❌ Verification Failed for ${backupId}: ${d.error || 'SHA-256 mismatch'}`);
+      }
+    } catch (err) {
+      logConsole("Error during verification: " + err.message, "err");
+    }
+  }
+
+  async function verifyLatestBackup() {
+    const rows = document.querySelectorAll('#backupListBody tr code');
+    if (!rows || rows.length === 0) {
+      alert("No backups available to verify. Please create a backup first.");
+      return;
+    }
+    const latestId = rows[0].textContent.trim();
+    verifyBackupItem(latestId);
+  }
+
+  let currentStagingToken = null;
+
+  async function stageRestoreModal(backupId) {
+    const modal = document.getElementById('restoreModal');
+    const body = document.getElementById('restoreModalBody');
+    modal.style.display = 'flex';
+    body.innerHTML = `
+      <div style="text-align:center; padding:2rem;">
+        <p style="font-weight:700;">⏳ Inspecting backup snapshot '${backupId}' in staging sandbox...</p>
+      </div>
+    `;
+
+    try {
+      const resp = await fetch("{{ url_for('hr.cloud_backup_restore_stage') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backup_id: backupId })
+      });
+      const d = await resp.json();
+      if (!d.ok) {
+        body.innerHTML = `<div class="flash err" style="margin-bottom:1rem;">${d.error || 'Failed to inspect backup.'}</div>
+          <button type="button" class="btn" onclick="closeRestoreModal()">Close</button>`;
+        return;
+      }
+
+      currentStagingToken = d.staging_token;
+
+      let warningsHtml = '';
+      if (d.warnings && d.warnings.length > 0) {
+        warningsHtml = `
+          <div style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; border-radius:10px; padding:12px; margin-bottom:14px; font-size:0.85rem; color:#fca5a5;">
+            <b>⚠️ SAFETY WARNINGS:</b>
+            <ul style="margin:4px 0 0 16px; padding:0;">
+              ${d.warnings.map(w => `<li>${w}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+
+      body.innerHTML = `
+        ${warningsHtml}
+        <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; margin-bottom:16px; font-size:0.86rem;">
+          <table style="width:100%; border-collapse:collapse;">
+            <tr>
+              <td class="muted" style="padding:4px 0;">Selected Backup:</td>
+              <td style="font-weight:700; color:#38bdf8;">${d.backup_id} (${d.backup_created_at})</td>
+            </tr>
+            <tr>
+              <td class="muted" style="padding:4px 0;">Employees:</td>
+              <td><b>Active: ${d.active_employees}</b> &bull; <b style="color:#38bdf8;">Backup: ${d.backup_employees}</b></td>
+            </tr>
+            <tr>
+              <td class="muted" style="padding:4px 0;">Attendance Records:</td>
+              <td><b>Active: ${d.active_attendance}</b> &bull; <b style="color:#a855f7;">Backup: ${d.backup_attendance}</b></td>
+            </tr>
+            <tr>
+              <td class="muted" style="padding:4px 0;">Latest Punch:</td>
+              <td><b>Active: ${d.active_latest_punch}</b> &bull; <b>Backup: ${d.backup_latest_punch}</b></td>
+            </tr>
+          </table>
+        </div>
+
+        <p style="font-size:0.84rem; color:#94a3b8; margin-bottom:12px;">
+          An automatic <b>pre-restore rollback checkpoint</b> will be created before applying this restore. To authorize, type <code>RESTORE-CONFIRM</code> in the box below:
+        </p>
+
+        <div style="margin-bottom:16px;">
+          <input type="text" id="confirmCodeInput" placeholder="Type RESTORE-CONFIRM here" style="width:100%; padding:10px; border-radius:8px; border:2px solid #ef4444; background:#0f172a; color:#fff; font-weight:700; font-family:monospace; font-size:1rem; text-transform:uppercase;">
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn" onclick="closeRestoreModal()">Cancel</button>
+          <button type="button" class="btn bad" onclick="executeRestore()">Authorize & Restore</button>
+        </div>
+      `;
+    } catch (err) {
+      body.innerHTML = `<div class="flash err">${err.message}</div>
+        <button type="button" class="btn" onclick="closeRestoreModal()">Close</button>`;
+    }
+  }
+
+  async function executeRestore() {
+    const input = document.getElementById('confirmCodeInput');
+    const code = input ? input.value.trim() : '';
+    if (code !== 'RESTORE-CONFIRM') {
+      alert("❌ Authorization failed: You must type 'RESTORE-CONFIRM' exactly.");
+      return;
+    }
+
+    if (!confirm("🚨 FINAL CONFIRMATION: Are you absolutely certain you want to apply this restore?\n\nCurrent live database records will be replaced with the selected backup snapshot.\nAn automatic rollback snapshot will be created before proceeding.")) {
+      return;
+    }
+
+    logConsole("Applying staged restore to authoritative cloud database...", "warn");
+    try {
+      const resp = await fetch("{{ url_for('hr.cloud_backup_restore_confirm') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staging_token: currentStagingToken,
+          confirmation_code: code
+        })
+      });
+      const d = await resp.json();
+      if (d.ok) {
+        logConsole(`Restore SUCCESS: ${d.message}. Pre-restore rollback backup: ${d.rollback_backup_id}`, "ok");
+        alert("✅ Restore Applied Successfully!\n\n" + d.message + "\n\nPre-restore safety rollback checkpoint saved as: " + d.rollback_backup_id);
+        location.reload();
+      } else {
+        logConsole(`Restore FAILED: ${d.error}`, "err");
+        alert("❌ Restore Error: " + d.error);
+      }
+    } catch (err) {
+      logConsole("Error during restore execution: " + err.message, "err");
+      alert("❌ Error: " + err.message);
+    }
+  }
+
+  function closeRestoreModal() {
+    document.getElementById('restoreModal').style.display = 'none';
+    currentStagingToken = null;
+  }
+</script>
+{% endblock %}
