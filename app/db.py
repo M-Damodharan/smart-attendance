@@ -306,28 +306,39 @@ def init_db(app):
     os.makedirs(os.path.dirname(db_file), exist_ok=True)
     os.makedirs(selfie_dir, exist_ok=True)
 
-    # Automatically restore from persistent seed data if database does not exist or is empty
+    # Automatically restore from latest backup or persistent seed data if database does not exist or is empty
     from config import BASE_DIR
     import shutil
+    latest_backup_db = os.path.join(BASE_DIR, "backups", "latest", "attendance.db")
     seed_db = os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
-    if (not os.path.exists(db_file) or os.path.getsize(db_file) == 0) and os.path.exists(seed_db):
-        try:
-            shutil.copy2(seed_db, db_file)
-            print(f"[setup] Restored database from seed data at {seed_db}")
-        except Exception as e:
-            print(f"[setup] Warning: could not restore seed database: {e}")
 
-    # Copy seed selfies if missing in target selfie_dir
+    if not os.path.exists(db_file) or os.path.getsize(db_file) == 0:
+        if os.path.exists(latest_backup_db) and os.path.getsize(latest_backup_db) > 0:
+            try:
+                shutil.copy2(latest_backup_db, db_file)
+                print(f"[setup] Restored database from latest backup at {latest_backup_db}")
+            except Exception as e:
+                print(f"[setup] Warning: could not restore latest backup: {e}")
+        elif os.path.exists(seed_db) and os.path.getsize(seed_db) > 0:
+            try:
+                shutil.copy2(seed_db, db_file)
+                print(f"[setup] Restored database from seed data at {seed_db}")
+            except Exception as e:
+                print(f"[setup] Warning: could not restore seed database: {e}")
+
+    # Copy seed/backup selfies if missing in target selfie_dir
+    latest_selfies = os.path.join(BASE_DIR, "backups", "latest", "selfies")
     seed_selfies = os.path.join(BASE_DIR, "app", "seed_data", "selfies")
-    if os.path.exists(seed_selfies):
-        try:
-            for fname in os.listdir(seed_selfies):
-                src_f = os.path.join(seed_selfies, fname)
-                dst_f = os.path.join(selfie_dir, fname)
-                if os.path.isfile(src_f) and not os.path.exists(dst_f):
-                    shutil.copy2(src_f, dst_f)
-        except Exception as e:
-            print(f"[setup] Warning: could not restore seed selfies: {e}")
+    for s_dir in (latest_selfies, seed_selfies):
+        if os.path.exists(s_dir):
+            try:
+                for fname in os.listdir(s_dir):
+                    src_f = os.path.join(s_dir, fname)
+                    dst_f = os.path.join(selfie_dir, fname)
+                    if os.path.isfile(src_f) and not os.path.exists(dst_f):
+                        shutil.copy2(src_f, dst_f)
+            except Exception as e:
+                print(f"[setup] Warning: could not restore selfies from {s_dir}: {e}")
 
     con = sqlite3.connect(db_file)
     con.execute("PRAGMA journal_mode = WAL")          # concurrent readers while writing
@@ -600,6 +611,14 @@ def init_db(app):
         print("[setup] Baseline employee SBG001 (Damodharan) created with active login.")
     con.commit()
     con.close()
+
+    # Automatically take an atomic startup backup so data is preserved across restarts
+    if not app.config.get("TESTING"):
+        try:
+            from app.backup_manager import create_backup
+            create_backup(reason="startup")
+        except Exception:
+            pass
 
 
 def create_admin(con, code, name, password):

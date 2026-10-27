@@ -232,6 +232,11 @@ def employee_form(eid=None):
                     audit("EMPLOYEE_CREATE", "employee", cur.lastrowid, f"{code} {name} (cat={category_id})")
                     flash(f"Employee created. Temporary password: {pw}", "ok")
                 db.commit()
+                try:
+                    from app.backup_manager import create_backup
+                    create_backup(reason="employee_change")
+                except Exception:
+                    pass
                 return redirect(url_for("hr.employees"))
             except sqlite3.IntegrityError:
                 flash(f"Employee code '{code}' already exists.", "err")
@@ -281,6 +286,11 @@ def register_face(eid):
     ok, msg, other_emp = register_face_for_employee(db, eid, img_data, registered_by_id=g.user["id"], force=force)
     if ok:
         flash(msg, "ok")
+        try:
+            from app.backup_manager import create_backup
+            create_backup(reason="face_registration")
+        except Exception:
+            pass
     else:
         flash(msg, "err")
     return redirect(url_for("hr.employee_form", eid=eid))
@@ -879,6 +889,8 @@ def settings():
     all_employees = db.execute("SELECT id, emp_code, name FROM employees WHERE active=1 ORDER BY emp_code").fetchall()
     maintenance_result = session.pop("maintenance_result", None)
     cache_status = get_cache_status()
+    from app.backup_manager import list_backups
+    backups_list = list_backups()
     return render_template("hr/settings.html",
                            offices=db.execute("SELECT * FROM offices").fetchall(),
                            shifts=db.execute("SELECT * FROM shifts").fetchall(),
@@ -889,7 +901,8 @@ def settings():
                            ltypes=db.execute("SELECT * FROM leave_types").fetchall(),
                            sys_settings=sys_settings,
                            cache_status=cache_status,
-                           maintenance_result=maintenance_result)
+                           maintenance_result=maintenance_result,
+                           backups_list=backups_list)
 
 
 @bp.route("/maintenance/clear-cache", methods=["POST"])
@@ -909,6 +922,57 @@ def maintenance_clear_cache():
     )
     session["maintenance_result"] = res
     return redirect(url_for("hr.settings") + "#maintenance")
+
+
+@bp.route("/database/download-backup", methods=["GET"])
+@hr_required
+def download_backup_zip():
+    from app.backup_manager import build_backup_zip_bytes
+    zip_bytes = build_backup_zip_bytes()
+    filename = f"SBG_Attendance_Backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return send_file(
+        io.BytesIO(zip_bytes),
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@bp.route("/database/restore-backup", methods=["POST"])
+@hr_required
+def restore_backup_route():
+    file = request.files.get("backup_file")
+    if not file or not file.filename:
+        flash("Please select a valid .zip or .db backup file to restore.", "err")
+        return redirect(url_for("hr.settings") + "#backups")
+    from app.backup_manager import restore_backup
+    res = restore_backup(file, user_id=g.user["id"])
+    if res.get("ok"):
+        flash(
+            f"Database successfully restored! Restored {res.get('employees', 0)} employees, "
+            f"{res.get('attendance', 0)} attendance records, and {res.get('selfies_restored', 0)} photos.",
+            "ok"
+        )
+    else:
+        flash(f"Restore failed: {res.get('error', 'Unknown error')}", "err")
+    return redirect(url_for("hr.settings") + "#backups")
+
+
+@bp.route("/database/create-snapshot", methods=["POST"])
+@hr_required
+def create_snapshot_route():
+    from app.backup_manager import create_backup
+    res = create_backup(reason="hr_manual")
+    if res.get("ok"):
+        counts = res.get("counts", {})
+        flash(
+            f"New backup snapshot created successfully! Saved {counts.get('employees', 0)} employees, "
+            f"{counts.get('attendance', 0)} attendance records, and {counts.get('selfie_files', 0)} photos.",
+            "ok"
+        )
+    else:
+        flash(f"Failed to create backup: {res.get('error')}", "err")
+    return redirect(url_for("hr.settings") + "#backups")
 
 
 # ------------------------------------------------------------------ user access control
