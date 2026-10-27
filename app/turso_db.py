@@ -5,6 +5,7 @@ Enables permanent 24/7 cloud persistence on Render Free Tier with zero data loss
 import os
 import json
 import base64
+import sqlite3
 import urllib.request
 import urllib.error
 from typing import Any, List, Optional, Sequence, Union
@@ -114,7 +115,10 @@ class TursoConnection:
         first_res = results[0]
         if first_res.get("type") == "error":
             err = first_res.get("error", {})
-            raise RuntimeError(f"Turso Cloud SQL Error: {err.get('message', 'Unknown error')}")
+            msg = err.get("message", "Unknown error")
+            if any(k in msg.lower() for k in ("unique constraint", "primary key", "foreign key", "check constraint")):
+                raise sqlite3.IntegrityError(f"Turso Cloud Integrity Error: {msg}")
+            raise sqlite3.OperationalError(f"Turso Cloud SQL Error: {msg}")
 
         resp_obj = first_res.get("response", {})
         result_obj = resp_obj.get("result", {})
