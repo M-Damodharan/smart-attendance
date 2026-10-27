@@ -6,9 +6,28 @@ import os
 import json
 import base64
 import sqlite3
-import urllib.request
-import urllib.error
 from typing import Any, List, Optional, Sequence, Union
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Global reusable HTTP Keep-Alive session pool
+_SESSION_POOL = None
+
+
+def _get_session() -> requests.Session:
+    global _SESSION_POOL
+    if _SESSION_POOL is None:
+        s = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=30,
+            max_retries=Retry(total=2, backoff_factor=0.2, status_forcelist=[502, 503, 504])
+        )
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+        _SESSION_POOL = s
+    return _SESSION_POOL
 
 
 class TursoRow(dict):
@@ -41,6 +60,9 @@ class TursoCursor:
         self.rowcount = affected_row_count
         self.columns = cols or (rows[0].keys() if rows else [])
         self.description = tuple((c, None, None, None, None, None, None) for c in self.columns) if self.columns else None
+
+    def __iter__(self):
+        return iter(self._rows)
 
     def fetchone(self) -> Optional[TursoRow]:
         if self._index < len(self._rows):
@@ -103,10 +125,10 @@ class TursoConnection:
             stmt["args"] = [self._convert_param(p) for p in params]
 
         payload = {"requests": [{"type": "execute", "stmt": stmt}, {"type": "close"}]}
-        req = urllib.request.Request(self.url, data=json.dumps(payload).encode("utf-8"), headers=self.headers)
+        session = _get_session()
         try:
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            resp = session.post(self.url, data=json.dumps(payload), headers=self.headers, timeout=10)
+            data = resp.json()
         except Exception as e:
             raise RuntimeError(f"Turso Cloud request failed: {e}") from e
 

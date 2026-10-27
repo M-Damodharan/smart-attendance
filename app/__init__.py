@@ -9,6 +9,7 @@ from config import Config
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400
     if test_config:
         app.config.update(test_config)
     if not app.config.get("SECRET_KEY") or app.config["SECRET_KEY"] in ("", "change-this-secret-in-production"):
@@ -104,6 +105,8 @@ def create_app(test_config=None):
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Permissions-Policy"] = "camera=(self), geolocation=(self)"
+        if request.path.startswith("/static/"):
+            resp.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
         return resp
 
     @app.route("/healthz")

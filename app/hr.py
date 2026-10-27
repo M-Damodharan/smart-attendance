@@ -56,7 +56,7 @@ def dashboard():
         rec = reg[e["id"]]["recs"].get(t)
         present = code in ("P", "OT", "HD", "IN", "MP")
         rec_d = dict(rec) if rec else {}
-        eff_shift = resolve_employee_shift(e["id"], t, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"))
+        eff_shift = resolve_employee_shift(e["id"], t, rec_d.get("check_in"), db, fallback_shift_id=rec_d.get("shift_id"), emp_obj=e)
         eff_shift_id = eff_shift["id"] if eff_shift else e["shift_id"]
 
         bs = by_shift.get(eff_shift_id)
@@ -85,27 +85,43 @@ def dashboard():
             if cin_dt and is_late(cin_dt, eff_shift):
                 stats["late"] += 1
 
-    # Also synchronize with database attendance table for today's late arrivals
-    db_late_count = db.execute("SELECT COUNT(DISTINCT emp_id) FROM attendance WHERE date=? AND late=1", (d2s(t),)).fetchone()[0]
-    stats["late"] = max(stats["late"], db_late_count)
+    # Batch all count queries into a single round-trip to Turso Cloud for maximum speed
+    batch_counts = db.execute("""
+        SELECT
+            (SELECT COUNT(DISTINCT emp_id) FROM attendance WHERE date=? AND late=1) as db_late_count,
+            (SELECT COUNT(*) FROM leaves WHERE status='Pending') as pending_leave,
+            (SELECT COUNT(*) FROM od_requests WHERE status='Pending') as pending_od,
+            (SELECT COUNT(*) FROM face_change_requests WHERE status='Pending') as pending_face_changes,
+            (SELECT COUNT(*) FROM ai_face_alerts WHERE status='BLOCKED') as pending_ai_alerts,
+            (SELECT COUNT(*) FROM employees WHERE active=0 AND block_reason IS NOT NULL) as ai_blocked_count,
+            (SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='STAFF') as wf_staff,
+            (SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='EMPLOYEES') as wf_employees,
+            (SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='CONTRACT') as wf_contract,
+            (SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND (c.code='ACCOUNTS_FINANCE' OR e.department LIKE '%Accounts%')) as wf_accounts,
+            (SELECT COUNT(*) FROM employees WHERE active=1 AND face_registered=1) as face_registered,
+            (SELECT COUNT(*) FROM employees WHERE active=1 AND (face_registered=0 OR face_registered IS NULL)) as face_pending_setup,
+            (SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0) as office_unset_count
+    """, (d2s(t),)).fetchone()
 
-    pending_leave = db.execute("SELECT COUNT(*) FROM leaves WHERE status='Pending'").fetchone()[0]
-    pending_od = db.execute("SELECT COUNT(*) FROM od_requests WHERE status='Pending'").fetchone()[0]
-    pending_face_changes = db.execute("SELECT COUNT(*) FROM face_change_requests WHERE status='Pending'").fetchone()[0]
-    pending_ai_alerts = db.execute("SELECT COUNT(*) FROM ai_face_alerts WHERE status='BLOCKED'").fetchone()[0]
-    ai_blocked_count = db.execute("SELECT COUNT(*) FROM employees WHERE active=0 AND block_reason IS NOT NULL").fetchone()[0]
+    stats["late"] = max(stats["late"], (batch_counts["db_late_count"] if batch_counts else 0) or 0)
+    pending_leave = (batch_counts["pending_leave"] if batch_counts else 0) or 0
+    pending_od = (batch_counts["pending_od"] if batch_counts else 0) or 0
+    pending_face_changes = (batch_counts["pending_face_changes"] if batch_counts else 0) or 0
+    pending_ai_alerts = (batch_counts["pending_ai_alerts"] if batch_counts else 0) or 0
+    ai_blocked_count = (batch_counts["ai_blocked_count"] if batch_counts else 0) or 0
 
     workforce = {
-        "staff": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='STAFF'").fetchone()[0],
-        "employees": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='EMPLOYEES'").fetchone()[0],
-        "contract": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND c.code='CONTRACT'").fetchone()[0],
-        "accounts": db.execute("SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND (c.code='ACCOUNTS_FINANCE' OR e.department LIKE '%Accounts%')").fetchone()[0],
+        "staff": (batch_counts["wf_staff"] if batch_counts else 0) or 0,
+        "employees": (batch_counts["wf_employees"] if batch_counts else 0) or 0,
+        "contract": (batch_counts["wf_contract"] if batch_counts else 0) or 0,
+        "accounts": (batch_counts["wf_accounts"] if batch_counts else 0) or 0,
     }
 
     face_stats = {
-        "registered": db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND face_registered=1").fetchone()[0],
-        "pending_setup": db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND (face_registered=0 OR face_registered IS NULL)").fetchone()[0],
+        "registered": (batch_counts["face_registered"] if batch_counts else 0) or 0,
+        "pending_setup": (batch_counts["face_pending_setup"] if batch_counts else 0) or 0,
     }
+    office_unset = ((batch_counts["office_unset_count"] if batch_counts else 0) or 0) > 0
 
     upcoming_schedules = db.execute(
         "SELECT w.*, e.name emp_name, e.emp_code, s.name shift_name FROM weekly_shift_schedules w "
@@ -121,7 +137,6 @@ def dashboard():
     recent = db.execute(
         "SELECT a.*, e.name, e.emp_code FROM attendance a JOIN employees e ON e.id=a.emp_id "
         "WHERE a.date=? AND e.active=1 ORDER BY COALESCE(a.check_out, a.check_in) DESC LIMIT 8", (d2s(t),)).fetchall()
-    office_unset = db.execute("SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0").fetchone()[0] > 0
     active_face_alerts = db.execute("""
         SELECT a.*, 
                e1.emp_code as emp_code, e1.name as emp_name, e1.department as emp_dept,

@@ -130,9 +130,9 @@ def create_notification(title: str, message: str, kind: str = "info", user_id: i
 
 
 # ------------------------------------------------------------------ employee categories & shift schedules
-def get_employee_shift_for_date(emp_id: int, d, fallback_shift_id: int = None):
+def get_employee_shift_for_date(emp_id: int, d, fallback_shift_id: int = None, db=None):
     """Retrieve the effective shift for an employee on a given date, supporting weekly schedules."""
-    db = get_db()
+    db = db or get_db()
     d_str = d2s(d) if isinstance(d, date) else str(d)[:10]
     row = db.execute(
         "SELECT s.* FROM weekly_shift_schedules w JOIN shifts s ON s.id = w.shift_id "
@@ -142,16 +142,17 @@ def get_employee_shift_for_date(emp_id: int, d, fallback_shift_id: int = None):
     ).fetchone()
     if row:
         return row
+    all_shifts = get_all_shifts_cached(db)
     if fallback_shift_id:
-        s = db.execute("SELECT * FROM shifts WHERE id=?", (fallback_shift_id,)).fetchone()
-        if s:
-            return s
+        for s in all_shifts:
+            if s["id"] == fallback_shift_id:
+                return s
     emp = db.execute("SELECT shift_id FROM employees WHERE id=?", (emp_id,)).fetchone()
     if emp and emp["shift_id"]:
-        s = db.execute("SELECT * FROM shifts WHERE id=?", (emp["shift_id"],)).fetchone()
-        if s:
-            return s
-    return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id LIMIT 1").fetchone()
+        for s in all_shifts:
+            if s["id"] == emp["shift_id"]:
+                return s
+    return all_shifts[0] if all_shifts else None
 
 
 def determine_shift_from_punch(cin, db=None):
@@ -179,106 +180,134 @@ def determine_shift_from_punch(cin, db=None):
     return shift
 
 
-def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback_shift_id=None):
-    """Resolve the effective shift for an employee.
-    Priority:
-    1. Weekly shift schedule for target date (if any).
-       - If scheduled shift is rotating (Shift 1 / Shift 2) and check_in is provided,
-         allow auto day/night detection via determine_shift_from_punch.
-       - Otherwise, return scheduled shift.
-    2. Check employee's department and category:
-       - ACCOUNTS & FINANCE: Accounts employees ALWAYS belong to the Accounts & Finance shift (09:00-18:00)
-         or General Shift. They are NEVER assigned to factory Shift 1!
-       - STAFF / HR: Staff employees belong to General Shift or Staff Shift.
-       - CONTRACT: Contract employees belong to their shift.
-       - EMPLOYEES: Factory workers rotate between Shift 1 (08:00-20:00) and Shift 2 (20:00-08:00).
-    3. Check employee's assigned shift in employees table or fallback_shift_id.
-    4. Fallback to determine_shift_from_punch if check_in provided.
-    5. First active shift in database.
+def get_all_shifts_cached(db=None):
+    db = db or get_db()
+    from flask import g
+    try:
+        if "cached_shifts" not in g or not g.cached_shifts:
+            g.cached_shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+        return g.cached_shifts
+    except Exception:
+        return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+
+
+def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback_shift_id=None, emp_obj=None, emp_schedules=None):
+    """
+    Intelligent Shift Allocation Engine with in-memory caching for sub-millisecond execution.
     """
     db = db or get_db()
     d = d or today()
     d_str = d2s(d) if isinstance(d, (date, datetime)) else str(d)[:10]
 
+    all_shifts = [dict(s) for s in get_all_shifts_cached(db)]
+    shift_by_id = {s["id"]: s for s in all_shifts}
+
     # 1. Weekly shift schedule for target date
-    sched = db.execute(
-        "SELECT s.* FROM weekly_shift_schedules w JOIN shifts s ON s.id = w.shift_id "
-        "WHERE w.emp_id = ? AND w.start_date <= ? AND w.end_date >= ? "
-        "ORDER BY w.id DESC LIMIT 1",
-        (emp_id, d_str, d_str),
-    ).fetchone()
+    sched = None
+    if emp_schedules is not None:
+        for s in emp_schedules:
+            if s.get("start_date") <= d_str <= s.get("end_date"):
+                sched = s
+                break
+    else:
+        sched = db.execute(
+            "SELECT s.* FROM weekly_shift_schedules w JOIN shifts s ON s.id = w.shift_id "
+            "WHERE w.emp_id = ? AND w.start_date <= ? AND w.end_date >= ? "
+            "ORDER BY w.id DESC LIMIT 1",
+            (emp_id, d_str, d_str),
+        ).fetchone()
+
     if sched:
-        s_name = (sched["name"] or "").lower()
+        sched = dict(sched)
+        s_name = (sched.get("name") or "").lower()
         if ("shift 1" in s_name or "shift 2" in s_name) and check_in:
             return determine_shift_from_punch(check_in, db) or sched
         return sched
 
-    # 2. Check employee record with category and department
-    emp = db.execute(
-        "SELECT e.*, c.code category_code, c.name category_name "
-        "FROM employees e LEFT JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?",
-        (emp_id,)
-    ).fetchone()
+    # 2. Check employee record with category and department (in-memory if emp_obj passed)
+    emp = emp_obj
+    if emp is None:
+        emp = db.execute(
+            "SELECT e.*, c.code category_code, c.name category_name "
+            "FROM employees e LEFT JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?",
+            (emp_id,)
+        ).fetchone()
 
     if emp:
-        dept = (emp["department"] or "").strip().lower()
-        cat_code = (emp["category_code"] or "").strip().lower()
-        cat_name = (emp["category_name"] or "").strip().lower()
+        emp = dict(emp)
+        dept = (emp.get("department") or "").strip().lower()
+        cat_code = (emp.get("category_code") or "").strip().lower()
+        cat_name = (emp.get("category_name") or "").strip().lower()
         is_accounts = ("account" in dept or "finance" in dept or cat_code == "accounts_finance" or "account" in cat_name or "finance" in cat_name)
-        is_staff = (cat_code == "staff" or "staff" in dept or "admin" in dept or "hr" in dept or "human" in dept or "it" in dept or emp["role"] == "hr")
+        is_staff = (cat_code == "staff" or "staff" in dept or "admin" in dept or "hr" in dept or "human" in dept or "it" in dept or emp.get("role") == "hr")
 
         # ACCOUNTS & FINANCE: Always resolve to Accounts & Finance Shift (09:00-18:00) or General Shift
         if is_accounts:
-            acc_s = db.execute(
-                "SELECT * FROM shifts WHERE active=1 AND (name LIKE '%Accounts%' OR name LIKE '%Finance%') ORDER BY id LIMIT 1"
-            ).fetchone()
-            if not acc_s:
-                acc_s = db.execute("SELECT * FROM shifts WHERE active=1 AND name LIKE '%General%' ORDER BY id LIMIT 1").fetchone()
-            if acc_s:
-                return acc_s
+            for s in all_shifts:
+                s_name = (s.get("name") or "").lower()
+                if "account" in s_name or "finance" in s_name:
+                    return s
+            for s in all_shifts:
+                if "general" in (s.get("name") or "").lower():
+                    return s
 
         # Assigned shift in employees table or fallback_shift_id
-        target_sid = fallback_shift_id or emp["shift_id"]
-        if target_sid:
-            s = db.execute("SELECT * FROM shifts WHERE id=?", (target_sid,)).fetchone()
-            if s:
-                s_name = (s["name"] or "").lower()
-                if ("shift 1" in s_name or "shift 2" in s_name) and check_in:
-                    return determine_shift_from_punch(check_in, db) or s
-                return s
+        target_sid = fallback_shift_id or emp.get("shift_id")
+        if target_sid and target_sid in shift_by_id:
+            s = shift_by_id[target_sid]
+            s_name = (s.get("name") or "").lower()
+            if ("shift 1" in s_name or "shift 2" in s_name) and check_in:
+                return determine_shift_from_punch(check_in, db) or s
+            return s
 
         # STAFF fallback if no shift assigned: General Shift or Staff Shift
         if is_staff:
-            staff_s = db.execute(
-                "SELECT * FROM shifts WHERE active=1 AND (name LIKE '%General%' OR name LIKE '%Staff%') ORDER BY id LIMIT 1"
-            ).fetchone()
-            if staff_s:
-                return staff_s
-                return s
+            for s in all_shifts:
+                s_name = (s.get("name") or "").lower()
+                if "general" in s_name or "staff" in s_name:
+                    return s
 
     # 3. Fallback to determine from punch time
     if check_in:
         return determine_shift_from_punch(check_in, db)
 
     # 4. Fallback to first active shift
-    return db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id LIMIT 1").fetchone()
+    return all_shifts[0] if all_shifts else None
 
 
-def get_employee_category(emp_id):
+def get_all_categories_cached(db=None):
+    db = db or get_db()
+    from flask import g
+    try:
+        if "cached_categories" not in g or not g.cached_categories:
+            g.cached_categories = db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()
+        return g.cached_categories
+    except Exception:
+        return db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()
+
+
+def get_employee_category(emp_id, db=None):
     """Retrieve employee category details (work hours, overtime, half-day/full-day cutoffs)."""
-    db = get_db()
+    db = db or get_db()
+    cat_id = None
     if isinstance(emp_id, dict) or hasattr(emp_id, "keys"):
-        emp_id = emp_id.get("id") if isinstance(emp_id, dict) else emp_id["id"]
-    cat = db.execute(
-        "SELECT c.* FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?",
-        (emp_id,),
-    ).fetchone()
-    if cat:
-        return cat
-    # Fallback to Employees category
-    row = db.execute("SELECT * FROM employee_categories WHERE code='EMPLOYEES'").fetchone()
-    if row:
-        return row
+        cat_id = emp_id.get("category_id") if isinstance(emp_id, dict) else (emp_id["category_id"] if "category_id" in emp_id.keys() else None)
+        emp_id = emp_id.get("id") if isinstance(emp_id, dict) else (emp_id["id"] if "id" in emp_id.keys() else None)
+    cats = [dict(c) for c in get_all_categories_cached(db)]
+    if cat_id:
+        for c in cats:
+            if c["id"] == cat_id:
+                return c
+    if isinstance(emp_id, int):
+        cat = db.execute(
+            "SELECT c.* FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?",
+            (emp_id,),
+        ).fetchone()
+        if cat:
+            return dict(cat)
+    for c in cats:
+        if c.get("code") == "EMPLOYEES":
+            return c
     return {
         "name": "Employees", "code": "EMPLOYEES", "work_hours": 12.0, "overtime_hours": 0.0,
         "half_day_min_hours": 4.0, "half_day_time": "14:00", "early_full_day_cutoff": "16:00", "full_day_time": "20:00"
@@ -463,6 +492,14 @@ def build_register(emp_rows, start: date, end: date):
         for d in daterange(max(s2d(l["from_date"]), start), min(s2d(l["to_date"]), end)):
             leave_map[(l["emp_id"], d2s(d))] = l
 
+    # Preload weekly shift schedules for all employees in one single query
+    schedules = {}
+    try:
+        for r in db.execute(f"SELECT s.*, w.emp_id, w.start_date, w.end_date FROM weekly_shift_schedules w JOIN shifts s ON s.id = w.shift_id WHERE w.emp_id IN ({qs})", (*ids,)).fetchall():
+            schedules.setdefault(r["emp_id"], []).append(r)
+    except Exception:
+        pass
+
     t = today()
     result = {}
     for emp in emp_rows:
@@ -470,11 +507,17 @@ def build_register(emp_rows, start: date, end: date):
         summ = dict.fromkeys(["P", "OT", "HD", "A", "L", "HL", "OD", "H", "WO", "MP", "IN", "late", "hours", "ot_hours"], 0)
         emp_dict = dict(emp) if emp else {}
         joined = s2d(emp_dict["joined_on"]) if emp_dict.get("joined_on") else date(2000, 1, 1)
+        emp_scheds = schedules.get(emp["id"], [])
         for d in daterange(start, end):
             k = (emp["id"], d2s(d))
             rec = att.get(k)
             rec_dict = dict(rec) if rec else {}
-            shift = resolve_employee_shift(emp["id"], d, rec_dict.get("check_in"), db, fallback_shift_id=rec_dict.get("shift_id"))
+            shift = resolve_employee_shift(
+                emp["id"], d, rec_dict.get("check_in"), db,
+                fallback_shift_id=rec_dict.get("shift_id"),
+                emp_obj=emp_dict,
+                emp_schedules=emp_scheds
+            )
             code = day_code(d, rec, leave_map.get(k), ods.get(k), hols.get(d2s(d)), t, joined, shift)
             days[d] = code
             if rec:

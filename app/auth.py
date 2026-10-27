@@ -52,6 +52,8 @@ def employee_required(view):
 
 def load_user():
     g.user = None
+    if request.path.startswith("/static/") or request.path in ("/favicon.ico", "/sw.js", "/healthz"):
+        return
     uid = session.get("uid")
     if uid:
         u = get_db().execute(

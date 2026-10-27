@@ -31,18 +31,23 @@ def dashboard():
         if yesterday_rec:
             rec = yesterday_rec
     start, end = month_range(t.year, t.month)
-    reg = build_register([u], start, end)[u["id"]]
+    reg_start = min(start, t - timedelta(days=7))
+    reg_end = max(end, t)
+    reg = build_register([u], reg_start, reg_end)[u["id"]]
     recent = []
     for i in range(0, 7):
         d = t - timedelta(days=i)
-        if d < start:
-            r2 = build_register([u], d, d)[u["id"]]
-        else:
-            r2 = reg
-        recent.append((d, r2["days"][d], r2["recs"].get(d)))
-    pend_l = db.execute("SELECT COUNT(*) FROM leaves WHERE emp_id=? AND status='Pending'", (u["id"],)).fetchone()[0]
-    pend_o = db.execute("SELECT COUNT(*) FROM od_requests WHERE emp_id=? AND status='Pending'", (u["id"],)).fetchone()[0]
-    pend_p = db.execute("SELECT COUNT(*) FROM permission_requests WHERE emp_id=? AND status='Pending'", (u["id"],)).fetchone()[0]
+        recent.append((d, reg["days"][d], reg["recs"].get(d)))
+
+    # Batch pending counts in a single query
+    pend_row = db.execute("""
+        SELECT
+            (SELECT COUNT(*) FROM leaves WHERE emp_id=? AND status='Pending') as pend_l,
+            (SELECT COUNT(*) FROM od_requests WHERE emp_id=? AND status='Pending') as pend_o,
+            (SELECT COUNT(*) FROM permission_requests WHERE emp_id=? AND status='Pending') as pend_p
+    """, (u["id"], u["id"], u["id"])).fetchone()
+    pend = ((pend_row["pend_l"] if pend_row else 0) or 0) + ((pend_row["pend_o"] if pend_row else 0) or 0) + ((pend_row["pend_p"] if pend_row else 0) or 0)
+
     holiday = db.execute("SELECT * FROM holidays WHERE date>=? ORDER BY date LIMIT 1", (d2s(t),)).fetchone()
     od_today = db.execute("SELECT * FROM od_requests WHERE emp_id=? AND od_date=? AND status='Approved'",
                           (u["id"], d2s(t))).fetchone()
@@ -54,7 +59,7 @@ def dashboard():
     office = get_department_office(db, u)
     current_shift = _shift(u, t, rec["shift_id"] if (rec and "shift_id" in rec.keys() and rec["shift_id"]) else None)
     return render_template("emp/dashboard.html", rec=rec, shift=current_shift, category=category, summary=reg["summary"], recent=recent,
-                           pend=pend_l + pend_o + pend_p, holiday=holiday, od_today=od_today, perm_today=perm_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"),
+                           pend=pend, holiday=holiday, od_today=od_today, perm_today=perm_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"),
                            office=office)
 
 

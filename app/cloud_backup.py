@@ -82,50 +82,46 @@ def get_cloud_telemetry() -> Dict[str, Any]:
         ping_ok = False
         logger.error(f"Cloud DB ping failed: {e}")
 
-    # Headcounts and records
+    # Headcounts, records, and latest punch in 1 single batched query
+    emp_count = 0
+    att_count = 0
+    shift_count = 0
+    leave_count = 0
+    latest_punch = None
     try:
-        emp_count = db.execute("SELECT COUNT(*) FROM employees WHERE active=1").fetchone()[0]
-    except Exception:
-        emp_count = 0
-
-    try:
-        att_count = db.execute("SELECT COUNT(*) FROM attendance").fetchone()[0]
-    except Exception:
-        att_count = 0
-
-    try:
-        shift_count = db.execute("SELECT COUNT(*) FROM shifts WHERE active=1").fetchone()[0]
-    except Exception:
-        shift_count = 0
-
-    try:
-        leave_count = db.execute("SELECT COUNT(*) FROM leaves").fetchone()[0]
-    except Exception:
-        leave_count = 0
-
-    try:
-        latest_punch_row = db.execute(
-            "SELECT MAX(check_in) as max_in, MAX(check_out) as max_out FROM attendance"
-        ).fetchone()
-        latest_punch = None
-        if latest_punch_row:
-            cin = latest_punch_row["max_in"] or ""
-            cout = latest_punch_row["max_out"] or ""
+        batch = db.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM employees WHERE active=1) as emp_count,
+                (SELECT COUNT(*) FROM attendance) as att_count,
+                (SELECT COUNT(*) FROM shifts WHERE active=1) as shift_count,
+                (SELECT COUNT(*) FROM leaves) as leave_count,
+                (SELECT MAX(check_in) FROM attendance) as max_in,
+                (SELECT MAX(check_out) FROM attendance) as max_out
+        """).fetchone()
+        if batch:
+            emp_count = batch["emp_count"] or 0
+            att_count = batch["att_count"] or 0
+            shift_count = batch["shift_count"] or 0
+            leave_count = batch["leave_count"] or 0
+            cin = batch["max_in"] or ""
+            cout = batch["max_out"] or ""
             latest_punch = max(cin, cout) if (cin or cout) else None
+    except Exception as e:
+        logger.warning(f"Telemetry batch query error: {e}")
+
+    # Stored settings in 1 single query
+    settings_map = {}
+    try:
+        s_rows = db.execute(
+            "SELECT key, value FROM system_settings WHERE key IN ('last_cloud_backup_ts', 'last_cloud_sync_ts', 'last_cloud_sync_result')"
+        ).fetchall()
+        settings_map = {r["key"]: r["value"] for r in s_rows if r and r["value"]}
     except Exception:
-        latest_punch = None
+        pass
 
-    # Stored settings
-    def _get_setting(k, default="-"):
-        try:
-            r = db.execute("SELECT value FROM system_settings WHERE key=?", (k,)).fetchone()
-            return r["value"] if r and r["value"] else default
-        except Exception:
-            return default
-
-    last_backup_ts = _get_setting("last_cloud_backup_ts", "Never")
-    last_sync_ts = _get_setting("last_cloud_sync_ts", "Never")
-    last_sync_result = _get_setting("last_cloud_sync_result", "No synchronization run yet.")
+    last_backup_ts = settings_map.get("last_cloud_backup_ts", "Never")
+    last_sync_ts = settings_map.get("last_cloud_sync_ts", "Never")
+    last_sync_result = settings_map.get("last_cloud_sync_result", "No synchronization run yet.")
 
     return {
         "ok": ping_ok,
