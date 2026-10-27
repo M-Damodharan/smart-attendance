@@ -785,7 +785,7 @@ body.login-page {
 
 body.login-page .wrap {
   width: 100% !important;
-  max-width: 1240px !important;
+  max-width: 480px !important;
   margin: 0 auto !important;
   padding: 0 !important;
   display: flex;
@@ -796,7 +796,7 @@ body.login-page .wrap {
 
 .login-wrapper {
   width: 100%;
-  max-width: 1240px;
+  max-width: 480px;
   margin: 0 auto;
   padding: 0;
   display: flex;
@@ -2391,23 +2391,14 @@ body.login-page {
 }
 
 body.login-page .wrap {
-  max-width: 1240px !important;
+  max-width: 480px !important;
   width: 100% !important;
   margin: 0 auto !important;
   padding: 0 !important;
-}
-
-.login-wrapper.outcrowd-layout {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: min(1360px, 94vw);
-  margin: auto;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 2.5rem);
-  padding: 1rem 0;
 }
 
 /* Outcrowd Floating Glass Topbar */
@@ -2551,182 +2542,7 @@ body.login-page .wrap {
    3D Animated Interactive Showcase Stage
    ========================================================================== */
 .outcrowd-3d-stage {
-  position: relative;
-  width: 100%;
-  height: 380px;
-  perspective: 1200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0.5rem 0 1.75rem;
-}
-
-.stage-perspective-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transform: rotateX(18deg) rotateY(-12deg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.outcrowd-3d-stage:hover .stage-perspective-wrap {
-  transform: rotateX(10deg) rotateY(-5deg);
-}
-
-/* Central 3D Rotating Gear Assembly */
-.gear-3d-assembly {
-  position: relative;
-  width: 220px;
-  height: 220px;
-  transform-style: preserve-3d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Outer Gear Ring */
-.gear-3d-ring.outer {
-  position: absolute;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  border: 4px dashed rgba(56, 189, 248, 0.7);
-  box-shadow: 0 0 30px rgba(56, 189, 248, 0.3), inset 0 0 20px rgba(56, 189, 248, 0.2);
-  animation: outcrowdGearSpin 24s linear infinite;
-}
-
-/* Middle Cog Ring */
-.gear-3d-ring.middle {
-  position: absolute;
-  width: 175px;
-  height: 175px;
-  border-radius: 50%;
-  border: 2px dotted rgba(139, 92, 246, 0.8);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-  animation: outcrowdGearSpinReverse 16s linear infinite;
-}
-
-/* Holographic Biometric Shield Core */
-.gear-3d-shield {
-  position: absolute;
-  width: 130px;
-  height: 130px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.25) 0%, rgba(15, 23, 42, 0.85) 80%);
-  border: 2px solid rgba(56, 189, 248, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  box-shadow: 0 0 35px rgba(56, 189, 248, 0.5), inset 0 0 25px rgba(56, 189, 248, 0.4);
-  transform: translateZ(25px);
-}
-
-/* Rotating Radar Sweep Laser */
-.radar-scan-sweep {
-  position: absolute;
-  inset: 0;
-  background: conic-gradient(from 0deg, transparent 0deg, transparent 270deg, rgba(56, 189, 248, 0.6) 360deg);
-  border-radius: 50%;
-  animation: outcrowdRadarSweep 4s linear infinite;
-}
-
-/* Concentric Energy Waves */
-.radar-ring {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid rgba(56, 189, 248, 0.4);
-}
-.radar-ring.r1 { width: 45px; height: 45px; }
-.radar-ring.r2 { width: 85px; height: 85px; }
-.radar-ring.r3 { width: 115px; height: 115px; }
-
-.shield-center-core {
-  position: relative;
-  z-index: 2;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(56, 189, 248, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 15px rgba(56, 189, 248, 0.6);
-}
-
-/* 3D Orbiting Floating Glass Telemetry Cards */
-.orbit-card {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: rgba(15, 23, 42, 0.78);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 14px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s;
-  cursor: default;
-  white-space: nowrap;
-}
-.orbit-card:hover {
-  transform: scale(1.06) translateZ(80px) !important;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.4);
-  border-color: rgba(56, 189, 248, 0.5);
-}
-
-.orbit-card-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-.orbit-card-title {
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: #ffffff;
-}
-.orbit-card-sub {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-/* Card Positions in 3D Space */
-.card-top-left {
-  top: 15px;
-  left: 20px;
-  transform: translateZ(60px);
-  animation: outcrowdFloat3D 5.5s ease-in-out infinite alternate;
-}
-.card-top-right {
-  top: 30px;
-  right: 25px;
-  transform: translateZ(80px);
-  animation: outcrowdFloat3D 6.2s ease-in-out infinite alternate -2s;
-}
-.card-bottom-left {
-  bottom: 30px;
-  left: 30px;
-  transform: translateZ(70px);
-  animation: outcrowdFloat3D 5.8s ease-in-out infinite alternate -3.5s;
-}
-.card-bottom-right {
-  bottom: 20px;
-  right: 15px;
-  transform: translateZ(90px);
-  animation: outcrowdFloat3D 6.5s ease-in-out infinite alternate -1s;
+  display: none !important;
 }
 
 /* Live Telemetry Ticker */
@@ -3167,51 +2983,17 @@ body.login-page .wrap {
 }
 
 /* Animations */
-@keyframes outcrowdGearSpin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-@keyframes outcrowdGearSpinReverse {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(-360deg); }
-}
-@keyframes outcrowdRadarSweep {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-@keyframes outcrowdFloat3D {
-  0% { transform: translateY(0px) translateZ(60px); }
-  100% { transform: translateY(-12px) translateZ(85px); }
-}
-@keyframes outcrowdGlowDrift {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(30px, 20px) scale(1.1); }
-}
 @keyframes outcrowdPulsePing {
   0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 6px #10b981; }
   50% { transform: scale(1.25); opacity: 0.7; box-shadow: 0 0 14px #10b981; }
 }
 
 @media (max-width: 980px) {
-  .outcrowd-3d-stage {
-    height: 300px;
-    margin-bottom: 1rem;
-  }
-  .stage-perspective-wrap {
-    transform: rotateX(10deg) rotateY(0deg) scale(0.85);
-  }
   .outcrowd-kpi-ticker {
     margin: 0 auto 1.5rem;
     max-width: 100%;
   }
 }
-@media (max-width: 600px) {
-  .outcrowd-3d-stage {
-    height: 240px;
-  }
-  .stage-perspective-wrap {
-    transform: scale(0.7);
-  }
   .outcrowd-topbar {
     padding: 0.6rem 0.85rem;
     margin-bottom: 1.25rem;
@@ -3283,172 +3065,7 @@ body.login-page .wrap {
 
 .dashboard-3d-stage-compact,
 .ai-analysis-stage {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  width: 150px;
-  height: 150px;
-  flex-shrink: 0;
-  perspective: 900px;
-  margin: 0.25rem 0.5rem;
-}
-
-.ai-robot-perspective-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ai-robot-floating-assembly {
-  position: relative;
-  width: 120px;
-  height: 120px;
-  transform-style: preserve-3d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: aiRobotHover 4.2s ease-in-out infinite alternate;
-}
-
-@keyframes aiRobotHover {
-  0% {
-    transform: translateY(5px) rotateX(4deg) rotateY(-8deg) scale(0.98);
-  }
-  100% {
-    transform: translateY(-8px) rotateX(-5deg) rotateY(8deg) scale(1.02);
-  }
-}
-
-.ai-orbit-ring {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.ai-orbit-ring.outer {
-  width: 136px;
-  height: 136px;
-  border: 2px dashed rgba(56, 189, 248, 0.75);
-  box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
-  animation: outcrowdGearSpin 22s linear infinite;
-}
-
-.ai-orbit-ring.inner {
-  width: 112px;
-  height: 112px;
-  border: 1.5px dotted rgba(168, 85, 247, 0.85);
-  box-shadow: 0 0 18px rgba(168, 85, 247, 0.35);
-  animation: outcrowdGearSpinReverse 15s linear infinite;
-}
-
-.ai-robot-sphere {
-  position: relative;
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translateZ(30px);
-  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 24px rgba(56, 189, 248, 0.5));
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.ai-analysis-stage:hover .ai-robot-sphere {
-  transform: translateZ(48px) scale(1.08);
-}
-
-.ai-robot-head-img {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
-  z-index: 2;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.8), 0 0 30px rgba(56, 189, 248, 0.6);
-  animation: aiRobotPulse 3.8s ease-in-out infinite alternate;
-}
-
-@keyframes aiRobotPulse {
-  0% {
-    filter: brightness(1) drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
-  }
-  100% {
-    filter: brightness(1.1) drop-shadow(0 0 22px rgba(168, 85, 247, 0.75));
-  }
-}
-
-.ai-robot-glow-backlight {
-  position: absolute;
-  inset: -12px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(56, 189, 248, 0.6) 0%, rgba(168, 85, 247, 0.35) 50%, transparent 75%);
-  z-index: 1;
-  filter: blur(10px);
-  animation: aiBacklightDrift 4.5s ease-in-out infinite alternate;
-}
-
-@keyframes aiBacklightDrift {
-  0% { transform: scale(0.92); opacity: 0.6; }
-  100% { transform: scale(1.2); opacity: 1; }
-}
-
-.ai-analysis-badge {
-  position: absolute;
-  bottom: -6px;
-  white-space: nowrap;
-  background: rgba(15, 23, 42, 0.94);
-  border: 1px solid rgba(56, 189, 248, 0.65);
-  border-radius: var(--radius-pill);
-  padding: 3px 11px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #38bdf8;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.35);
-  z-index: 5;
-}
-
-/* Large Showcase Version for Login Screen */
-.ai-robot-assembly-large {
-  position: relative;
-  width: 240px;
-  height: 240px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform-style: preserve-3d;
-  animation: aiRobotHover 4.5s ease-in-out infinite alternate;
-}
-.ai-robot-sphere-large {
-  position: relative;
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translateZ(40px);
-  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 35px rgba(56, 189, 248, 0.6));
-}
-.ai-robot-head-img-large {
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
-  z-index: 2;
-  border: 2.5px solid rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 3px 8px rgba(255, 255, 255, 0.9), 0 0 40px rgba(56, 189, 248, 0.7);
-  animation: aiRobotPulse 3.8s ease-in-out infinite alternate;
+  display: none !important;
 }
 
 /* Responsive Auto-Fitting for Mobile App & Web Pages */

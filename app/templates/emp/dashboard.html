@@ -2,44 +2,22 @@
 {% from "_macros.html" import chip with context %}
 {% block title %}Dashboard · SBG{% endblock %}
 {% block content %}
-<div class="dashboard-3d-wrapper">
-  <div class="outcrowd-glow-orb orb-1"></div>
-  <div class="outcrowd-glow-orb orb-2"></div>
-  <div class="outcrowd-bg-grid"></div>
-
-  <section class="hero dashboard-3d-hero">
-    <div>
-      <div style="font-size:0.875rem; font-weight:700; color:var(--brand-accent); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:4px;">
-        Welcome back, {{ g.user['name'] }}
-      </div>
-      <div class="clock" id="clock">--:--</div>
-      <div class="date">{{ today.strftime('%A, %d %B %Y') }}</div>
-      <div class="muted small" style="margin-top:6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span class="hero-badge">🏷️ {{ category['name'] if category else 'Standard Employee' }}</span>
-        <span class="hero-badge">🕒 {{ shift['name'] }} ({{ shift['start_time'] }}–{{ shift['end_time'] }})</span>
-        <span class="hero-badge">📍 {{ office['name'] if office else 'Department Office' }} (50m)</span>
-        <a href="{{ url_for('emp.face_change') }}" class="hero-badge-link {% if g.user['face_registered'] %}active{% else %}pending{% endif %}">
-          👤 Face ID: {{ 'Active' if g.user['face_registered'] else 'Setup Needed' }}
-        </a>
-      </div>
+<section class="hero">
+  <div>
+    <div style="font-size:0.875rem; font-weight:700; color:var(--brand-accent); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:4px;">
+      Welcome back, {{ g.user['name'] }}
     </div>
-
-    <!-- 3D AI Biometric Analysis Robot Character (Perevoz AI SaaS Dribbble Design) -->
-    <div class="dashboard-3d-stage-compact ai-analysis-stage" aria-label="AI Biometric Intelligence Core">
-      <div class="ai-robot-perspective-wrap">
-        <div class="ai-robot-floating-assembly">
-          <div class="ai-orbit-ring outer"></div>
-          <div class="ai-orbit-ring inner"></div>
-          <div class="ai-robot-sphere">
-            <img src="{{ url_for('static', filename='img/ai_robot_3d.png') }}" alt="AI Biometric Intelligence Core" class="ai-robot-head-img">
-            <div class="ai-robot-glow-backlight"></div>
-          </div>
-        </div>
-      </div>
-      <div class="gear-telemetry-badge ai-analysis-badge">
-        <span class="telemetry-dot pulse"></span> SBG AI Core
-      </div>
+    <div class="clock" id="clock">--:--</div>
+    <div class="date">{{ today.strftime('%A, %d %B %Y') }}</div>
+    <div class="muted small" style="margin-top:6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span class="hero-badge">🏷️ {{ category['name'] if category else 'Standard Employee' }}</span>
+      <span class="hero-badge">🕒 {{ shift['name'] }} ({{ shift['start_time'] }}–{{ shift['end_time'] }})</span>
+      <span class="hero-badge">📍 {{ office['name'] if office else 'Department Office' }} (50m)</span>
+      <a href="{{ url_for('emp.face_change') }}" class="hero-badge-link {% if g.user['face_registered'] %}active{% else %}pending{% endif %}">
+        👤 Face ID: {{ 'Active' if g.user['face_registered'] else 'Setup Needed' }}
+      </a>
     </div>
+  </div>
 
 
     <div class="today-state">
@@ -176,7 +154,6 @@
   </section>
 
   {% if holiday %}<p class="muted small center">Next holiday: <strong>{{ holiday['name'] }}</strong> · {{ holiday['date']|dmy }}</p>{% endif %}
-</div>
 {% endblock %}
 {% block scripts %}
 <script>
