@@ -1,5 +1,6 @@
 import secrets
 import time
+import threading
 from functools import wraps
 
 from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
@@ -50,12 +51,43 @@ def employee_required(view):
     return wrapped
 
 
+_USER_SESSION_CACHE = {}
+_USER_CACHE_LOCK = threading.Lock()
+
+
+def get_cached_user(uid: int, ttl: float = 8.0):
+    now_ts = time.time()
+    with _USER_CACHE_LOCK:
+        item = _USER_SESSION_CACHE.get(uid)
+        if item and (now_ts - item["ts"] < ttl):
+            return dict(item["user"])
+    return None
+
+
+def set_cached_user(uid: int, user_dict: dict):
+    with _USER_CACHE_LOCK:
+        _USER_SESSION_CACHE[uid] = {"user": dict(user_dict), "ts": time.time()}
+
+
+def clear_user_cache(uid: int = None):
+    with _USER_CACHE_LOCK:
+        if uid:
+            _USER_SESSION_CACHE.pop(uid, None)
+        else:
+            _USER_SESSION_CACHE.clear()
+
+
 def load_user():
     g.user = None
     if request.path.startswith("/static/") or request.path in ("/favicon.ico", "/sw.js", "/healthz"):
         return
     uid = session.get("uid")
     if uid:
+        cached_u = get_cached_user(uid, ttl=8.0)
+        if cached_u:
+            g.user = cached_u
+            return
+
         u = get_db().execute(
             "SELECT e.*, s.name shift_name, s.start_time, s.end_time, "
             "c.name category_name, c.work_hours category_work_hours, c.overtime_hours category_ot_hours "
@@ -75,6 +107,7 @@ def load_user():
                 u_dict["shift_id"] = cur_shift["id"]
             if not u_dict.get("category_name"):
                 u_dict["category_name"] = "Staff" if u_dict.get("role") == "hr" else "Employees"
+            set_cached_user(uid, u_dict)
             g.user = u_dict
         else:
             session.clear()
@@ -330,6 +363,7 @@ def login(login_type=None):
 @bp.route("/logout", methods=["POST", "GET"])
 def logout():
     if g.user:
+        clear_user_cache(g.user["id"])
         audit("LOGOUT", "employee", g.user["id"])
         get_db().commit()
     session.clear()
@@ -355,6 +389,7 @@ def change_password():
             db = get_db()
             db.execute("UPDATE employees SET password_hash=?, must_change_pw=0 WHERE id=?",
                        (generate_password_hash(new), g.user["id"]))
+            clear_user_cache(g.user["id"])
             audit("PASSWORD_CHANGE", "employee", g.user["id"], f"{g.user['emp_code']} ({g.user['role']})")
             db.commit()
             is_first = session.pop("first_time_login", False) or g.user.get("must_change_pw")

@@ -4,8 +4,10 @@ Enables permanent 24/7 cloud persistence on Render Free Tier with zero data loss
 """
 import os
 import json
+import time
 import base64
 import sqlite3
+import threading
 from typing import Any, List, Optional, Sequence, Union
 import requests
 from requests.adapters import HTTPAdapter
@@ -13,6 +15,17 @@ from urllib3.util.retry import Retry
 
 # Global reusable HTTP Keep-Alive session pool
 _SESSION_POOL = None
+
+# Micro-caching for near-instant repeat query resolution (4.0s TTL)
+_READ_CACHE_LOCK = threading.Lock()
+_READ_CACHE = {}
+_READ_CACHE_TTL = 4.0  # seconds
+
+
+def clear_turso_cache():
+    """Immediately invalidates all cached query results."""
+    with _READ_CACHE_LOCK:
+        _READ_CACHE.clear()
 
 
 def _get_session() -> requests.Session:
@@ -114,11 +127,29 @@ class TursoConnection:
         else:
             return {"type": "text", "value": str(p)}
 
-    def execute(self, sql: str, params: Optional[Sequence[Any]] = None) -> TursoCursor:
-        # Ignore local SQLite pragmas that are not needed on Turso Cloud
+    def execute(self, sql: str, params: Optional[Sequence[Any]] = None, bypass_cache: bool = False) -> TursoCursor:
         clean_sql = sql.strip()
+        # Ignore local SQLite pragmas that are not needed on Turso Cloud
         if clean_sql.upper().startswith("PRAGMA") and ("JOURNAL_MODE" in clean_sql.upper() or "FOREIGN_KEYS" in clean_sql.upper() or "BUSY_TIMEOUT" in clean_sql.upper()):
             return TursoCursor(self, [], None, 0)
+
+        is_select = clean_sql.upper().startswith("SELECT")
+        is_write = any(clean_sql.upper().startswith(w) for w in ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "DROP", "ALTER"))
+
+        # Invalidate read cache immediately on any write operation
+        if is_write:
+            clear_turso_cache()
+
+        # Check in-memory read cache for repeat SELECT queries
+        cache_key = None
+        if is_select and not bypass_cache and "RANDOM()" not in clean_sql.upper() and clean_sql != "SELECT 1":
+            cache_key = (clean_sql, tuple(str(p) for p in params) if params else ())
+            now_ts = time.time()
+            with _READ_CACHE_LOCK:
+                cached = _READ_CACHE.get(cache_key)
+                if cached and (now_ts - cached["ts"] < _READ_CACHE_TTL):
+                    cloned_rows = [TursoRow(list(r.keys()), list(r.values())) for r in cached["rows"]]
+                    return TursoCursor(self, cloned_rows, cached["lastrowid"], cached["affected"], cols=cached["cols"])
 
         stmt = {"sql": sql}
         if params is not None:
@@ -170,7 +201,25 @@ class TursoConnection:
 
         last_id = result_obj.get("last_insert_rowid")
         affected = result_obj.get("affected_row_count", 0)
-        return TursoCursor(self, parsed_rows, int(last_id) if last_id is not None else None, affected, cols=cols)
+
+        # Store in read cache
+        if is_select and cache_key:
+            with _READ_CACHE_LOCK:
+                if len(_READ_CACHE) > 500:
+                    _READ_CACHE.clear()
+                _READ_CACHE[cache_key] = {
+                    "rows": parsed_rows,
+                    "lastrowid": int(last_id) if last_id is not None else None,
+                    "affected": affected,
+                    "cols": cols,
+                    "ts": time.time(),
+                }
+
+        cursor_rows = [TursoRow(list(r.keys()), list(r.values())) for r in parsed_rows]
+        return TursoCursor(self, cursor_rows, int(last_id) if last_id is not None else None, affected, cols=cols)
+
+    def clear_cache(self):
+        clear_turso_cache()
 
     def executescript(self, script: str):
         statements = [s.strip() for s in script.split(";") if s.strip()]
