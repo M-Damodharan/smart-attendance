@@ -350,6 +350,8 @@
 </div>
 
 <script>
+  const _CSRF_TOKEN = "{{ csrf_token() }}";
+
   function logConsole(msg, type = 'info') {
     const con = document.getElementById('liveConsole');
     if (!con) return;
@@ -385,7 +387,7 @@
     } catch (err) {
       logConsole("Error updating telemetry: " + err.message, "err");
     }
-  const _CSRF_TOKEN = "{{ csrf_token() }}";
+  }
 
   async function triggerSyncAll() {
     const btn = document.getElementById('btnSyncAll');
