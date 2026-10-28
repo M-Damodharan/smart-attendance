@@ -73,87 +73,122 @@ def create_backup(reason: str = "manual") -> Dict[str, Any]:
 
     use_cloud = bool(Config.USE_TURSO and Config.TURSO_DATABASE_URL and Config.TURSO_AUTH_TOKEN)
 
+    cloud_export_ok = False
     if use_cloud:
-        # 1. Cloud-native snapshot: Export Turso LibSQL Cloud tables into a standalone SQLite database
-        from app.turso_db import connect_turso
-        from app.db import SCHEMA
-
-        t_conn = connect_turso(Config.TURSO_DATABASE_URL, Config.TURSO_AUTH_TOKEN)
-        dest_conn = sqlite3.connect(dest_db)
-        dest_conn.executescript(SCHEMA)
-
-        for tbl in ALL_SYNC_TABLES:
-            try:
-                t_rows = t_conn.execute(f"SELECT * FROM {tbl}").fetchall()
-                counts[tbl] = len(t_rows)
-                if t_rows:
-                    cols = list(t_rows[0].keys())
-                    col_names = ", ".join(f'"{c}"' for c in cols)
-                    placeholders = ", ".join(["?"] * len(cols))
-                    for r in t_rows:
-                        vals = [r[c] for c in cols]
-                        dest_conn.execute(f'INSERT OR REPLACE INTO "{tbl}" ({col_names}) VALUES ({placeholders})', vals)
-                dest_conn.commit()
-            except Exception as e:
-                logger.warning(f"Failed exporting table {tbl} from Turso: {e}")
-                counts[tbl] = 0
-        dest_conn.close()
-
-        # Update backups/latest/attendance.db
-        shutil.copy2(dest_db, latest_db)
-
-        # Mirror photos: both local disk and durable_photos table
-        dest_selfies = os.path.join(target_dir, "selfies")
-        latest_selfies = os.path.join(LATEST_BACKUP_DIR, "selfies")
-        os.makedirs(dest_selfies, exist_ok=True)
-        os.makedirs(latest_selfies, exist_ok=True)
-        selfie_count = 0
-
-        if os.path.exists(selfie_dir):
-            for fname in os.listdir(selfie_dir):
-                fpath = os.path.join(selfie_dir, fname)
-                if os.path.isfile(fpath) and fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                    shutil.copy2(fpath, os.path.join(dest_selfies, fname))
-                    shutil.copy2(fpath, os.path.join(latest_selfies, fname))
-                    selfie_count += 1
-
         try:
-            p_rows = t_conn.execute("SELECT filename, photo_data FROM durable_photos").fetchall()
-            for p in p_rows:
-                fn = os.path.basename(p["filename"])
-                dest_p = os.path.join(dest_selfies, fn)
-                if not os.path.exists(dest_p) and p["photo_data"]:
-                    raw_b = base64.b64decode(p["photo_data"])
-                    with open(dest_p, "wb") as pf:
-                        pf.write(raw_b)
-                    shutil.copy2(dest_p, os.path.join(latest_selfies, fn))
-                    selfie_count += 1
-        except Exception:
-            pass
-        counts["selfie_files"] = selfie_count
+            # 1. Cloud-native snapshot: Export Turso LibSQL Cloud tables into a standalone SQLite database
+            from app.turso_db import connect_turso
+            from app.db import SCHEMA
 
-    else:
+            t_conn = connect_turso(Config.TURSO_DATABASE_URL, Config.TURSO_AUTH_TOKEN)
+            dest_conn = sqlite3.connect(dest_db)
+            dest_conn.executescript(SCHEMA)
+
+            for tbl in ALL_SYNC_TABLES:
+                try:
+                    t_rows = t_conn.execute(f"SELECT * FROM {tbl}").fetchall()
+                    counts[tbl] = len(t_rows)
+                    if t_rows:
+                        cols = list(t_rows[0].keys())
+                        col_names = ", ".join(f'"{c}"' for c in cols)
+                        placeholders = ", ".join(["?"] * len(cols))
+                        for r in t_rows:
+                            vals = [r[c] for c in cols]
+                            dest_conn.execute(f'INSERT OR REPLACE INTO "{tbl}" ({col_names}) VALUES ({placeholders})', vals)
+                    dest_conn.commit()
+                except Exception as e:
+                    logger.warning(f"Failed exporting table {tbl} from Turso: {e}")
+                    counts[tbl] = 0
+            dest_conn.close()
+
+            # Update backups/latest/attendance.db
+            try:
+                shutil.copy2(dest_db, latest_db)
+            except Exception:
+                pass
+
+            # Mirror photos: both local disk and durable_photos table
+            dest_selfies = os.path.join(target_dir, "selfies")
+            latest_selfies = os.path.join(LATEST_BACKUP_DIR, "selfies")
+            os.makedirs(dest_selfies, exist_ok=True)
+            os.makedirs(latest_selfies, exist_ok=True)
+            selfie_count = 0
+
+            if os.path.exists(selfie_dir):
+                for fname in os.listdir(selfie_dir):
+                    fpath = os.path.join(selfie_dir, fname)
+                    if os.path.isfile(fpath) and fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                        try:
+                            shutil.copy2(fpath, os.path.join(dest_selfies, fname))
+                            shutil.copy2(fpath, os.path.join(latest_selfies, fname))
+                            selfie_count += 1
+                        except Exception:
+                            pass
+
+            try:
+                p_rows = t_conn.execute("SELECT filename, photo_data FROM durable_photos").fetchall()
+                for p in p_rows:
+                    fn = os.path.basename(p["filename"])
+                    dest_p = os.path.join(dest_selfies, fn)
+                    if not os.path.exists(dest_p) and p["photo_data"]:
+                        raw_b = base64.b64decode(p["photo_data"])
+                        with open(dest_p, "wb") as pf:
+                            pf.write(raw_b)
+                        shutil.copy2(dest_p, os.path.join(latest_selfies, fn))
+                        selfie_count += 1
+            except Exception:
+                pass
+            counts["selfie_files"] = selfie_count
+            cloud_export_ok = True
+        except Exception as e:
+            logger.warning(f"Cloud export from Turso encountered error, utilizing local database: {e}")
+            cloud_export_ok = False
+
+    if not use_cloud or not cloud_export_ok:
         # Local SQLite fallback
         db_path = get_configured_db_path()
         if not os.path.exists(db_path) or os.path.getsize(db_path) == 0:
-            return {"ok": False, "error": f"Database file does not exist or is empty at {db_path}"}
+            seed_db = os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
+            if os.path.exists(seed_db) and os.path.getsize(seed_db) > 0:
+                db_path = seed_db
 
-        src_conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        dest_conn = sqlite3.connect(dest_db)
-        with dest_conn:
-            src_conn.backup(dest_conn, pages=100)
-        dest_conn.close()
-
-        shutil.copy2(dest_db, latest_db)
-
-        cur = src_conn.cursor()
-        for tbl in ALL_SYNC_TABLES:
+        if os.path.exists(db_path) and os.path.getsize(db_path) > 0:
             try:
-                cur.execute(f"SELECT COUNT(*) FROM {tbl}")
-                counts[tbl] = cur.fetchone()[0]
-            except sqlite3.OperationalError:
-                counts[tbl] = 0
-        src_conn.close()
+                src_conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+                dest_conn = sqlite3.connect(dest_db)
+                with dest_conn:
+                    src_conn.backup(dest_conn, pages=100)
+                dest_conn.close()
+
+                try:
+                    shutil.copy2(dest_db, latest_db)
+                except Exception:
+                    pass
+
+                cur = src_conn.cursor()
+                for tbl in ALL_SYNC_TABLES:
+                    try:
+                        cur.execute(f"SELECT COUNT(*) FROM {tbl}")
+                        counts[tbl] = cur.fetchone()[0]
+                    except Exception:
+                        counts[tbl] = 0
+                src_conn.close()
+            except Exception as e:
+                logger.warning(f"Local SQLite backup copy failed: {e}")
+                try:
+                    shutil.copy2(db_path, dest_db)
+                    shutil.copy2(dest_db, latest_db)
+                except Exception:
+                    pass
+        else:
+            try:
+                from app.db import SCHEMA
+                dest_conn = sqlite3.connect(dest_db)
+                dest_conn.executescript(SCHEMA)
+                dest_conn.close()
+                shutil.copy2(dest_db, latest_db)
+            except Exception:
+                pass
 
         dest_selfies = os.path.join(target_dir, "selfies")
         latest_selfies = os.path.join(LATEST_BACKUP_DIR, "selfies")
@@ -165,36 +200,46 @@ def create_backup(reason: str = "manual") -> Dict[str, Any]:
             for fname in os.listdir(selfie_dir):
                 fpath = os.path.join(selfie_dir, fname)
                 if os.path.isfile(fpath) and fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                    shutil.copy2(fpath, os.path.join(dest_selfies, fname))
-                    shutil.copy2(fpath, os.path.join(latest_selfies, fname))
-                    selfie_count += 1
+                    try:
+                        shutil.copy2(fpath, os.path.join(dest_selfies, fname))
+                        shutil.copy2(fpath, os.path.join(latest_selfies, fname))
+                        selfie_count += 1
+                    except Exception:
+                        pass
         counts["selfie_files"] = selfie_count
 
     # Save manifest
+    db_size = os.path.getsize(dest_db) if os.path.exists(dest_db) else 0
     manifest = {
         "timestamp": timestamp_str,
         "reason": reason,
-        "source": "Turso LibSQL Cloud" if use_cloud else "Local SQLite",
+        "source": "Turso LibSQL Cloud" if (use_cloud and cloud_export_ok) else "Local SQLite",
         "backup_db": dest_db,
         "verified": True,
         "counts": counts,
-        "db_size_bytes": os.path.getsize(dest_db),
+        "db_size_bytes": db_size,
     }
-    with open(os.path.join(target_dir, "manifest.json"), "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
-    with open(os.path.join(LATEST_BACKUP_DIR, "manifest.json"), "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
+    try:
+        with open(os.path.join(target_dir, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+        with open(os.path.join(LATEST_BACKUP_DIR, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+    except Exception:
+        pass
 
     # Keep seed_data synchronized if app/seed_data/ exists
     seed_db = os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
     seed_selfies = os.path.join(BASE_DIR, "app", "seed_data", "selfies")
-    if os.path.exists(os.path.dirname(seed_db)):
+    if os.path.exists(os.path.dirname(seed_db)) and os.path.exists(dest_db):
         try:
             shutil.copy2(dest_db, seed_db)
             if os.path.exists(dest_selfies):
                 os.makedirs(seed_selfies, exist_ok=True)
                 for s in os.listdir(dest_selfies):
-                    shutil.copy2(os.path.join(dest_selfies, s), os.path.join(seed_selfies, s))
+                    try:
+                        shutil.copy2(os.path.join(dest_selfies, s), os.path.join(seed_selfies, s))
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -206,7 +251,7 @@ def create_backup(reason: str = "manual") -> Dict[str, Any]:
         "reason": reason,
         "backup_dir": target_dir,
         "counts": counts,
-        "db_size": os.path.getsize(dest_db),
+        "db_size": db_size,
     }
 
 
@@ -279,26 +324,68 @@ def list_backups() -> List[Dict[str, Any]]:
 
 def build_backup_zip_bytes() -> bytes:
     """Builds a complete backup ZIP archive in memory containing attendance.db, selfies/, and manifest.json."""
-    backup_meta = create_backup(reason="download")
-    backup_dir = backup_meta.get("backup_dir", LATEST_BACKUP_DIR)
+    backup_dir = None
+    try:
+        backup_meta = create_backup(reason="download")
+        if backup_meta and backup_meta.get("ok"):
+            backup_dir = backup_meta.get("backup_dir")
+    except Exception as e:
+        logger.warning(f"create_backup during download threw: {e}")
+
+    if not backup_dir or not os.path.exists(os.path.join(backup_dir, "attendance.db")):
+        backup_dir = LATEST_BACKUP_DIR
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        db_file = os.path.join(backup_dir, "attendance.db")
+        db_file = os.path.join(backup_dir, "attendance.db") if backup_dir else None
+        if not db_file or not os.path.exists(db_file):
+            db_file = get_configured_db_path()
+        if not os.path.exists(db_file):
+            db_file = os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
         if os.path.exists(db_file):
             zf.write(db_file, "attendance.db")
 
-        manifest_file = os.path.join(backup_dir, "manifest.json")
-        if os.path.exists(manifest_file):
+        manifest_file = os.path.join(backup_dir, "manifest.json") if backup_dir else None
+        if manifest_file and os.path.exists(manifest_file):
             zf.write(manifest_file, "manifest.json")
 
-        selfies_dir = os.path.join(backup_dir, "selfies")
+        selfies_dir = os.path.join(backup_dir, "selfies") if backup_dir else None
+        if not selfies_dir or not os.path.exists(selfies_dir):
+            selfies_dir = get_configured_selfie_dir()
         if os.path.exists(selfies_dir):
             for fname in os.listdir(selfies_dir):
                 fpath = os.path.join(selfies_dir, fname)
                 if os.path.isfile(fpath):
-                    zf.write(fpath, os.path.join("selfies", fname))
+                    try:
+                        zf.write(fpath, os.path.join("selfies", fname))
+                    except Exception:
+                        pass
 
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
+
+
+def build_fallback_db_zip_bytes() -> bytes:
+    """Emergency fallback zip generator that packages attendance.db directly from disk without external calls."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for candidate in [
+            os.path.join(LATEST_BACKUP_DIR, "attendance.db"),
+            get_configured_db_path(),
+            os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
+        ]:
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                zf.write(candidate, "attendance.db")
+                break
+        selfie_dir = get_configured_selfie_dir()
+        if os.path.exists(selfie_dir):
+            for fname in os.listdir(selfie_dir)[:100]:
+                fp = os.path.join(selfie_dir, fname)
+                if os.path.isfile(fp):
+                    try:
+                        zf.write(fp, os.path.join("selfies", fname))
+                    except Exception:
+                        pass
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
 

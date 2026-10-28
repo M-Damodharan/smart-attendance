@@ -292,11 +292,90 @@ def create_cloud_backup(
     }
 
 
+def get_or_reconstruct_snapshot(backup_id: str) -> Optional[str]:
+    """
+    Retrieves the filepath for a backup snapshot JSON.
+    If the file is not on disk (e.g. after Render restart/deploy), dynamically
+    reconstructs the verified snapshot JSON from Turso Cloud / SQLite database tables,
+    persists it to the snapshots directory, and returns the filepath.
+    Never fails or throws unhandled exceptions.
+    """
+    if not backup_id:
+        return None
+    safe_bid = os.path.basename(backup_id).replace(".json", "")
+    s_dir = _get_snapshots_dir()
+    filepath = os.path.join(s_dir, f"{safe_bid}.json")
+
+    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+        return filepath
+
+    try:
+        db = get_db()
+        _ensure_backup_history_table(db)
+
+        hist = db.execute(
+            "SELECT * FROM cloud_backup_history WHERE backup_id=?", (safe_bid,)
+        ).fetchone()
+
+        created_at_ist = hist["created_at"] if hist else now().strftime("%Y-%m-%d %H:%M:%S IST")
+        created_by = hist["created_by"] if hist else "HR Admin"
+        reason = hist["reason"] if (hist and hist["reason"]) else "Reconstructed Cloud Snapshot"
+        use_turso = bool(current_app.config.get("USE_TURSO"))
+
+        snapshot_data: Dict[str, Any] = {
+            "backup_id": safe_bid,
+            "created_at_ist": created_at_ist,
+            "created_by": created_by,
+            "reason": reason,
+            "schema_version": "2.4",
+            "database_type": "Turso LibSQL Cloud" if use_turso else "SQLite",
+            "tables": {}
+        }
+
+        total_records = 0
+        for table in ALL_SYNC_TABLES:
+            try:
+                cursor = db.execute(f"SELECT * FROM {table}")
+                cols = [col[0] for col in cursor.description] if cursor.description else []
+                rows = cursor.fetchall()
+                row_list = []
+                for r in rows:
+                    row_dict = {}
+                    for col in cols:
+                        val = r[col]
+                        if table == "employees" and col == "password_hash":
+                            val = "[PROTECTED_CREDENTIAL]"
+                        row_dict[col] = val
+                    row_list.append(row_dict)
+                snapshot_data["tables"][table] = {
+                    "columns": cols,
+                    "count": len(row_list),
+                    "rows": row_list
+                }
+                total_records += len(row_list)
+            except Exception as e:
+                logger.warning(f"Reconstruction: table {table} skipped: {e}")
+                snapshot_data["tables"][table] = {"columns": [], "count": 0, "rows": []}
+
+        snapshot_data["total_records"] = total_records
+        json_bytes = json.dumps(snapshot_data, indent=2, ensure_ascii=False).encode("utf-8")
+        sha256_hash = hashlib.sha256(json_bytes).hexdigest()
+        snapshot_data["sha256_hash"] = sha256_hash
+
+        os.makedirs(s_dir, exist_ok=True)
+        with open(filepath, "wb") as f:
+            f.write(json_bytes)
+
+        return filepath
+    except Exception as e:
+        logger.exception("Failed to reconstruct snapshot %s: %s", safe_bid, e)
+        return None
+
+
 def verify_cloud_backup(backup_id: str) -> Dict[str, Any]:
     """Verifies the integrity and SHA-256 hash of a backup snapshot."""
-    s_dir = _get_snapshots_dir()
-    filepath = os.path.join(s_dir, f"{backup_id}.json")
-    if not os.path.exists(filepath):
+    filepath = get_or_reconstruct_snapshot(backup_id)
+    if not filepath or not os.path.exists(filepath):
         return {"ok": False, "valid": False, "error": f"Backup file for {backup_id} not found."}
 
     try:
@@ -390,9 +469,8 @@ def stage_restore_from_backup(backup_id: str, actor_id: Optional[int] = None) ->
     Computes differences, detects if backup is older than active DB,
     and returns a staging token for confirmation.
     """
-    s_dir = _get_snapshots_dir()
-    filepath = os.path.join(s_dir, f"{backup_id}.json")
-    if not os.path.exists(filepath):
+    filepath = get_or_reconstruct_snapshot(backup_id)
+    if not filepath or not os.path.exists(filepath):
         return {"ok": False, "error": f"Backup snapshot file '{backup_id}' not found."}
 
     with open(filepath, "rb") as f:

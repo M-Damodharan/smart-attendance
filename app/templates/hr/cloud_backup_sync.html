@@ -246,12 +246,20 @@
         <span>💾</span> Backup All Data
       </button>
 
-      <button type="button" class="btn-3d btn-indigo" onclick="verifyLatestBackup()" id="btnVerifyBackup">
+      <a href="{{ url_for('hr.download_backup_zip') }}" class="btn-3d btn-indigo" title="Download Complete Database Backup ZIP archive (attendance.db + selfies)">
+        <span>⬇️</span> Download Database (.ZIP)
+      </a>
+
+      <a href="{{ url_for('hr.download_database_sqlite') }}" class="btn-3d btn-amber" title="Download Standalone SQLite attendance.db database file directly">
+        <span>💾</span> Download Database (.DB)
+      </a>
+
+      <button type="button" class="btn-3d" style="background:linear-gradient(135deg, #475569, #334155); color:#fff;" onclick="verifyLatestBackup()" id="btnVerifyBackup">
         <span>🛡️</span> Verify Cloud Backup
       </button>
 
-      <a href="#historyTable" class="btn-3d btn-amber">
-        <span>📜</span> View Backup History
+      <a href="#historyTable" class="btn-3d" style="background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff;">
+        <span>📜</span> View History
       </a>
     </div>
 

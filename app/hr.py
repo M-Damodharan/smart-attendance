@@ -1,9 +1,12 @@
 import io
+import logging
 import sqlite3
 from datetime import datetime, timedelta
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.security import generate_password_hash
+
+logger = logging.getLogger(__name__)
 
 from .auth import hr_required
 from .db import get_db
@@ -952,15 +955,76 @@ def maintenance_clear_cache():
 @bp.route("/database/download-backup", methods=["GET"])
 @hr_required
 def download_backup_zip():
-    from app.backup_manager import build_backup_zip_bytes
-    zip_bytes = build_backup_zip_bytes()
-    filename = f"SBG_Attendance_Backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-    return send_file(
-        io.BytesIO(zip_bytes),
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=filename
-    )
+    try:
+        from app.backup_manager import build_backup_zip_bytes
+        zip_bytes = build_backup_zip_bytes()
+        if not zip_bytes or len(zip_bytes) < 30:
+            raise ValueError("Generated backup archive is empty.")
+        filename = f"SBG_Attendance_Backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        return send_file(
+            io.BytesIO(zip_bytes),
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.exception("Database backup download failed: %s", e)
+        try:
+            from app.backup_manager import build_fallback_db_zip_bytes
+            fb_bytes = build_fallback_db_zip_bytes()
+            if fb_bytes and len(fb_bytes) >= 30:
+                filename = f"SBG_Attendance_Backup_Fallback_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                return send_file(
+                    io.BytesIO(fb_bytes),
+                    mimetype="application/zip",
+                    as_attachment=True,
+                    download_name=filename
+                )
+        except Exception as fb_err:
+            logger.exception("Fallback zip creation failed: %s", fb_err)
+        flash(f"Database backup temporarily unavailable: {str(e)}. Please retry shortly.", "err")
+        return redirect(url_for("hr.settings") + "#backups")
+
+
+@bp.route("/database/download-db", methods=["GET"])
+@hr_required
+def download_database_sqlite():
+    """Allows downloading the raw attendance.db SQLite file directly."""
+    import os
+    from config import BASE_DIR, Config
+    try:
+        from app.backup_manager import create_backup, get_configured_db_path, LATEST_BACKUP_DIR
+        try:
+            create_backup(reason="direct_db_download")
+        except Exception as snap_err:
+            logger.warning("Snapshot creation for direct db download notice: %s", snap_err)
+
+        candidate_dbs = [
+            os.path.join(LATEST_BACKUP_DIR, "attendance.db"),
+            get_configured_db_path(),
+            os.path.join(BASE_DIR, "app", "seed_data", "attendance.db")
+        ]
+        target_db = None
+        for candidate in candidate_dbs:
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                target_db = candidate
+                break
+
+        if not target_db:
+            flash("Database file not available for download on server disk.", "err")
+            return redirect(url_for("hr.settings") + "#backups")
+
+        filename = f"SBG_attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        return send_file(
+            target_db,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.sqlite3"
+        )
+    except Exception as e:
+        logger.exception("Failed downloading raw SQLite database: %s", e)
+        flash(f"Failed to download database: {str(e)}", "err")
+        return redirect(url_for("hr.settings") + "#backups")
 
 
 @bp.route("/database/restore-backup", methods=["POST"])
@@ -1323,12 +1387,22 @@ def cloud_backup_restore_confirm():
 @hr_required
 def cloud_backup_download(backup_id):
     import os
-    from flask import current_app
-    safe_bid = os.path.basename(backup_id).replace(".json", "")
-    base = current_app.config.get("BASE_DIR") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    filepath = os.path.join(base, "backups", "cloud_snapshots", f"{safe_bid}.json")
-    if not os.path.exists(filepath):
-        abort(404)
-    return send_file(filepath, as_attachment=True, download_name=f"{safe_bid}.json", mimetype="application/json")
+    try:
+        from .cloud_backup import get_or_reconstruct_snapshot
+        filepath = get_or_reconstruct_snapshot(backup_id)
+        if not filepath or not os.path.exists(filepath):
+            flash(f"Backup snapshot '{backup_id}' could not be located or reconstructed.", "err")
+            return redirect(url_for("hr.cloud_backup_sync"))
+        safe_bid = os.path.basename(filepath)
+        return send_file(
+            filepath,
+            as_attachment=True,
+            download_name=safe_bid,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logger.exception("Failed downloading cloud backup snapshot %s: %s", backup_id, e)
+        flash(f"Download failed: {str(e)}", "err")
+        return redirect(url_for("hr.cloud_backup_sync"))
 
 

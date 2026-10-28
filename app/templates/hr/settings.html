@@ -373,8 +373,11 @@
       <p class="muted small" style="margin:4px 0 0;">Automatic snapshots whenever employees are created or modified. Download full backup ZIP (database + photos) or restore at any time.</p>
     </div>
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <a href="{{ url_for('hr.download_backup_zip') }}" class="btn primary sm" style="font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+      <a href="{{ url_for('hr.download_backup_zip') }}" class="btn primary sm" style="font-weight:700; display:inline-flex; align-items:center; gap:6px;" title="Download complete database with biometric photos and manifest in ZIP archive">
         <span>⬇️ Download Full Backup (.ZIP)</span>
+      </a>
+      <a href="{{ url_for('hr.download_database_sqlite') }}" class="btn sm" style="font-weight:600; display:inline-flex; align-items:center; gap:6px;" title="Download standalone SQLite attendance.db database file directly">
+        <span>💾 Download Database (.DB)</span>
       </a>
       <form method="post" action="{{ url_for('hr.create_snapshot_route') }}" style="margin:0;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
