@@ -624,6 +624,16 @@ def selfie(name):
         (user_face_img and safe.lower() == user_face_img.lower())
     )
     if not is_hr and not is_owner:
+        # Check if photo is recorded in attendance for this employee
+        db = get_db()
+        att_row = db.execute(
+            "SELECT id FROM attendance WHERE emp_id=? AND (in_selfie=? OR out_selfie=?) LIMIT 1",
+            (g.user["id"], safe, safe)
+        ).fetchone()
+        if att_row:
+            is_owner = True
+
+    if not is_hr and not is_owner:
         abort(403)
     photo_path = get_photo_path(safe, emp_code=emp_code)
     if not photo_path or not os.path.exists(photo_path):
@@ -632,7 +642,9 @@ def selfie(name):
 
     ext = os.path.splitext(safe)[1].lower()
     mimetype = "image/png" if ext == ".png" else ("image/webp" if ext == ".webp" else ("image/svg+xml" if ext == ".svg" else "image/jpeg"))
-    return send_file(photo_path, mimetype=mimetype)
+    resp = send_file(photo_path, mimetype=mimetype)
+    resp.headers["Cache-Control"] = "private, max-age=86400, stale-while-revalidate=604800"
+    return resp
 
 
 # ------------------------------------------------------------------ comments

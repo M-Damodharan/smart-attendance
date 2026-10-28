@@ -67,6 +67,11 @@
         {% endif %}
       </span>
       <span class="r">
+        {% if r and r['in_selfie'] %}
+          <a href="{{ url_for('api.selfie', name=r['in_selfie']) }}" target="_blank" title="View Punch Face Selfie" style="display:inline-flex;align-items:center;margin-right:8px;vertical-align:middle;text-decoration:none;">
+            <img src="{{ url_for('api.selfie', name=r['in_selfie']) }}" alt="Selfie" onerror="this.onerror=null;this.style.display='none'" style="width:28px;height:28px;border-radius:6px;object-fit:cover;border:1.5px solid #10b981;box-shadow:0 1px 4px rgba(16,185,129,0.3);">
+          </a>
+        {% endif %}
         {% if r and r['work_hours'] %}
           {% if r['ot_hours'] and r['ot_hours'] > 0 %}
             <b>{{ (r['work_hours'] - r['ot_hours'])|round(1) }}h + {{ r['ot_hours'] }}h OT</b>

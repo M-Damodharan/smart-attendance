@@ -238,13 +238,23 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
 
 CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
 CREATE INDEX IF NOT EXISTS idx_att_emp ON attendance(emp_id, date);
+CREATE INDEX IF NOT EXISTS idx_attendance_shift ON attendance(shift_id);
 CREATE INDEX IF NOT EXISTS idx_leave_emp ON leaves(emp_id, status);
+CREATE INDEX IF NOT EXISTS idx_leaves_dates ON leaves(emp_id, from_date, to_date);
+CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
 CREATE INDEX IF NOT EXISTS idx_od_emp ON od_requests(emp_id, od_date);
+CREATE INDEX IF NOT EXISTS idx_od_status ON od_requests(status);
 CREATE INDEX IF NOT EXISTS idx_perm_emp ON permission_requests(emp_id, perm_date);
+CREATE INDEX IF NOT EXISTS idx_perm_status ON permission_requests(status);
 CREATE INDEX IF NOT EXISTS idx_ai_alert_date ON ai_face_alerts(date);
 CREATE INDEX IF NOT EXISTS idx_ai_alert_emp ON ai_face_alerts(emp_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_emp ON webauthn_credentials(emp_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_cred ON webauthn_credentials(credential_id);
+CREATE INDEX IF NOT EXISTS idx_employees_active_role ON employees(active, role);
+CREATE INDEX IF NOT EXISTS idx_employees_code ON employees(emp_code);
+CREATE INDEX IF NOT EXISTS idx_holidays_date ON holidays(date);
+CREATE INDEX IF NOT EXISTS idx_shifts_active ON shifts(active);
+CREATE INDEX IF NOT EXISTS idx_face_change_emp ON face_change_requests(emp_id, status);
 
 CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

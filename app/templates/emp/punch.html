@@ -125,19 +125,19 @@
 
       <!-- Employee Card with Photo & Fallback Placeholder -->
       <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:16px;padding:14px;margin-bottom:18px;display:flex;align-items:center;gap:14px;text-align:left;">
-        <div style="position:relative;width:68px;height:68px;flex-shrink:0;">
-          <img id="punch-modal-photo" src="" alt="Punch Photo" style="width:68px;height:68px;border-radius:12px;object-fit:cover;border:2px solid #10b981;display:none;">
-          <div id="punch-modal-avatar-fallback" style="width:68px;height:68px;border-radius:12px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;font-size:1.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #10b981;">
+        <div style="position:relative;width:76px;height:76px;flex-shrink:0;">
+          <img id="punch-modal-photo" src="" alt="Punch Photo" style="width:76px;height:76px;border-radius:14px;object-fit:cover;border:2.5px solid #10b981;box-shadow:0 4px 14px rgba(16,185,129,0.35);display:none;">
+          <div id="punch-modal-avatar-fallback" style="width:76px;height:76px;border-radius:14px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;font-size:1.8rem;font-weight:800;display:flex;align-items:center;justify-content:center;border:2.5px solid #10b981;box-shadow:0 4px 14px rgba(16,185,129,0.35);">
             {{ g.user['name'][:2]|upper }}
           </div>
         </div>
         <div style="flex:1;min-width:0;">
-          <div id="punch-modal-emp-name" style="font-weight:800;font-size:1.05rem;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ g.user['name'] }}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
-            <span id="punch-modal-emp-code" class="emp-code-pill" style="font-size:0.75rem;padding:2px 8px;">{{ g.user['emp_code'] }}</span>
-            <span id="punch-modal-status-badge" class="badge b-approved" style="font-size:0.75rem;padding:2px 8px;">✓ Marked</span>
+          <div id="punch-modal-emp-name" style="font-weight:800;font-size:1.1rem;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ g.user['name'] }}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;">
+            <span id="punch-modal-emp-code" class="emp-code-pill" style="font-size:0.75rem;padding:2px 8px;font-weight:700;">{{ g.user['emp_code'] }}</span>
+            <span id="punch-modal-status-badge" class="badge b-approved" style="font-size:0.75rem;padding:2px 8px;font-weight:700;">✓ Marked</span>
           </div>
-          <div id="punch-modal-shift-info" class="muted small" style="margin-top:4px;font-size:0.78rem;">{{ shift['name'] if shift else 'Regular Shift' }}</div>
+          <div id="punch-modal-shift-info" class="muted small" style="margin-top:4px;font-size:0.8rem;">{{ shift['name'] if shift else 'Regular Shift' }}</div>
         </div>
       </div>
 

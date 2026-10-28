@@ -326,6 +326,7 @@
       };
 
       promptEl.textContent = 'Recording attendance…';
+      go.innerHTML = '<span class="spinner-sm" style="display:inline-block;width:15px;height:15px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:8px"></span> Recording attendance…';
       const res = await postJSON('/api/punch', payload);
       promptEl.textContent = '';
 
@@ -381,27 +382,51 @@
           const initials = res.emp_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
           fallbackEl.textContent = initials || '👤';
         }
-        if (photoEl && res.photo_url) {
-          photoEl.src = res.photo_url;
-          photoEl.onload = () => {
-            photoEl.style.display = 'block';
-            if (fallbackEl) fallbackEl.style.display = 'none';
-          };
+
+        // Direct local selfie rendering: 0ms network latency, 100% reliable face preview
+        const displayPhoto = (selfie && typeof selfie === 'string' && selfie.startsWith('data:image')) ? selfie : (res.photo_url || '');
+        if (photoEl && displayPhoto) {
+          photoEl.src = displayPhoto;
+          photoEl.style.display = 'block';
+          if (fallbackEl) fallbackEl.style.display = 'none';
           photoEl.onerror = () => {
-            photoEl.style.display = 'none';
-            if (fallbackEl) fallbackEl.style.display = 'flex';
+            if (res.photo_url && photoEl.src !== res.photo_url) {
+              photoEl.src = res.photo_url;
+            } else {
+              photoEl.style.display = 'none';
+              if (fallbackEl) fallbackEl.style.display = 'flex';
+            }
           };
         } else {
           if (photoEl) photoEl.style.display = 'none';
           if (fallbackEl) fallbackEl.style.display = 'flex';
         }
 
+        let secondsRemaining = 5;
+        let redirectTimer = null;
+        const doRedirect = () => {
+          if (redirectTimer) {
+            clearInterval(redirectTimer);
+            redirectTimer = null;
+          }
+          location.href = '/dashboard';
+        };
+
         const doneBtn = $('btn-punch-modal-done');
         if (doneBtn) {
-          doneBtn.onclick = () => { location.href = '/dashboard'; };
+          doneBtn.onclick = doRedirect;
+          doneBtn.innerHTML = `✓ Done &bull; Return to Dashboard (${secondsRemaining}s)`;
         }
         successModal.style.display = 'flex';
-        setTimeout(() => { location.href = '/dashboard'; }, 3800);
+
+        redirectTimer = setInterval(() => {
+          secondsRemaining--;
+          if (doneBtn && secondsRemaining > 0) {
+            doneBtn.innerHTML = `✓ Done &bull; Return to Dashboard (${secondsRemaining}s)`;
+          } else if (secondsRemaining <= 0) {
+            doRedirect();
+          }
+        }, 1000);
       } else {
         setTimeout(() => location.href = '/dashboard', 2200);
       }
