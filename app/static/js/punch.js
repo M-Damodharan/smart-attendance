@@ -355,7 +355,56 @@
       result.innerHTML = `<b>${res.message}</b>` + details;
       go.textContent = '✓ Attendance Marked';
       go.disabled = true;
-      setTimeout(() => location.href = '/dashboard', 2200);
+
+      // 4. Show dedicated 3D Success Popup Modal containing verified employee details
+      const successModal = $('punch-success-modal');
+      if (successModal) {
+        if ($('punch-modal-emp-name') && res.emp_name) $('punch-modal-emp-name').textContent = res.emp_name;
+        if ($('punch-modal-emp-code') && res.emp_code) $('punch-modal-emp-code').textContent = res.emp_code;
+        if ($('punch-modal-status-badge')) {
+          const stBadge = $('punch-modal-status-badge');
+          stBadge.textContent = '✓ ' + (res.punch_status || (kind === 'in' ? 'Checked In' : 'Checked Out'));
+          stBadge.className = 'badge b-approved';
+        }
+        if ($('punch-modal-shift-info')) {
+          let sInfo = res.shift || 'Regular Shift';
+          if (res.duration) sInfo += ` · Worked ${res.duration}`;
+          if (res.ot_hours && res.ot_hours > 0) sInfo += ` (OT: ${res.ot_hours}h)`;
+          $('punch-modal-shift-info').textContent = sInfo;
+        }
+        if ($('punch-modal-date') && res.date) $('punch-modal-date').textContent = res.date;
+        if ($('punch-modal-time') && res.time) $('punch-modal-time').textContent = res.time;
+
+        const photoEl = $('punch-modal-photo');
+        const fallbackEl = $('punch-modal-avatar-fallback');
+        if (fallbackEl && res.emp_name) {
+          const initials = res.emp_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+          fallbackEl.textContent = initials || '👤';
+        }
+        if (photoEl && res.photo_url) {
+          photoEl.src = res.photo_url;
+          photoEl.onload = () => {
+            photoEl.style.display = 'block';
+            if (fallbackEl) fallbackEl.style.display = 'none';
+          };
+          photoEl.onerror = () => {
+            photoEl.style.display = 'none';
+            if (fallbackEl) fallbackEl.style.display = 'flex';
+          };
+        } else {
+          if (photoEl) photoEl.style.display = 'none';
+          if (fallbackEl) fallbackEl.style.display = 'flex';
+        }
+
+        const doneBtn = $('btn-punch-modal-done');
+        if (doneBtn) {
+          doneBtn.onclick = () => { location.href = '/dashboard'; };
+        }
+        successModal.style.display = 'flex';
+        setTimeout(() => { location.href = '/dashboard'; }, 3800);
+      } else {
+        setTimeout(() => location.href = '/dashboard', 2200);
+      }
       return;
 
     } catch (e) {

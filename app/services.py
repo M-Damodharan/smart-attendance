@@ -284,8 +284,9 @@ def resolve_employee_shift(emp_id: int, d=None, check_in=None, db=None, fallback
     sched = None
     if emp_schedules is not None:
         for s in emp_schedules:
-            if s.get("start_date") <= d_str <= s.get("end_date"):
-                sched = s
+            s_dict = dict(s)
+            if s_dict.get("start_date") and s_dict.get("end_date") and s_dict["start_date"] <= d_str <= s_dict["end_date"]:
+                sched = s_dict
                 break
     else:
         sched = db.execute(

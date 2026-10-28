@@ -13,14 +13,30 @@ app = create_app({"TESTING": False})
 
 
 def test_concurrent_multi_user_page_reloads():
+    with app.app_context():
+        from app.db import get_db
+        db = get_db()
+        hr_emp = db.execute("SELECT id, name FROM employees WHERE role='hr' AND active=1 LIMIT 1").fetchone()
+        reg_emp = db.execute("SELECT id, name FROM employees WHERE role='employee' AND active=1 AND must_change_pw=0 LIMIT 1").fetchone()
+        if not reg_emp:
+            reg_emp = db.execute("SELECT id, name FROM employees WHERE role='employee' AND active=1 LIMIT 1").fetchone()
+            if reg_emp:
+                db.execute("UPDATE employees SET must_change_pw=0 WHERE id=?", (reg_emp["id"],))
+                if hasattr(db, "commit"):
+                    db.commit()
+        hr_id = hr_emp["id"] if hr_emp else 1
+        hr_name = hr_emp["name"] if hr_emp else "HR Admin"
+        emp_id = reg_emp["id"] if reg_emp else 2
+        emp_name = reg_emp["name"] if reg_emp else "Employee"
+
     endpoints = [
-        ("/hr/dashboard", 1, "hr", "HR Admin"),
-        ("/hr/attendance", 1, "hr", "HR Admin"),
-        ("/hr/employees", 1, "hr", "HR Admin"),
-        ("/hr/cloud-backup-sync", 1, "hr", "HR Admin"),
-        ("/dashboard", 20, "employee", "Damodharan"),
-        ("/punch", 20, "employee", "Damodharan"),
-        ("/history", 20, "employee", "Damodharan"),
+        ("/hr/dashboard", hr_id, "hr", hr_name),
+        ("/hr/attendance", hr_id, "hr", hr_name),
+        ("/hr/employees", hr_id, "hr", hr_name),
+        ("/hr/cloud-backup-sync", hr_id, "hr", hr_name),
+        ("/dashboard", emp_id, "employee", emp_name),
+        ("/punch", emp_id, "employee", emp_name),
+        ("/history", emp_id, "employee", emp_name),
     ]
 
     def _fetch_page(task_info):

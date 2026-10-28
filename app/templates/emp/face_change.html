@@ -24,7 +24,7 @@
         {% if g.user['face_registered'] %}
           <div style="display:flex;align-items:center;gap:14px;margin-top:6px">
             {% if g.user['face_image'] %}
-              <img src="{{ url_for('api.selfie', name=g.user['face_image']) }}" alt="Registered Face Photo" style="width:72px;height:72px;border-radius:12px;object-fit:cover;border:2px solid #10b981;box-shadow:0 2px 8px rgba(16,185,129,0.25)">
+              <img src="{{ url_for('api.selfie', name=g.user['face_image']) }}" alt="Registered Face Photo" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}';" style="width:72px;height:72px;border-radius:12px;object-fit:cover;border:2px solid #10b981;box-shadow:0 2px 8px rgba(16,185,129,0.25)">
             {% endif %}
             <div>
               <div style="display:inline-flex;align-items:center;gap:6px;color:#10b981;font-weight:600;font-size:0.95rem">

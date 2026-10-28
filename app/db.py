@@ -68,6 +68,11 @@ CREATE TABLE IF NOT EXISTS employees (
     password_hash TEXT NOT NULL,
     must_change_pw INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
+    block_reason TEXT,
+    blocked_at TEXT,
+    device_registered INTEGER NOT NULL DEFAULT 0,
+    device_name TEXT,
+    device_registered_at TEXT,
     face_registered INTEGER NOT NULL DEFAULT 0,
     face_template TEXT,
     face_registered_at TEXT,
@@ -93,6 +98,8 @@ CREATE TABLE IF NOT EXISTS attendance (
     face_verified INTEGER NOT NULL DEFAULT 0,
     face_similarity REAL NOT NULL DEFAULT 0.0,
     source TEXT NOT NULL DEFAULT 'app', -- app | correction
+    auth_method TEXT DEFAULT 'webauthn_face_id',
+    device_credential_id TEXT,
     remarks TEXT,
     UNIQUE (emp_id, date)
 );

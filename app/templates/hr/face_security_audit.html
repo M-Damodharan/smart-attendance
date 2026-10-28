@@ -120,6 +120,7 @@
             <div style="text-align:center">
               <img src="{{ url_for('api.selfie', name=a.selfie_path) }}" 
                    alt="Punch Selfie" 
+                   onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}';"
                    style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1.5px solid #ef4444">
               <span style="display:block;font-size:0.65rem;color:var(--text-muted)">Live Punch</span>
             </div>
@@ -131,6 +132,7 @@
             <div style="text-align:center">
               <img src="{{ url_for('api.selfie', name=a.target_selfie_path) }}" 
                    alt="Target Face" 
+                   onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}';"
                    style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1.5px solid #f59e0b">
               <span style="display:block;font-size:0.65rem;color:var(--text-muted)">Registered</span>
             </div>

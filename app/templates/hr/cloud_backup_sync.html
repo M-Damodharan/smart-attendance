@@ -385,7 +385,7 @@
     } catch (err) {
       logConsole("Error updating telemetry: " + err.message, "err");
     }
-  }
+  const _CSRF_TOKEN = "{{ csrf_token() }}";
 
   async function triggerSyncAll() {
     const btn = document.getElementById('btnSyncAll');
@@ -398,8 +398,10 @@
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-CSRFToken": _CSRF_TOKEN,
           "X-Requested-With": "XMLHttpRequest"
-        }
+        },
+        body: JSON.stringify({ csrf_token: _CSRF_TOKEN })
       });
       const d = await resp.json();
       if (d.ok) {
@@ -428,8 +430,12 @@
     try {
       const resp = await fetch("{{ url_for('hr.cloud_backup_create_run') }}", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "Manual HR Dashboard Backup" })
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": _CSRF_TOKEN,
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({ reason: "Manual HR Dashboard Backup", csrf_token: _CSRF_TOKEN })
       });
       const d = await resp.json();
       if (d.ok) {
@@ -491,8 +497,12 @@
     try {
       const resp = await fetch("{{ url_for('hr.cloud_backup_restore_stage') }}", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ backup_id: backupId })
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": _CSRF_TOKEN,
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({ backup_id: backupId, csrf_token: _CSRF_TOKEN })
       });
       const d = await resp.json();
       if (!d.ok) {
@@ -573,10 +583,15 @@
     try {
       const resp = await fetch("{{ url_for('hr.cloud_backup_restore_confirm') }}", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": _CSRF_TOKEN,
+          "X-Requested-With": "XMLHttpRequest"
+        },
         body: JSON.stringify({
           staging_token: currentStagingToken,
-          confirmation_code: code
+          confirmation_code: code,
+          csrf_token: _CSRF_TOKEN
         })
       });
       const d = await resp.json();

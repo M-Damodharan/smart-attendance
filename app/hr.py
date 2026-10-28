@@ -1017,9 +1017,13 @@ def toggle_access(eid):
     return redirect(request.referrer or url_for("hr.employees"))
 
 
-@bp.post("/employees/<int:eid>/delete")
+@bp.route("/employees/<int:eid>/delete", methods=["GET", "POST"])
 @hr_required
 def delete_employee(eid):
+    if request.method == "GET":
+        flash("To delete an employee, please use the Delete button in Employee Master.", "info")
+        return redirect(url_for("hr.employees"))
+
     import os
     from flask import current_app
     db = get_db()
@@ -1035,31 +1039,12 @@ def delete_employee(eid):
         return redirect(request.referrer or url_for("hr.employees"))
 
     selfie_dir = current_app.config.get("SELFIE_DIR", "")
+    emp_code = emp["emp_code"].upper()
 
-    # 1. Clean attendance selfies from disk
-    for r in db.execute("SELECT in_selfie, out_selfie FROM attendance WHERE emp_id=?", (eid,)):
-        for fn in (r["in_selfie"], r["out_selfie"]):
-            if fn and selfie_dir:
-                try:
-                    fpath = os.path.join(selfie_dir, os.path.basename(fn))
-                    if os.path.isfile(fpath):
-                        os.remove(fpath)
-                except OSError:
-                    pass
-
-    # 2. Clean registered face photo from disk
-    if emp["face_image"] and selfie_dir:
-        try:
-            fpath = os.path.join(selfie_dir, os.path.basename(emp["face_image"]))
-            if os.path.isfile(fpath):
-                os.remove(fpath)
-        except OSError:
-            pass
-
-    # 3. Clean AI face alert selfies from disk
     try:
-        for r in db.execute("SELECT selfie_path, target_selfie_path FROM ai_face_alerts WHERE emp_id=? OR target_emp_id=?", (eid, eid)):
-            for fn in (r["selfie_path"], r["target_selfie_path"]):
+        # 1. Clean attendance selfies from disk
+        for r in db.execute("SELECT in_selfie, out_selfie FROM attendance WHERE emp_id=?", (eid,)):
+            for fn in (r["in_selfie"], r["out_selfie"]):
                 if fn and selfie_dir:
                     try:
                         fpath = os.path.join(selfie_dir, os.path.basename(fn))
@@ -1067,47 +1052,92 @@ def delete_employee(eid):
                             os.remove(fpath)
                     except OSError:
                         pass
-    except Exception:
-        pass
 
-    n_att = db.execute("SELECT COUNT(*) FROM attendance WHERE emp_id=?", (eid,)).fetchone()[0]
+        # 2. Clean registered face photo from disk
+        if emp["face_image"] and selfie_dir:
+            try:
+                fpath = os.path.join(selfie_dir, os.path.basename(emp["face_image"]))
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+            except OSError:
+                pass
 
-    # 4. Cascade delete all dependent records belonging to this employee
-    for t in (
-        "attendance",
-        "leaves",
-        "od_requests",
-        "permission_requests",
-        "face_change_requests",
-        "challenges",
-        "weekly_shift_schedules",
-        "webauthn_credentials",
-    ):
+        # 3. Clean AI face alert selfies from disk
         try:
-            db.execute(f"DELETE FROM {t} WHERE emp_id=?", (eid,))
+            for r in db.execute("SELECT selfie_path, target_selfie_path FROM ai_face_alerts WHERE emp_id=? OR target_emp_id=?", (eid, eid)):
+                for fn in (r["selfie_path"], r["target_selfie_path"]):
+                    if fn and selfie_dir:
+                        try:
+                            fpath = os.path.join(selfie_dir, os.path.basename(fn))
+                            if os.path.isfile(fpath):
+                                os.remove(fpath)
+                        except OSError:
+                            pass
         except Exception:
             pass
-    try:
-        db.execute("DELETE FROM ai_face_alerts WHERE emp_id=? OR target_emp_id=?", (eid, eid))
-    except Exception:
-        pass
 
-    # 5. Nullify foreign reviewer/decider references so they do not point to deleted ID
-    try:
-        db.execute("UPDATE leaves SET decided_by=NULL WHERE decided_by=?", (eid,))
-        db.execute("UPDATE od_requests SET decided_by=NULL WHERE decided_by=?", (eid,))
-        db.execute("UPDATE permission_requests SET decided_by=NULL WHERE decided_by=?", (eid,))
-        db.execute("UPDATE face_change_requests SET decided_by=NULL WHERE decided_by=?", (eid,))
-        db.execute("UPDATE ai_face_alerts SET hr_action_by=NULL WHERE hr_action_by=?", (eid,))
-        db.execute("UPDATE employees SET face_registered_by=NULL WHERE face_registered_by=?", (eid,))
-    except Exception:
-        pass
+        n_att_row = db.execute("SELECT COUNT(*) FROM attendance WHERE emp_id=?", (eid,)).fetchone()
+        n_att = n_att_row[0] if n_att_row else 0
 
-    # 6. Delete employee record
-    db.execute("DELETE FROM employees WHERE id=?", (eid,))
-    audit("EMPLOYEE_DELETE", "employee", eid, f"{emp['emp_code']} {emp['name']} (fully deleted with {n_att} attendance records, biometrics, and requests)")
-    db.commit()
-    flash(f"{emp['emp_code']} ({emp['name']}) and all associated records deleted permanently.", "ok")
+        # 4. Cascade delete all dependent records belonging to this employee
+        # Includes notifications and comments which have strict foreign keys to employees(id)
+        for t in (
+            "notifications",
+            "comments",
+            "attendance",
+            "leaves",
+            "od_requests",
+            "permission_requests",
+            "face_change_requests",
+            "challenges",
+            "weekly_shift_schedules",
+            "webauthn_credentials",
+        ):
+            try:
+                col_name = "user_id" if t == "notifications" else "emp_id"
+                db.execute(f"DELETE FROM {t} WHERE {col_name}=?", (eid,))
+            except Exception as e:
+                current_app.logger.warning(f"Could not delete from {t} for employee {eid}: {e}")
+
+        try:
+            db.execute("DELETE FROM ai_face_alerts WHERE emp_id=? OR target_emp_id=?", (eid, eid))
+        except Exception:
+            pass
+
+        try:
+            db.execute("DELETE FROM durable_photos WHERE UPPER(emp_code)=?", (emp_code,))
+        except Exception:
+            pass
+
+        # 5. Nullify foreign reviewer/decider/registrant references so they do not point to deleted ID
+        try:
+            db.execute("UPDATE notifications SET user_id=NULL WHERE user_id=?", (eid,))
+            db.execute("UPDATE leaves SET decided_by=NULL WHERE decided_by=?", (eid,))
+            db.execute("UPDATE od_requests SET decided_by=NULL WHERE decided_by=?", (eid,))
+            db.execute("UPDATE permission_requests SET decided_by=NULL WHERE decided_by=?", (eid,))
+            db.execute("UPDATE face_change_requests SET decided_by=NULL WHERE decided_by=?", (eid,))
+            db.execute("UPDATE ai_face_alerts SET hr_action_by=NULL WHERE hr_action_by=?", (eid,))
+            db.execute("UPDATE employees SET face_registered_by=NULL WHERE face_registered_by=?", (eid,))
+        except Exception as e:
+            current_app.logger.warning(f"Could not nullify references for employee {eid}: {e}")
+
+        # 6. Delete employee record
+        db.execute("DELETE FROM employees WHERE id=?", (eid,))
+        audit("EMPLOYEE_DELETE", "employee", eid, f"{emp['emp_code']} {emp['name']} (fully deleted with {n_att} attendance records, biometrics, and requests)")
+        db.commit()
+
+        # Invalidate caches
+        from app.auth import clear_user_cache
+        clear_user_cache(eid)
+        from app.turso_db import clear_turso_cache
+        clear_turso_cache()
+        clear_shared_cache()
+
+        flash(f"{emp['emp_code']} ({emp['name']}) and all associated records deleted permanently.", "ok")
+    except Exception as e:
+        current_app.logger.exception(f"Error deleting employee {eid}: {e}")
+        flash(f"Could not delete employee {emp['emp_code']}: {str(e)}", "err")
+
     return redirect(url_for("hr.employees"))
 
 

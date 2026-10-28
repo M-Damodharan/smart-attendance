@@ -145,6 +145,7 @@ def create_app(test_config=None):
 
     @app.errorhandler(403)
     @app.errorhandler(404)
+    @app.errorhandler(405)
     @app.errorhandler(400)
     def err(e):
         code = getattr(e, "code", 400)

@@ -45,7 +45,7 @@
           <div style="text-align:center;padding:8px;background:var(--bg-card);border-radius:8px;border:1px solid #ef4444;">
             <span class="muted small" style="display:block;margin-bottom:4px;font-weight:600;color:#ef4444;">Offending Punch</span>
             {% if a.selfie_path %}
-            <img src="{{ url_for('api.selfie', name=a.selfie_path) }}" alt="Punch Face" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid #ef4444;margin:0 auto;display:block;">
+            <img src="{{ url_for('api.selfie', name=a.selfie_path) }}" alt="Punch Face" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}';" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid #ef4444;margin:0 auto;display:block;">
             {% else %}
             <div style="width:64px;height:64px;border-radius:8px;background:var(--bg-surface);margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">👤</div>
             {% endif %}
@@ -61,7 +61,7 @@
           <div style="text-align:center;padding:8px;background:var(--bg-card);border-radius:8px;border:1px solid #f59e0b;">
             <span class="muted small" style="display:block;margin-bottom:4px;font-weight:600;color:#f59e0b;">Conflicting Account</span>
             {% if a.target_selfie_path %}
-            <img src="{{ url_for('api.selfie', name=a.target_selfie_path) }}" alt="Target Face" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid #f59e0b;margin:0 auto;display:block;">
+            <img src="{{ url_for('api.selfie', name=a.target_selfie_path) }}" alt="Target Face" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}';" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid #f59e0b;margin:0 auto;display:block;">
             {% else %}
             <div style="width:64px;height:64px;border-radius:8px;background:var(--bg-surface);margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">👤</div>
             {% endif %}
