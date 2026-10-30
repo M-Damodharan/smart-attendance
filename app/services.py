@@ -707,3 +707,109 @@ def coords_from_maps_link(link):
     except Exception:
         return None
     return coords_from_text(final) or coords_from_text(body)
+
+
+def check_and_sync_missed_punches(db=None):
+    """
+    Checks for attendance records where employee punched IN but did NOT punch OUT within 12 hours.
+    Automatically:
+    1. Marks status = 'MP', work_hours = 0.0, ot_hours = 0.0, check_out = NULL.
+    2. Sends an automatic notification to HR (target_role='hr') with employee details and date/time.
+    3. Leaves mp_resolved = 0 so it stays in the HR Missed Punch List until HR reviews and resolves it.
+    """
+    if db is None:
+        db = get_db()
+
+    now_dt = now()
+    today_s = d2s(today())
+
+    try:
+        # Check if mp_resolved column exists
+        cols = [c[1] for c in db.execute("PRAGMA table_info(attendance)").fetchall()]
+        has_mp_col = "mp_resolved" in cols
+
+        query = """
+            SELECT a.*, e.name as emp_name, e.emp_code, e.department, s.name as shift_name
+            FROM attendance a
+            JOIN employees e ON e.id = a.emp_id
+            LEFT JOIN shifts s ON s.id = a.shift_id
+            WHERE a.check_in IS NOT NULL 
+        """
+        if has_mp_col:
+            query += " AND (a.mp_resolved IS NULL OR a.mp_resolved = 0)"
+        
+        rows = db.execute(query).fetchall()
+        updated = False
+
+        for r in rows:
+            cin_dt = parse_dt(r["check_in"])
+            if not cin_dt:
+                continue
+
+            elapsed_sec = (now_dt - cin_dt).total_seconds()
+            is_past_day = r["date"] < today_s
+            is_over_12h = elapsed_sec >= 12 * 3600
+
+            # If unclosed and over 12 hours or past day:
+            if (is_past_day or is_over_12h) and (not r["check_out"] or r["status"] == "MP"):
+                needs_update = False
+                if r["status"] != "MP" or r["work_hours"] != 0.0 or r["ot_hours"] != 0.0 or r["check_out"] is not None:
+                    needs_update = True
+
+                if needs_update:
+                    if has_mp_col:
+                        db.execute("""
+                            UPDATE attendance 
+                            SET status = 'MP', 
+                                work_hours = 0.0, 
+                                ot_hours = 0.0, 
+                                check_out = NULL,
+                                out_selfie = NULL,
+                                mp_resolved = 0
+                            WHERE id = ?
+                        """, (r["id"],))
+                    else:
+                        db.execute("""
+                            UPDATE attendance 
+                            SET status = 'MP', 
+                                work_hours = 0.0, 
+                                ot_hours = 0.0, 
+                                check_out = NULL,
+                                out_selfie = NULL
+                            WHERE id = ?
+                        """, (r["id"],))
+                    updated = True
+
+                # Send automatic notification to HR if not already notified
+                notif_tag = f"MISSED_PUNCH_ATT_{r['id']}"
+                existing_notif = db.execute(
+                    "SELECT id FROM notifications WHERE target_role='hr' AND (message LIKE ? OR message LIKE ?)",
+                    (f"%{notif_tag}%", f"%{r['emp_code']}%punched IN%{r['date']}%")
+                ).fetchone()
+
+                if not existing_notif:
+                    cin_time_str = cin_dt.strftime("%I:%M %p")
+                    notif_title = f"⚠️ Missed Punch Alert: {r['emp_name']} ({r['emp_code']})"
+                    notif_msg = (
+                        f"Employee {r['emp_name']} ({r['emp_code']} · {r['department'] or 'Staff'}) "
+                        f"punched IN at {cin_time_str} on {r['date']} but did not punch OUT within 12 hours. "
+                        f"Automatically marked as Missed Punch (MP). Pending HR review. [{notif_tag}]"
+                    )
+                    create_notification(
+                        title=notif_title,
+                        message=notif_msg,
+                        kind="missed_punch",
+                        target_role="hr",
+                        link_url="/hr/missed-punches",
+                        db=db
+                    )
+                    updated = True
+
+        if updated:
+            try:
+                db.commit()
+            except Exception:
+                pass
+    except Exception as e:
+        if current_app:
+            current_app.logger.warning(f"Error in check_and_sync_missed_punches: {e}")

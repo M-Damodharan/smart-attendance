@@ -5,7 +5,7 @@ from werkzeug.security import check_password_hash
 
 from .auth import employee_required
 from .db import get_db
-from .services import (audit, build_register, create_notification, d2s, daterange, get_employee_category,
+from .services import (audit, build_register, check_and_sync_missed_punches, create_notification, d2s, daterange, get_employee_category,
                        get_employee_shift_for_date, get_upcoming_holiday_cached, leave_balance, month_range, now, parse_dt, s2d, today,
                        working_days)
 
@@ -21,6 +21,7 @@ def _shift(user, target_date=None, shift_id=None):
 @employee_required
 def dashboard():
     db, u = get_db(), g.user
+    check_and_sync_missed_punches(db)
     t = today()
     now_dt = now()
     rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(t))).fetchone()

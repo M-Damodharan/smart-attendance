@@ -101,6 +101,9 @@ CREATE TABLE IF NOT EXISTS attendance (
     auth_method TEXT DEFAULT 'webauthn_face_id',
     device_credential_id TEXT,
     remarks TEXT,
+    mp_resolved INTEGER NOT NULL DEFAULT 0,
+    mp_resolved_at TEXT,
+    mp_resolved_by TEXT,
     UNIQUE (emp_id, date)
 );
 
@@ -428,6 +431,12 @@ def init_db(app):
         con.execute("ALTER TABLE attendance ADD COLUMN auth_method TEXT DEFAULT 'webauthn_face_id'")
     if "device_credential_id" not in att_cols:
         con.execute("ALTER TABLE attendance ADD COLUMN device_credential_id TEXT")
+    if "mp_resolved" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN mp_resolved INTEGER NOT NULL DEFAULT 0")
+    if "mp_resolved_at" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN mp_resolved_at TEXT")
+    if "mp_resolved_by" not in att_cols:
+        con.execute("ALTER TABLE attendance ADD COLUMN mp_resolved_by TEXT")
 
     office_cols = [c[1] for c in con.execute("PRAGMA table_info(offices)").fetchall()]
     if "department" not in office_cols:

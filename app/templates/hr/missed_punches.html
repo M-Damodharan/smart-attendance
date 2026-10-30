@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip with context %}
+{% block title %}Missed Punch List · HR · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="ph">
+  <div>
+    <h2>⚠️ HR – Missed Punch List</h2>
+    <p class="muted small" style="margin:2px 0 0">
+      Employees who punched IN but did not punch OUT within 12 hours. Review, approve, or manually correct.
+    </p>
+  </div>
+  <div class="monthnav">
+    <a class="btn sm" href="{{ url_for('hr.attendance') }}">← Daily Attendance</a>
+    <a class="btn sm primary" href="{{ url_for('hr.corrections') }}">+ Manual Correction</a>
+  </div>
+</div>
+
+<section class="kpis" style="margin-bottom:1.25rem">
+  <div class="kpi {% if total_pending > 0 %}bad{% else %}ok{% endif %}" style="cursor:pointer" onclick="switchMpTab('pending')">
+    <b>{{ total_pending }}</b>
+    <span>Pending HR Resolution</span>
+  </div>
+  <div class="kpi ok" style="cursor:pointer" onclick="switchMpTab('resolved')">
+    <b>{{ total_resolved }}</b>
+    <span>Resolved History</span>
+  </div>
+  <div class="kpi">
+    <b>12.0 hrs</b>
+    <span>Auto-Cutoff Threshold</span>
+  </div>
+</section>
+
+<!-- Policy Alert Banner -->
+<div class="card" style="padding:0.9rem 1.25rem;margin-bottom:1.25rem;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.25);border-radius:12px;display:flex;align-items:flex-start;gap:12px;">
+  <span style="font-size:1.5rem;line-height:1;">🛡️</span>
+  <div style="font-size:0.85rem">
+    <strong style="color:#ef4444;">Automated 12-Hour Shift Integrity Rule:</strong>
+    <span class="muted" style="display:block;margin-top:2px;">
+      If an employee does not punch OUT within 12 hours of punching IN, the system automatically registers the shift as a <b>Missed Punch (MP)</b> with 0 working hours and 0 overtime hours. False checkout records are strictly forbidden. Missed punches remain visible here until reviewed and resolved by HR.
+    </span>
+  </div>
+</div>
+
+<div class="filters" style="margin-bottom:1.25rem">
+  <div class="tabs">
+    <button type="button" class="tab-btn on" id="btn-tab-pending" onclick="switchMpTab('pending')">
+      ⚠️ Pending Resolution ({{ total_pending }})
+    </button>
+    <button type="button" class="tab-btn" id="btn-tab-resolved" onclick="switchMpTab('resolved')">
+      ✓ Resolved History ({{ total_resolved }})
+    </button>
+  </div>
+</div>
+
+<!-- SECTION 1: Pending Missed Punches -->
+<section class="card tablewrap" id="sec-pending">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <h3 style="margin:0">Pending Missed OUT Punches</h3>
+    <span class="pill bad">{{ total_pending }} Pending Review</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th>Date</th>
+        <th>Punch IN</th>
+        <th>Punch OUT</th>
+        <th>Shift / Policy</th>
+        <th>Status</th>
+        <th style="min-width:180px">HR Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in pending_mps %}
+      <tr>
+        <td>
+          <b>{{ r['emp_name'] }}</b>
+          <span class="muted small" style="display:block">
+            {{ r['emp_code'] }}{% if r['department'] %} · {{ r['department'] }}{% endif %}
+            {% if r['category_name'] %} · <span class="badge" style="font-size:0.7rem;padding:1px 6px;">🏷️ {{ r['category_name'] }}</span>{% endif %}
+          </span>
+        </td>
+        <td>
+          <b>{{ r['date'] }}</b>
+          {% if r['date'] < today|string %}<span class="late" style="display:block;font-size:0.72rem">Previous Day</span>{% endif %}
+        </td>
+        <td>
+          <b style="color:var(--brand-accent)">{{ r['check_in']|hm }}</b>
+          <span class="muted small" style="display:block">{{ r['check_in'][11:19] if r['check_in'] else '' }}</span>
+        </td>
+        <td>
+          <span class="badge" style="background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);font-weight:700">
+            Missing OUT
+          </span>
+          <span class="muted small" style="display:block;margin-top:2px;">No punch out recorded</span>
+        </td>
+        <td>
+          <b>{{ r['shift_name'] or 'Standard Shift' }}</b>
+          <span class="muted small" style="display:block">{{ r['category_work_hours']|int if r['category_work_hours'] else 12 }}h Shift Duration</span>
+        </td>
+        <td>
+          <span class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);font-weight:700;">
+            ⚠️ Missed Punch
+          </span>
+          <span class="late" style="display:block;font-size:0.72rem;margin-top:2px;">Pending HR</span>
+        </td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="btn sm primary" onclick="openResolveModal({{ r['id'] }}, '{{ r['emp_name']|replace("'", "\\'") }}', '{{ r['emp_code'] }}', '{{ r['date'] }}', '{{ r['check_in']|hm }}')" style="font-size:0.78rem;padding:4px 8px;">
+              ✏️ Resolve OUT
+            </button>
+            <form method="post" action="{{ url_for('hr.missed_punch_resolve') }}" onsubmit="return confirm('Approve this record as a confirmed Missed Punch? Zero work hours will be recorded.');" style="display:inline">
+              <input type="hidden" name="att_id" value="{{ r['id'] }}">
+              <input type="hidden" name="action" value="approve_mp">
+              <input type="hidden" name="reason" value="HR Verified: Missed OUT punch after 12h shift cutoff">
+              <button type="submit" class="btn sm" style="font-size:0.78rem;padding:4px 8px;border-color:rgba(239,68,68,0.4);color:#ef4444">
+                ✓ Confirm MP
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" class="center muted" style="padding:2.5rem 1rem">
+          <div style="font-size:2rem;margin-bottom:0.5rem">🎉</div>
+          <b>No Pending Missed Punches!</b>
+          <p class="small muted" style="margin:4px 0 0">All employees have completed valid IN and OUT punches, or past records have been resolved by HR.</p>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- SECTION 2: Resolved History -->
+<section class="card tablewrap" id="sec-resolved" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <h3 style="margin:0">Resolved Missed Punch History</h3>
+    <span class="pill ok">{{ total_resolved }} Records</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th>Date</th>
+        <th>Punch IN</th>
+        <th>Resolved Punch OUT</th>
+        <th>Status</th>
+        <th>Resolution Remarks</th>
+        <th>Resolved By &amp; Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in resolved_mps %}
+      <tr>
+        <td>
+          <b>{{ r['emp_name'] }}</b>
+          <span class="muted small" style="display:block">{{ r['emp_code'] }}{% if r['department'] %} · {{ r['department'] }}{% endif %}</span>
+        </td>
+        <td><b>{{ r['date'] }}</b></td>
+        <td><b>{{ r['check_in']|hm }}</b></td>
+        <td>
+          {% if r['check_out'] %}
+            <b>{{ r['check_out']|hm }}</b> ({{ r['work_hours']|hrs }})
+          {% else %}
+            <span class="muted">None (Confirmed MP)</span>
+          {% endif %}
+        </td>
+        <td>
+          {{ chip(r['status']) }}
+          {% if r['source'] == 'correction' %}<span class="tag">Corrected</span>{% endif %}
+        </td>
+        <td class="small">
+          <b>{{ r['remarks'] or 'Resolved by HR' }}</b>
+        </td>
+        <td class="small muted">
+          {{ r['mp_resolved_by'] or 'HR' }}<br>
+          <span style="font-size:0.72rem">{{ r['mp_resolved_at'] or '' }}</span>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" class="center muted" style="padding:2rem 1rem">No past resolved missed punch records yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- Modal: Resolve Missed Punch with Actual Punch OUT -->
+<div id="resolve-modal" class="modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(3px);">
+  <div class="card" style="width:100%;max-width:480px;margin:1rem;background:var(--bg-card);border:1px solid var(--border-default);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,0.35);padding:1.5rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h3 style="margin:0;font-size:1.15rem">✏️ Resolve Missed OUT Punch</h3>
+      <button type="button" class="btn sm" onclick="closeResolveModal()" style="padding:2px 8px">&times;</button>
+    </div>
+    <form method="post" action="{{ url_for('hr.missed_punch_resolve') }}">
+      <input type="hidden" name="att_id" id="modal-att-id" value="">
+      <input type="hidden" name="action" value="correct_out">
+
+      <div style="background:var(--bg-surface);padding:0.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:0.85rem">
+        <div>Employee: <strong id="modal-emp-info">--</strong></div>
+        <div style="margin-top:2px">Date: <strong id="modal-date">--</strong> &bull; Punch IN: <strong id="modal-cin">--</strong></div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem">
+        <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:4px">
+          Actual Punch OUT Time <span style="color:#ef4444">*</span>
+        </label>
+        <input type="time" name="check_out" id="modal-cout" class="input" required style="width:100%">
+        <span class="muted small" style="display:block;margin-top:3px">Enter the time the employee finished work (e.g. 20:00).</span>
+      </div>
+
+      <div class="form-group" style="margin-bottom:1.25rem">
+        <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:4px">
+          Mandatory HR Reason <span style="color:#ef4444">*</span>
+        </label>
+        <textarea name="reason" class="input" rows="3" required placeholder="Explain why the employee missed punch OUT and verification method (min 5 chars)..." style="width:100%"></textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn" onclick="closeResolveModal()">Cancel</button>
+        <button type="submit" class="btn primary">Save &amp; Resolve OUT</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchMpTab(tab) {
+  const secP = document.getElementById('sec-pending');
+  const secR = document.getElementById('sec-resolved');
+  const btnP = document.getElementById('btn-tab-pending');
+  const btnR = document.getElementById('btn-tab-resolved');
+
+  if (tab === 'pending') {
+    secP.style.display = 'block';
+    secR.style.display = 'none';
+    btnP.classList.add('on');
+    btnR.classList.remove('on');
+  } else {
+    secP.style.display = 'none';
+    secR.style.display = 'block';
+    btnP.classList.remove('on');
+    btnR.classList.add('on');
+  }
+}
+
+function openResolveModal(id, name, code, dateStr, cin) {
+  document.getElementById('modal-att-id').value = id;
+  document.getElementById('modal-emp-info').innerText = name + ' (' + code + ')';
+  document.getElementById('modal-date').innerText = dateStr;
+  document.getElementById('modal-cin').innerText = cin;
+  document.getElementById('resolve-modal').style.display = 'flex';
+}
+
+function closeResolveModal() {
+  document.getElementById('resolve-modal').style.display = 'none';
+}
+
+window.addEventListener('click', function(e) {
+  const m = document.getElementById('resolve-modal');
+  if (e.target === m) {
+    closeResolveModal();
+  }
+});
+</script>
+{% endblock %}

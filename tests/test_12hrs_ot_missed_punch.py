@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, date, timedelta
 from app import create_app
 from app.db import get_db
-from app.services import compute_attendance_status, compute_status, finalize_attendance, day_code
+from app.services import compute_attendance_status, compute_status, finalize_attendance, day_code, check_and_sync_missed_punches
 
 class Test12HrsOTAndMissedPunch(unittest.TestCase):
     def setUp(self):
@@ -95,10 +95,97 @@ class Test12HrsOTAndMissedPunch(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         html = resp.get_data(as_text=True)
 
-        # Verify today-state section does NOT render any selfie <img> thumbnail
         today_state_idx = html.find('class="today-state"')
         self.assertNotEqual(today_state_idx, -1)
         today_state_html = html[today_state_idx:today_state_idx+1200]
         self.assertNotIn("<img", today_state_html)
         self.assertNotIn("View Punch In Photo", today_state_html)
         self.assertNotIn("View Punch Out Photo", today_state_html)
+
+    def test_check_and_sync_missed_punches_creates_notification_and_mp(self):
+        with self.app.app_context():
+            db = get_db()
+            emp = db.execute("SELECT * FROM employees WHERE emp_code='EMP001'").fetchone()
+            # Clean past test record for this test date
+            test_date = "2026-10-20"
+            db.execute("DELETE FROM attendance WHERE emp_id=? AND date=?", (emp["id"], test_date))
+            # Insert unclosed punch from a past date
+            db.execute(
+                "INSERT INTO attendance (emp_id, date, shift_id, check_in, check_out, work_hours, ot_hours, status, mp_resolved) "
+                "VALUES (?, ?, 1, ?, NULL, 0, 0, NULL, 0)",
+                (emp["id"], test_date, f"{test_date} 08:30:00")
+            )
+            db.commit()
+
+            # Run sync
+            check_and_sync_missed_punches(db)
+
+            # Verify marked as MP with 0 work hours and no check_out
+            row = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (emp["id"], test_date)).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row["status"], "MP")
+            self.assertEqual(row["work_hours"], 0.0)
+            self.assertEqual(row["ot_hours"], 0.0)
+            self.assertIsNone(row["check_out"])
+            self.assertEqual(row["mp_resolved"], 0)
+
+            # Verify HR notification created
+            notif = db.execute(
+                "SELECT * FROM notifications WHERE target_role='hr' AND message LIKE ? ORDER BY id DESC LIMIT 1",
+                (f"%{emp['emp_code']}%{test_date}%",)
+            ).fetchone()
+            self.assertIsNotNone(notif)
+            self.assertEqual(notif["kind"], "missed_punch")
+            self.assertIn("Missed Punch Alert", notif["title"])
+
+    def test_hr_missed_punches_page_and_resolution_flow(self):
+        # 1. Login as HR
+        res_hr = self.client.post("/login/staff", data={"emp_code": "HR001", "password": "admin123", "login_type": "staff"}, follow_redirects=False)
+        self.assertEqual(res_hr.status_code, 302)
+
+        with self.app.app_context():
+            db = get_db()
+            emp = db.execute("SELECT * FROM employees WHERE emp_code='EMP001'").fetchone()
+            test_date = "2026-10-21"
+            db.execute("DELETE FROM attendance WHERE emp_id=? AND date=?", (emp["id"], test_date))
+            cur = db.execute(
+                "INSERT INTO attendance (emp_id, date, shift_id, check_in, check_out, work_hours, ot_hours, status, mp_resolved) "
+                "VALUES (?, ?, 1, ?, NULL, 0, 0, 'MP', 0)",
+                (emp["id"], test_date, f"{test_date} 08:00:00")
+            )
+            att_id = cur.lastrowid
+            db.commit()
+
+        # 2. View HR Missed Punch List
+        res_mp = self.client.get("/hr/missed-punches")
+        self.assertEqual(res_mp.status_code, 200)
+        html = res_mp.get_data(as_text=True)
+        self.assertIn("HR – Missed Punch List", html)
+        self.assertIn("Missing OUT", html)
+        self.assertIn(test_date, html)
+        self.assertIn(emp["name"], html)
+
+        # 3. Resolve Missed Punch with Actual Punch OUT time
+        res_res = self.client.post("/hr/missed-punches/resolve", data={
+            "att_id": att_id,
+            "action": "correct_out",
+            "check_out": "20:00",
+            "reason": "Employee worked full shift and forgot OUT punch; verified by supervisor."
+        }, follow_redirects=False)
+        self.assertEqual(res_res.status_code, 302)
+
+        with self.app.app_context():
+            db = get_db()
+            updated = db.execute("SELECT * FROM attendance WHERE id=?", (att_id,)).fetchone()
+            self.assertEqual(updated["status"], "P")
+            self.assertEqual(updated["mp_resolved"], 1)
+            self.assertEqual(updated["check_out"], f"{test_date} 20:00:00")
+            self.assertEqual(updated["work_hours"], 12.0)
+            self.assertEqual(updated["source"], "correction")
+
+        # 4. View Attendance page for that date - now displays resolved status
+        res_att = self.client.get(f"/hr/attendance?date={test_date}")
+        self.assertEqual(res_att.status_code, 200)
+        att_html = res_att.get_data(as_text=True)
+        self.assertIn("Present", att_html)
+        self.assertIn("08:00 PM", att_html)

@@ -14,6 +14,7 @@
       <input type="date" name="date" value="{{ d }}" onchange="this.form.submit()">
     </form>
     <a class="btn sm" href="?date={{ nxt }}" title="Next day">›</a>
+    <a class="btn sm" href="{{ url_for('hr.missed_punches') }}" style="margin-left:0.5rem;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);font-weight:600">⚠️ Missed Punches ({{ pending_mp_count }})</a>
     <a class="btn sm primary" href="{{ url_for('hr.corrections') }}" style="margin-left:0.5rem">+ Add / Correct Punch</a>
   </div>
 </div>
@@ -120,6 +121,11 @@
             <span class="badge" style="background:var(--status-wo-bg);color:var(--status-wo)">Weekly Off</span>
           {% elif r['code'] == 'H' %}
             <span class="badge" style="background:var(--status-wo-bg);color:var(--status-wo)">Holiday</span>
+          {% elif r['code'] == 'MP' or (rec and rec['status'] == 'MP') %}
+            <span class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);font-weight:700">⚠️ Missed Punch</span>
+            {% if rec and not rec['mp_resolved'] %}
+              <a href="{{ url_for('hr.missed_punches') }}" class="tag" style="background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);text-decoration:none;margin-left:3px;font-size:0.7rem">Resolve</a>
+            {% endif %}
           {% elif r['code'] == '-' %}
             <span class="badge" style="background:var(--bg-surface);color:var(--text-muted);border:1px solid var(--border-default)">Not checked in</span>
           {% else %}
@@ -129,11 +135,25 @@
           {% if rec and rec['source'] == 'correction' %}<span class="tag">Corrected</span>{% endif %}
         </td>
         <td><b>{{ rec['check_in']|hm if rec else '—' }}</b></td>
-        <td><b>{{ rec['check_out']|hm if rec else '—' }}</b></td>
         <td>
-          <b>{{ rec['work_hours']|hrs if rec else '—' }}</b>
-          {% if rec and rec['ot_hours'] and rec['ot_hours'] > 0 %}
-            <span class="badge" style="display:block;margin-top:3px;font-size:0.7rem;background:var(--status-ot-bg);color:var(--status-ot);border:1px solid var(--status-ot-border)">+{{ rec['ot_hours']|hrs }} OT</span>
+          {% if rec and rec['check_out'] %}
+            <b>{{ rec['check_out']|hm }}</b>
+          {% elif rec and (rec['status'] == 'MP' or r['code'] == 'MP') %}
+            <span class="late" style="font-size:0.8rem;font-weight:700">Missing OUT</span>
+          {% elif rec and r['code'] == 'IN' %}
+            <span class="muted small">Working Now</span>
+          {% else %}
+            <b>—</b>
+          {% endif %}
+        </td>
+        <td>
+          {% if rec and (rec['status'] == 'MP' or r['code'] == 'MP') and not rec['check_out'] %}
+            <b>0m</b> <span class="muted small" style="display:block;font-size:0.7rem">(Missed Punch)</span>
+          {% else %}
+            <b>{{ rec['work_hours']|hrs if rec else '—' }}</b>
+            {% if rec and rec['ot_hours'] and rec['ot_hours'] > 0 %}
+              <span class="badge" style="display:block;margin-top:3px;font-size:0.7rem;background:var(--status-ot-bg);color:var(--status-ot);border:1px solid var(--status-ot-border)">+{{ rec['ot_hours']|hrs }} OT</span>
+            {% endif %}
           {% endif %}
         </td>
         <td class="small">

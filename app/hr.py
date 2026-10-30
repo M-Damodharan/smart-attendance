@@ -12,7 +12,7 @@ from .auth import hr_required
 from .db import get_db
 from .face_engine import register_face_for_employee, reset_face_for_employee
 from .maintenance import safe_clean_cache, get_cache_status
-from .services import (coords_from_maps_link, audit, build_register, clear_shared_cache,
+from .services import (coords_from_maps_link, audit, build_register, check_and_sync_missed_punches, clear_shared_cache,
                        create_notification, d2s, daterange,
                        finalize_attendance, format_duration, get_all_shifts_cached, get_employee_category,
                        get_employee_shift_for_date, is_late, month_range, now, parse_dt,
@@ -50,6 +50,7 @@ def _employees(only_active=True, shift_id=None, dept=None, category_id=None, inc
 @hr_required
 def dashboard():
     db, t = get_db(), today()
+    check_and_sync_missed_punches(db)
     emps = _employees()
     reg = build_register(emps, t, t)
     shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
@@ -104,7 +105,8 @@ def dashboard():
             (SELECT COUNT(*) FROM employees e JOIN employee_categories c ON c.id=e.category_id WHERE e.active=1 AND (c.code='ACCOUNTS_FINANCE' OR e.department LIKE '%Accounts%')) as wf_accounts,
             (SELECT COUNT(*) FROM employees WHERE active=1 AND face_registered=1) as face_registered,
             (SELECT COUNT(*) FROM employees WHERE active=1 AND (face_registered=0 OR face_registered IS NULL)) as face_pending_setup,
-            (SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0) as office_unset_count
+            (SELECT COUNT(*) FROM offices WHERE active=1 AND lat=0 AND lng=0) as office_unset_count,
+            (SELECT COUNT(*) FROM attendance WHERE check_in IS NOT NULL AND (status='MP' OR check_out IS NULL) AND (mp_resolved IS NULL OR mp_resolved=0)) as pending_missed_punches
     """, (d2s(t),)).fetchone()
 
     stats["late"] = max(stats["late"], (batch_counts["db_late_count"] if batch_counts else 0) or 0)
@@ -113,6 +115,7 @@ def dashboard():
     pending_face_changes = (batch_counts["pending_face_changes"] if batch_counts else 0) or 0
     pending_ai_alerts = (batch_counts["pending_ai_alerts"] if batch_counts else 0) or 0
     ai_blocked_count = (batch_counts["ai_blocked_count"] if batch_counts else 0) or 0
+    pending_mp_count = (batch_counts["pending_missed_punches"] if batch_counts else 0) or 0
 
     workforce = {
         "staff": (batch_counts["wf_staff"] if batch_counts else 0) or 0,
@@ -155,6 +158,7 @@ def dashboard():
     return render_template("hr/dashboard.html", office_unset=office_unset, stats=stats, by_shift=by_shift.values(), total=len(emps),
                            pending_leave=pending_leave, pending_od=pending_od, pending_face_changes=pending_face_changes,
                            pending_ai_alerts=pending_ai_alerts, ai_blocked_count=ai_blocked_count,
+                           pending_mp_count=pending_mp_count,
                            active_face_alerts=active_face_alerts,
                            workforce=workforce, face_stats=face_stats, upcoming_schedules=upcoming_schedules,
                            security_exceptions=security_exceptions, recent=recent, today=t)
@@ -336,6 +340,7 @@ def reset_face(eid):
 @hr_required
 def attendance():
     db = get_db()
+    check_and_sync_missed_punches(db)
     try:
         d = s2d(request.args.get("date") or d2s(today()))
     except ValueError:
@@ -389,8 +394,10 @@ def attendance():
             "leave": leave,
             "absent": absent,
         })
+    pending_mp_count = db.execute("SELECT COUNT(*) FROM attendance WHERE check_in IS NOT NULL AND (status='MP' OR check_out IS NULL) AND (mp_resolved IS NULL OR mp_resolved=0)").fetchone()[0]
     return render_template("hr/attendance.html", groups=groups, d=d,
                            total_present=total_present, total_not_in=total_not_in, total_leave=total_leave,
+                           pending_mp_count=pending_mp_count,
                            prev=d2s(d - timedelta(days=1)), nxt=d2s(d + timedelta(days=1)))
 
 
@@ -671,6 +678,154 @@ def corrections():
         return redirect(url_for("hr.corrections"))
     recent = db.execute("SELECT * FROM audit_log WHERE action LIKE 'CORRECTION%' ORDER BY id DESC LIMIT 20").fetchall()
     return render_template("hr/corrections.html", emps=_employees(), recent=recent, today=today())
+
+
+# ------------------------------------------------------------------ HR – Missed Punch List & Resolution
+@bp.route("/missed-punches")
+@hr_required
+def missed_punches():
+    db = get_db()
+    check_and_sync_missed_punches(db)
+
+    # Check if mp_resolved column exists
+    cols = [c[1] for c in db.execute("PRAGMA table_info(attendance)").fetchall()]
+    has_mp_col = "mp_resolved" in cols
+
+    pending_query = """
+        SELECT a.*, e.name as emp_name, e.emp_code, e.department, s.name as shift_name,
+               c.name as category_name, c.work_hours as category_work_hours
+        FROM attendance a
+        JOIN employees e ON e.id = a.emp_id
+        LEFT JOIN shifts s ON s.id = a.shift_id
+        LEFT JOIN employee_categories c ON c.id = e.category_id
+        WHERE a.check_in IS NOT NULL 
+          AND (a.status = 'MP' OR a.check_out IS NULL)
+    """
+    if has_mp_col:
+        pending_query += " AND (a.mp_resolved IS NULL OR a.mp_resolved = 0)"
+    pending_query += " ORDER BY a.date DESC, a.check_in DESC"
+
+    pending_mps = db.execute(pending_query).fetchall()
+
+    resolved_mps = []
+    if has_mp_col:
+        resolved_mps = db.execute("""
+            SELECT a.*, e.name as emp_name, e.emp_code, e.department, s.name as shift_name
+            FROM attendance a
+            JOIN employees e ON e.id = a.emp_id
+            LEFT JOIN shifts s ON s.id = a.shift_id
+            WHERE a.mp_resolved = 1
+            ORDER BY a.mp_resolved_at DESC, a.date DESC
+            LIMIT 50
+        """).fetchall()
+
+    return render_template(
+        "hr/missed_punches.html",
+        pending_mps=pending_mps,
+        resolved_mps=resolved_mps,
+        total_pending=len(pending_mps),
+        total_resolved=len(resolved_mps),
+        today=today()
+    )
+
+
+@bp.route("/missed-punches/resolve", methods=["POST"])
+@hr_required
+def missed_punch_resolve():
+    db = get_db()
+    f = request.form
+    try:
+        att_id = int(f.get("att_id", 0))
+    except (ValueError, TypeError):
+        flash("Invalid attendance record specified.", "err")
+        return redirect(url_for("hr.missed_punches"))
+
+    rec = db.execute("SELECT * FROM attendance WHERE id=?", (att_id,)).fetchone()
+    if not rec:
+        flash("Attendance record not found.", "err")
+        return redirect(url_for("hr.missed_punches"))
+
+    emp = db.execute("SELECT * FROM employees WHERE id=?", (rec["emp_id"],)).fetchone()
+    if not emp:
+        flash("Employee account not found.", "err")
+        return redirect(url_for("hr.missed_punches"))
+
+    action = f.get("action", "correct_out")
+    reason = f.get("reason", "").strip()
+    now_ts = now().strftime(DT_FMT)
+    hr_actor = g.user.get("name", "HR Admin")
+
+    if action == "correct_out":
+        tout = f.get("check_out", "").strip()
+        if not tout:
+            flash("Please specify a valid check-out time (HH:MM).", "err")
+            return redirect(url_for("hr.missed_punches"))
+        if len(reason) < 5:
+            flash("A reason of at least 5 characters is mandatory for resolving a missed punch.", "err")
+            return redirect(url_for("hr.missed_punches"))
+
+        cin = rec["check_in"]
+        cout = f"{rec['date']} {tout}:00"
+        cin_dt = parse_dt(cin)
+        cout_dt = parse_dt(cout)
+
+        # Handle night shift crossover if check-out time is earlier than check-in time
+        if cout_dt and cin_dt and cout_dt <= cin_dt:
+            next_day_cout = cin_dt.date() + timedelta(days=1)
+            cout = f"{next_day_cout} {tout}:00"
+            cout_dt = parse_dt(cout)
+
+        if not cout_dt or not cin_dt or cout_dt <= cin_dt:
+            flash("Check-out time must be after check-in time.", "err")
+            return redirect(url_for("hr.missed_punches"))
+
+        shift_id = rec["shift_id"] if ("shift_id" in rec.keys() and rec["shift_id"]) else emp["shift_id"]
+        shift = resolve_employee_shift(emp["id"], s2d(rec["date"]), cin, db, fallback_shift_id=shift_id, emp_obj=emp)
+        cat = get_employee_category(emp["id"])
+        upd = finalize_attendance({"check_in": cin, "check_out": cout}, shift, cat)
+
+        db.execute("""
+            UPDATE attendance 
+            SET check_out=?, 
+                work_hours=?, 
+                ot_hours=?, 
+                status=?, 
+                late=?, 
+                source='correction', 
+                mp_resolved=1, 
+                mp_resolved_at=?, 
+                mp_resolved_by=?, 
+                remarks=? 
+            WHERE id=?
+        """, (cout, upd["work_hours"], upd["ot_hours"], upd["status"], upd["late"], now_ts, hr_actor, reason, att_id))
+
+        audit("MISSED_PUNCH_RESOLVED", "attendance", f"{emp['emp_code']}@{rec['date']}",
+              f"OUT={cout} status={upd['status']} hours={upd['work_hours']} | reason: {reason}")
+        db.commit()
+        flash(f"Missed punch for {emp['name']} ({emp['emp_code']}) successfully resolved with OUT at {tout}. Status: {upd['status']} ({format_duration(upd['work_hours'])}).", "ok")
+
+    elif action == "approve_mp":
+        approve_reason = reason or "Approved as Missed Punch (zero payable hours recorded)"
+        db.execute("""
+            UPDATE attendance 
+            SET status='MP', 
+                work_hours=0.0, 
+                ot_hours=0.0, 
+                check_out=NULL, 
+                out_selfie=NULL, 
+                mp_resolved=1, 
+                mp_resolved_at=?, 
+                mp_resolved_by=?, 
+                remarks=? 
+            WHERE id=?
+        """, (now_ts, hr_actor, approve_reason, att_id))
+
+        audit("MISSED_PUNCH_APPROVED", "attendance", f"{emp['emp_code']}@{rec['date']}",
+              f"Approved as MP (zero hours) | reason: {approve_reason}")
+        db.commit()
+        flash(f"Missed punch for {emp['name']} ({emp['emp_code']}) on {rec['date']} approved as Missed Punch.", "ok")
+
+    return redirect(url_for("hr.missed_punches"))
 
 
 # ------------------------------------------------------------------ audit log

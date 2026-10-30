@@ -14,7 +14,7 @@ from .auth import employee_required, login_required
 from .db import get_db
 from .face_engine import verify_face_for_employee, FACE_MATCH_THRESHOLD
 from .photo_storage import get_photo_path, save_photo
-from .services import (approved_od_for, approved_permission_for, audit, determine_shift_from_punch, finalize_attendance, format_duration,
+from .services import (approved_od_for, approved_permission_for, audit, check_and_sync_missed_punches, determine_shift_from_punch, finalize_attendance, format_duration,
                        get_employee_category, get_employee_shift_for_date, haversine, now, today, d2s, parse_dt,
                        resolve_employee_shift)
 from .webauthn_engine import (generate_registration_challenge, verify_registration_response,
@@ -237,6 +237,7 @@ def punch():
     if kind not in ("in", "out"):
         return _err("Invalid action.")
     db, user = get_db(), g.user
+    check_and_sync_missed_punches(db)
     t = now()
     from datetime import datetime, timedelta
     today_s = d2s(today())
@@ -742,6 +743,7 @@ def get_comments(entity_type, entity_id):
 @login_required
 def get_notifications():
     db = get_db()
+    check_and_sync_missed_punches(db)
     role = g.user["role"]
     uid = g.user["id"]
 

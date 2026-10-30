@@ -151,6 +151,7 @@
       <span>🤖 Ask AI Assistant</span>
     </button>
     <a class="btn sm" href="{{ url_for('hr.face_security_audit') }}" style="border-color:#ef4444;color:#ef4444;font-weight:700">🛡️ AI Face Audit</a>
+    <a class="btn sm" href="{{ url_for('hr.missed_punches') }}" style="border-color:#ef4444;color:#ef4444;font-weight:700">⚠️ Missed Punches ({{ pending_mp_count }})</a>
     <a class="btn sm primary" href="{{ url_for('hr.shifts') }}">⚡ Bulk Shifts &amp; Rotation</a>
     <a class="btn sm" href="{{ url_for('hr.corrections') }}">+ Manual Punch</a>
     <a class="btn sm" href="{{ url_for('hr.attendance') }}">Daily Register</a>
@@ -166,6 +167,11 @@
       <span class="muted small">4-Department Architecture &bull; One Face, One Account Binding</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {% if pending_mp_count %}
+      <a href="{{ url_for('hr.missed_punches') }}" class="pill bad" style="font-size:0.8rem;padding:4px 10px;font-weight:700;background:rgba(239,68,68,0.18);border:1px solid #ef4444;color:#ef4444">
+        ⚠️ {{ pending_mp_count }} Missed Punch(es) Pending Review &rarr;
+      </a>
+      {% endif %}
       {% if ai_blocked_count or pending_ai_alerts %}
       <a href="{{ url_for('hr.face_security_audit') }}" class="pill bad" style="font-size:0.8rem;padding:4px 10px;font-weight:700;background:rgba(239,68,68,0.18);border:1px solid #ef4444;color:#ef4444">
         🚨 {{ ai_blocked_count or pending_ai_alerts }} Account(s) BLOCKED by AI Defense &rarr;
