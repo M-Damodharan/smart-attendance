@@ -45,7 +45,7 @@
         <div class="muted small">Department: <b>{{ office['department'] if office and office['department'] else 'General' }}</b> &bull; Shift: <b>{{ shift['name'] }}</b></div>
       </div>
     </div>
-    <span class="badge" style="background:rgba(16,185,129,0.14);color:#059669;font-weight:700;border:1px solid rgba(16,185,129,0.3);box-shadow:0 2px 4px rgba(16,185,129,0.15)">Strict 50m Geofence</span>
+    <span class="badge" style="background:rgba(16,185,129,0.14);color:#059669;font-weight:700;border:1px solid rgba(16,185,129,0.3);box-shadow:0 2px 4px rgba(16,185,129,0.15)">Strict {{ office['radius_m'] if office and office['radius_m'] else 30 }}m Geofence</span>
   </div>
 
   <div class="steps">

@@ -927,7 +927,7 @@ def settings():
             if act == "office":
                 oid = f.get("id", type=int)
                 dept = f.get("department", "").strip() or None
-                radius = min(int(f.get("radius_m") or 50), 50)
+                radius = min(int(f.get("radius_m") or 30), 30)
                 name = f.get("name", "").strip() or (dept or "Office")
 
                 raw_lat = str(f.get("lat", "")).strip()
@@ -952,7 +952,7 @@ def settings():
                 audit("OFFICE_SAVE", "office", oid, f"{vals[0]} dept={dept} {vals[2]:.6f},{vals[3]:.6f} r={vals[4]}m")
                 db.commit()
                 clear_shared_cache()
-                flash(f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict 50 m max radius).", "ok")
+                flash(f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict 30 m max radius).", "ok")
                 return redirect(url_for("hr.settings"))
             elif act == "office_link":
                 pt = coords_from_maps_link(f.get("link", ""))
@@ -961,7 +961,7 @@ def settings():
                           "'lat,lng', DMS coordinates, or click '📍 Use Current GPS'.", "err")
                     return redirect(url_for("hr.settings"))
                 target_id = str(f.get("id", "")).strip()
-                radius = min(int(f.get("radius_m") or 50), 50)
+                radius = min(int(f.get("radius_m") or 30), 30)
 
                 if target_id == "all" or not target_id:
                     # Update all active department offices in 1 click
@@ -969,7 +969,7 @@ def settings():
                     audit("OFFICE_LOCATION_ALL_SET", "offices", 0, f"{pt[0]:.6f},{pt[1]:.6f} r={radius}m")
                     db.commit()
                     clear_shared_cache()
-                    flash(f"All department office locations successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict 50 m policy).", "ok")
+                    flash(f"All department office locations successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict 30 m policy).", "ok")
                     return redirect(url_for("hr.settings"))
                 else:
                     oid = int(target_id)
@@ -979,7 +979,7 @@ def settings():
                     audit("OFFICE_LOCATION_FROM_LINK", "office", oid, f"{pt[0]:.6f},{pt[1]:.6f} r={radius}m")
                     db.commit()
                     clear_shared_cache()
-                    flash(f"Location for '{off_name}' successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict 50 m policy).", "ok")
+                    flash(f"Location for '{off_name}' successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict 30 m policy).", "ok")
                     return redirect(url_for("hr.settings"))
             elif act == "shift":
                 sid = f.get("id", type=int)

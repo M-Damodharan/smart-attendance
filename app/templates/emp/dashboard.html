@@ -12,7 +12,7 @@
     <div class="muted small" style="margin-top:6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       <span class="hero-badge">🏷️ {{ category['name'] if category else 'Standard Employee' }}</span>
       <span class="hero-badge">🕒 {{ shift['name'] }} ({{ shift['start_time'] }}–{{ shift['end_time'] }})</span>
-      <span class="hero-badge">📍 {{ office['name'] if office else 'Department Office' }} (50m)</span>
+      <span class="hero-badge">📍 {{ office['name'] if office else 'Department Office' }} ({{ office['radius_m'] if office and office['radius_m'] else 30 }}m)</span>
       <a href="{{ url_for('emp.face_change') }}" class="hero-badge-link {% if g.user['face_registered'] %}active{% else %}pending{% endif %}">
         👤 Face ID: {{ 'Active' if g.user['face_registered'] else 'Setup Needed' }}
       </a>

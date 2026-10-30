@@ -458,15 +458,15 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
             att = db.execute("SELECT id FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')").fetchone()
             self.assertIsNone(att)
 
-    def test_12_strict_50m_geofence_enforced(self):
-        """12. Strictly 50 m maximum radius allowed: >50m rejected, <=50m accepted."""
+    def test_12_strict_30m_geofence_enforced(self):
+        """12. Strictly 30 m maximum radius allowed: >30m rejected, <=30m accepted."""
         c = self.app.test_client()
         with self.app.app_context():
             db = get_db()
             db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
             db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
-            # Ensure office has strict 50m radius
-            db.execute("UPDATE offices SET lat=12.971600, lng=77.594600, radius_m=50 WHERE department='Staff' OR id=1")
+            # Ensure office has strict 30m radius
+            db.execute("UPDATE offices SET lat=12.971600, lng=77.594600, radius_m=30 WHERE department='Staff' OR id=1")
             db.commit()
 
         self._login(c, "E0012", "123456789")
@@ -476,10 +476,10 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
         self.assertTrue(geo_out["ok"])
         self.assertFalse(geo_out["inside"])
         self.assertFalse(geo_out["allowed"])
-        self.assertEqual(geo_out["radius"], 50)
-        self.assertGreater(geo_out["distance"], 50)
+        self.assertEqual(geo_out["radius"], 30)
+        self.assertGreater(geo_out["distance"], 30)
 
-        # 2. Punch attempt outside 50m is rejected
+        # 2. Punch attempt outside 30m is rejected
         ch_res = c.get("/api/android-biometric/challenge")
         ch_data = ch_res.get_json()
         clear_selfie = make_test_face(1)
@@ -499,15 +499,15 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
         self.assertEqual(res_fail.status_code, 400)
         fail_data = res_fail.get_json()
         self.assertFalse(fail_data["ok"])
-        self.assertIn("allowed 50 m only", fail_data["error"])
+        self.assertIn("allowed 30 m only", fail_data["error"])
 
-        # 3. Coordinate within 50m (12.971750, 77.594600 is ~17 meters north) is allowed
+        # 3. Coordinate within 30m (12.971750, 77.594600 is ~17 meters north) is allowed
         geo_in = c.post("/api/geo-check", json={"lat": 12.971750, "lng": 77.594600, "accuracy": 10}).get_json()
         self.assertTrue(geo_in["ok"])
         self.assertTrue(geo_in["inside"])
         self.assertTrue(geo_in["allowed"])
-        self.assertEqual(geo_in["radius"], 50)
-        self.assertLessEqual(geo_in["distance"], 50)
+        self.assertEqual(geo_in["radius"], 30)
+        self.assertLessEqual(geo_in["distance"], 30)
 
     def test_13_four_department_marked_locations(self):
         """13. All 4 departments (Staff, Production, Contract Operations, Accounts & Finance) have marked location points."""
@@ -522,9 +522,9 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
             self.assertIn("Contract Operations", dept_names)
             self.assertIn("Accounts & Finance", dept_names)
 
-            # Verify every department location has strict 50m radius
+            # Verify every department location has strict 30m radius
             for o in offices:
-                self.assertLessEqual(o["radius_m"], 50)
+                self.assertLessEqual(o["radius_m"], 30)
 
     def test_14_user_covered_closed_camera_rejected_without_punch(self):
         """14. Covered camera lens or closed camera photo is strictly rejected: Face Not Clear modal triggered and punch blocked."""

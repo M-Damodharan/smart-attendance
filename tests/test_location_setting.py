@@ -61,7 +61,7 @@ class LocationSettingTestCase(unittest.TestCase):
             for r in rows:
                 self.assertAlmostEqual(r["lat"], 12.743475, places=4)
                 self.assertAlmostEqual(r["lng"], 77.817446, places=4)
-                self.assertEqual(r["radius_m"], 50)
+                self.assertEqual(r["radius_m"], 30)
 
     def test_hr_set_location_individual_office(self):
         self._login_hr()
@@ -83,7 +83,7 @@ class LocationSettingTestCase(unittest.TestCase):
             r = db.execute("SELECT lat, lng, radius_m FROM offices WHERE id=1").fetchone()
             self.assertAlmostEqual(r["lat"], 12.762733, places=4)
             self.assertAlmostEqual(r["lng"], 77.802695, places=4)
-            self.assertEqual(r["radius_m"], 50)
+            self.assertEqual(r["radius_m"], 30)
 
     def test_hr_save_location_card_with_pasted_combined_coords(self):
         self._login_hr()
@@ -97,7 +97,7 @@ class LocationSettingTestCase(unittest.TestCase):
                 "department": "",
                 "lat": "12.750000, 77.810000",
                 "lng": "",
-                "radius_m": "50",
+                "radius_m": "30",
                 "active": "1",
             },
             follow_redirects=True,

@@ -4,11 +4,11 @@
 <section class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
     <div>
-      <h3 style="margin:0;">4 Department Marked Locations &amp; Geofence (Strict 50 m Policy)</h3>
-      <p class="muted small" style="margin:2px 0 0;">Each department has its own separated GPS location point. Attendance punching is strictly restricted to within <b>50 meters</b> of the employee's assigned department location point.</p>
+      <h3 style="margin:0;">4 Department Marked Locations &amp; Geofence (Strict 30 m Policy)</h3>
+      <p class="muted small" style="margin:2px 0 0;">Each department has its own separated GPS location point. Attendance punching is strictly restricted to within <b>30 meters</b> of the employee's assigned department location point.</p>
     </div>
     <span class="badge" style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:6px 12px;border-radius:8px;">
-      📍 Strict 50m Max Radius Policy
+      📍 Strict 30m Max Radius Policy
     </span>
   </div>
 
@@ -93,8 +93,8 @@
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-surface);padding:8px 10px;border-radius:8px;">
         <span class="small muted">Allowed Radius:</span>
         <div style="display:flex;align-items:center;gap:6px;">
-          <input name="radius_m" type="number" min="10" max="50" value="50" required style="width:55px;padding:2px 6px;" readonly>
-          <span class="badge b-approved" style="font-size:0.72rem;">Strict 50m Max</span>
+          <input name="radius_m" type="number" min="10" max="30" value="{{ o['radius_m'] or 30 }}" required style="width:55px;padding:2px 6px;" readonly>
+          <span class="badge b-approved" style="font-size:0.72rem;">Strict 30m Max</span>
         </div>
       </div>
 
@@ -514,43 +514,109 @@ function handleCoordPaste(e, latInput){
   }
 }
 
-// Resilient GPS locator with fast high-accuracy attempt + automatic low-accuracy fallback
+// Resilient GPS & Network locator:
+// 1. Attempts High-Accuracy GPS (satellite fix with 8s timeout, 60s maxAge)
+// 2. Automatically falls back to Low-Accuracy / Wi-Fi GPS (5s timeout, 300s maxAge)
+// 3. Automatically falls back to IP Geolocation via backend /api/geo/my-location or ipapi.co
 function acquireGpsLocation(onSuccess, onError){
-  if(!navigator.geolocation){
-    onError(new Error('GPS geolocation not supported on this browser/device'));
-    return;
-  }
   let finished = false;
 
-  // Try high accuracy first (5 sec timeout)
+  function tryIpFallback(reason){
+    if(finished) return;
+    // Attempt backend proxy first
+    fetch('/api/geo/my-location', { headers: { 'Accept': 'application/json' } })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if(!finished && data && data.ok && data.lat && data.lng){
+          finished = true;
+          onSuccess({
+            coords: {
+              latitude: Number(data.lat),
+              longitude: Number(data.lng),
+              accuracy: data.accuracy || 150
+            },
+            source: data.source || 'network',
+            city: data.city || 'Hosur'
+          });
+          return;
+        }
+        // Direct client fallback to ipapi
+        return fetch('https://ipapi.co/json/')
+          .then(r => r.ok ? r.json() : null)
+          .then(d2 => {
+            if(!finished && d2 && d2.latitude && d2.longitude){
+              finished = true;
+              onSuccess({
+                coords: {
+                  latitude: Number(d2.latitude),
+                  longitude: Number(d2.longitude),
+                  accuracy: 150
+                },
+                source: 'network_ip',
+                city: d2.city || 'Hosur'
+              });
+              return;
+            }
+            if(!finished){
+              finished = true;
+              onError(new Error(reason || 'Unable to retrieve GPS or IP location.'));
+            }
+          });
+      })
+      .catch(err => {
+        if(!finished){
+          finished = true;
+          onError(new Error(reason || 'Location unavailable: ' + (err.message || 'Network error')));
+        }
+      });
+  }
+
+  if(!navigator.geolocation){
+    tryIpFallback('Browser does not support direct GPS geolocation');
+    return;
+  }
+
+  // Tier 1: High Accuracy GPS (8 sec timeout, 60s cache)
   navigator.geolocation.getCurrentPosition(pos => {
     if(!finished){
       finished = true;
-      onSuccess(pos);
+      onSuccess({
+        coords: {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        },
+        source: 'gps'
+      });
     }
   }, err => {
-    // If high accuracy times out or fails (e.g. indoors/desktop), fall back to standard/network accuracy
+    // Tier 2: Low-Accuracy / Wi-Fi triangulation fallback (5 sec timeout, 5 min cache)
     if(!finished){
       navigator.geolocation.getCurrentPosition(pos2 => {
         if(!finished){
           finished = true;
-          onSuccess(pos2);
+          onSuccess({
+            coords: {
+              latitude: pos2.coords.latitude,
+              longitude: pos2.coords.longitude,
+              accuracy: pos2.coords.accuracy
+            },
+            source: 'wifi_network'
+          });
         }
       }, err2 => {
-        if(!finished){
-          finished = true;
-          onError(err2 || err);
-        }
-      }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 });
+        // Tier 3: Automatic IP Geolocation Fallback
+        tryIpFallback(err2 ? (err2.message || 'GPS hardware unavailable') : (err ? err.message : ''));
+      }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
     }
-  }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+  }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // Quick GPS setter at top of page
 function useQuickGps(btn){
   const inp = document.getElementById('quick-location-input');
   const origText = btn.textContent;
-  btn.textContent = '⏳ Acquiring GPS…';
+  btn.textContent = '⏳ Acquiring Location…';
   btn.disabled = true;
 
   acquireGpsLocation(pos => {
@@ -559,7 +625,9 @@ function useQuickGps(btn){
     const acc = Math.round(pos.coords.accuracy);
     inp.value = `${lat}, ${lng}`;
     inp.style.borderColor = '#10b981';
-    btn.textContent = `✓ GPS Captured (±${acc}m)`;
+    inp.style.backgroundColor = 'rgba(16,185,129,0.08)';
+    const label = pos.source === 'gps' ? `✓ GPS Captured (±${acc}m)` : `✓ Network Location (${pos.city || 'Hosur'})`;
+    btn.textContent = label;
     btn.disabled = false;
     const setBtn = document.getElementById('quick-set-btn');
     if(setBtn){
@@ -572,9 +640,9 @@ function useQuickGps(btn){
         setBtn.textContent = '📍 Set Location';
       }, 6000);
     }
-    setTimeout(() => { btn.textContent = origText; }, 4000);
+    setTimeout(() => { btn.textContent = origText; }, 5000);
   }, err => {
-    alert('GPS location error: ' + (err.message || 'Permission denied or timed out. Please allow location access.'));
+    alert('Location notice: ' + (err.message || 'Permission denied or timed out. Please allow location access.'));
     btn.textContent = origText;
     btn.disabled = false;
   });
@@ -587,9 +655,19 @@ function fillLocationFor(btn){
   const lngInput = form.querySelector('input[name=lng]');
   const saveBtn = form.querySelector('button[type=submit]');
   const origText = btn.textContent;
+  let feedbackEl = form.querySelector('.loc-feedback');
+  if(!feedbackEl){
+    feedbackEl = document.createElement('div');
+    feedbackEl.className = 'loc-feedback small';
+    feedbackEl.style.cssText = 'margin-top:6px;font-weight:600;text-align:center;transition:all 0.3s ease;';
+    btn.parentNode.parentNode.appendChild(feedbackEl);
+  }
 
-  btn.textContent = '⏳ Fetching GPS…';
+  btn.textContent = '⏳ Fetching Location…';
   btn.disabled = true;
+  feedbackEl.style.display = 'block';
+  feedbackEl.style.color = '#3b82f6';
+  feedbackEl.textContent = '📡 Acquiring GPS satellite fix / network location…';
 
   acquireGpsLocation(pos => {
     const lat = pos.coords.latitude.toFixed(6);
@@ -599,23 +677,29 @@ function fillLocationFor(btn){
     lngInput.value = lng;
     latInput.style.borderColor = '#10b981';
     lngInput.style.borderColor = '#10b981';
-    btn.textContent = `✓ GPS Captured (±${acc}m)`;
+    latInput.style.backgroundColor = 'rgba(16,185,129,0.08)';
+    lngInput.style.backgroundColor = 'rgba(16,185,129,0.08)';
+
+    const label = pos.source === 'gps' ? `✓ GPS Locked (±${acc}m)` : `✓ Network Location (${pos.city || 'Hosur'})`;
+    btn.textContent = label;
     btn.disabled = false;
+
+    feedbackEl.style.color = '#10b981';
+    feedbackEl.textContent = `✓ Coordinates set: ${lat}, ${lng} — Click "Save & Set Location" to confirm.`;
+
     if(saveBtn){
       saveBtn.style.background = '#059669';
       saveBtn.style.color = '#fff';
+      saveBtn.style.boxShadow = '0 0 12px rgba(5,150,105,0.6)';
       saveBtn.textContent = '💾 Click to Save Location';
-      setTimeout(() => {
-        saveBtn.style.background = '';
-        saveBtn.style.color = '';
-        saveBtn.textContent = '📍 Save & Set Location';
-      }, 6000);
     }
-    setTimeout(() => { btn.textContent = origText; }, 4000);
+    setTimeout(() => { btn.textContent = origText; }, 5000);
   }, err => {
-    alert('Location permission denied or unavailable: ' + (err.message || 'Could not acquire GPS.'));
     btn.textContent = origText;
     btn.disabled = false;
+    feedbackEl.style.color = '#ef4444';
+    feedbackEl.textContent = '⚠️ Location blocked or timed out. Please allow Location in browser or paste coordinates above.';
+    alert('Location notice: ' + (err.message || 'Could not acquire location. Please paste coordinates manually into the boxes.'));
   });
 }
 

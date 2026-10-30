@@ -127,9 +127,9 @@ def evaluate_geo(user, lat, lng, acc):
     if acc > max_acc:
         return {"ok": False, "error": f"GPS accuracy too low (±{int(acc)} m). Move to an open area or ask HR to adjust GPS threshold in Settings."}
 
-    # Strict 50-meter maximum policy: Location point 50 m only allowed
-    max_policy_radius = 50
-    office_radius = min(int(office["radius_m"] or 50), max_policy_radius)
+    # Strict 30-meter maximum policy: Location point 30 m only allowed
+    max_policy_radius = 30
+    office_radius = min(int(office["radius_m"] or 30), max_policy_radius)
     allowed = office_radius
     dist = haversine(lat, lng, office["lat"], office["lng"])
     inside = dist <= allowed
@@ -178,6 +178,67 @@ def geo_check():
     d = request.get_json(silent=True) or {}
     res = evaluate_geo(g.user, d.get("lat"), d.get("lng"), d.get("accuracy"))
     return jsonify(res)
+
+
+@bp.get("/geo/my-location")
+def get_my_location():
+    """
+    Returns approximate coordinates using client IP address,
+    acting as a reliable fallback for desktop / indoor browsers when hardware GPS times out.
+    """
+    import urllib.request
+    import json
+
+    client_ip = ""
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        client_ip = xff.split(",")[0].strip()
+    if not client_ip or client_ip.startswith(("127.", "192.168.", "10.", "172.")):
+        client_ip = request.remote_addr or ""
+
+    url = f"https://ipapi.co/{client_ip}/json/" if client_ip and not client_ip.startswith(("127.", "192.168.", "10.", "172.")) else "https://ipapi.co/json/"
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "SBG-Attendance/1.0"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            lat = data.get("latitude")
+            lng = data.get("longitude")
+            city = data.get("city") or "Hosur"
+            region = data.get("region") or "Tamil Nadu"
+            if lat and lng:
+                return jsonify({
+                    "ok": True,
+                    "lat": round(float(lat), 6),
+                    "lng": round(float(lng), 6),
+                    "accuracy": 150,
+                    "city": city,
+                    "region": region,
+                    "source": "ip_network"
+                })
+    except Exception:
+        pass
+
+    try:
+        req = urllib.request.Request("https://freeipapi.com/api/json", headers={"User-Agent": "SBG-Attendance/1.0"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            lat = data.get("latitude")
+            lng = data.get("longitude")
+            if lat and lng:
+                return jsonify({
+                    "ok": True,
+                    "lat": round(float(lat), 6),
+                    "lng": round(float(lng), 6),
+                    "accuracy": 200,
+                    "city": data.get("cityName") or "Hosur",
+                    "region": data.get("regionName") or "Tamil Nadu",
+                    "source": "freeipapi"
+                })
+    except Exception:
+        pass
+
+    return jsonify({"ok": False, "error": "Could not determine location from IP"}), 400
 
 
 @bp.post("/webauthn/register/challenge")
