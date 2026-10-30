@@ -123,11 +123,10 @@
       <h3 id="punch-modal-title" style="margin:0 0 4px;font-size:1.4rem;color:#10b981;font-weight:800;letter-spacing:-0.01em">Attendance Successful</h3>
       <p id="punch-modal-subtitle" style="margin:0 0 16px;font-size:0.88rem;color:var(--text-muted)">Your attendance record was saved in the database.</p>
 
-      <!-- Employee Card with Photo & Fallback Placeholder -->
+      <!-- Verified Employee Card (Clean Verified Biometrics - No Camera Face Image) -->
       <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:16px;padding:14px;margin-bottom:18px;display:flex;align-items:center;gap:14px;text-align:left;">
-        <div style="position:relative;width:76px;height:76px;flex-shrink:0;">
-          <img id="punch-modal-photo" src="" alt="Punch Photo" style="width:76px;height:76px;border-radius:14px;object-fit:cover;border:2.5px solid #10b981;box-shadow:0 4px 14px rgba(16,185,129,0.35);display:none;">
-          <div id="punch-modal-avatar-fallback" style="width:76px;height:76px;border-radius:14px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;font-size:1.8rem;font-weight:800;display:flex;align-items:center;justify-content:center;border:2.5px solid #10b981;box-shadow:0 4px 14px rgba(16,185,129,0.35);">
+        <div style="position:relative;width:58px;height:58px;flex-shrink:0;">
+          <div id="punch-modal-avatar-fallback" style="width:58px;height:58px;border-radius:14px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:1.45rem;font-weight:800;display:flex;align-items:center;justify-content:center;border:2.5px solid #10b981;box-shadow:0 4px 14px rgba(16,185,129,0.35);">
             {{ g.user['name'][:2]|upper }}
           </div>
         </div>

@@ -799,10 +799,11 @@ def check_and_sync_missed_punches(db=None):
             # If unclosed and over 12 hours or past day:
             if (is_past_day or is_over_12h) and (not r["check_out"] or r["status"] == "MP"):
                 needs_update = False
-                if r["status"] != "MP" or r["work_hours"] != 0.0 or r["ot_hours"] != 0.0 or r["check_out"] is not None:
+                if r["status"] != "MP" or r["work_hours"] != 0.0 or r["ot_hours"] != 0.0 or r["check_out"] is not None or not r["remarks"]:
                     needs_update = True
 
                 if needs_update:
+                    mp_remark = "Auto Marked – OUT Punch Not Recorded Within 12 Hours."
                     if has_mp_col:
                         db.execute("""
                             UPDATE attendance 
@@ -811,9 +812,10 @@ def check_and_sync_missed_punches(db=None):
                                 ot_hours = 0.0, 
                                 check_out = NULL,
                                 out_selfie = NULL,
-                                mp_resolved = 0
+                                mp_resolved = 0,
+                                remarks = ?
                             WHERE id = ?
-                        """, (r["id"],))
+                        """, (mp_remark, r["id"]))
                     else:
                         db.execute("""
                             UPDATE attendance 
@@ -821,9 +823,10 @@ def check_and_sync_missed_punches(db=None):
                                 work_hours = 0.0, 
                                 ot_hours = 0.0, 
                                 check_out = NULL,
-                                out_selfie = NULL
+                                out_selfie = NULL,
+                                remarks = ?
                             WHERE id = ?
-                        """, (r["id"],))
+                        """, (mp_remark, r["id"]))
                     updated = True
 
                 # Send automatic notification to HR if not already notified
@@ -839,7 +842,7 @@ def check_and_sync_missed_punches(db=None):
                     notif_msg = (
                         f"Employee {r['emp_name']} ({r['emp_code']} · {r['department'] or 'Staff'}) "
                         f"punched IN at {cin_time_str} on {r['date']} but did not punch OUT within 12 hours. "
-                        f"Automatically marked as Missed Punch (MP). Pending HR review. [{notif_tag}]"
+                        f"Auto Marked – OUT Punch Not Recorded Within 12 Hours. Pending HR review. [{notif_tag}]"
                     )
                     create_notification(
                         title=notif_title,

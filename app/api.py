@@ -250,6 +250,7 @@ def punch():
     ).fetchone()
 
     target_rec = None
+    mp_remark = "Auto Marked – OUT Punch Not Recorded Within 12 Hours."
     if kind == "in":
         if yesterday_rec:
             cin_dt = parse_dt(yesterday_rec["check_in"])
@@ -257,7 +258,12 @@ def punch():
                 return _err("You have an active night shift from yesterday. Please check out first.")
             else:
                 # Yesterday's shift expired after 12 hours: auto-mark as Missed Punch (MP)
-                db.execute("UPDATE attendance SET status='MP', work_hours=0.0, ot_hours=0.0 WHERE id=?", (yesterday_rec["id"],))
+                db.execute("""
+                    UPDATE attendance 
+                    SET status='MP', work_hours=0.0, ot_hours=0.0, check_out=NULL, out_selfie=NULL,
+                        remarks=?, mp_resolved=0 
+                    WHERE id=?
+                """, (mp_remark, yesterday_rec["id"]))
                 db.commit()
                 yesterday_rec = None
         if today_rec and today_rec["check_in"]:
@@ -265,16 +271,26 @@ def punch():
     elif kind == "out":
         if today_rec and today_rec["check_in"] and not today_rec["check_out"]:
             cin_dt = parse_dt(today_rec["check_in"])
-            if cin_dt and (t - cin_dt).total_seconds() > 12.5 * 3600:
-                # Over 12.5 hours without punch out: marked as Missed Punch
-                db.execute("UPDATE attendance SET status='MP', work_hours=0.0, ot_hours=0.0 WHERE id=?", (today_rec["id"],))
+            if cin_dt and (t - cin_dt).total_seconds() >= 12 * 3600:
+                # Over 12 hours without punch out: marked as Missed Punch
+                db.execute("""
+                    UPDATE attendance 
+                    SET status='MP', work_hours=0.0, ot_hours=0.0, check_out=NULL, out_selfie=NULL,
+                        remarks=?, mp_resolved=0 
+                    WHERE id=?
+                """, (mp_remark, today_rec["id"]))
                 db.commit()
                 return _err("Your shift expired after 12 hours and has been recorded as a Missed Punch (MP).")
             target_rec = today_rec
         elif yesterday_rec:
             cin_dt = parse_dt(yesterday_rec["check_in"])
             if cin_dt and (t - cin_dt).total_seconds() >= 12 * 3600:
-                db.execute("UPDATE attendance SET status='MP', work_hours=0.0, ot_hours=0.0 WHERE id=?", (yesterday_rec["id"],))
+                db.execute("""
+                    UPDATE attendance 
+                    SET status='MP', work_hours=0.0, ot_hours=0.0, check_out=NULL, out_selfie=NULL,
+                        remarks=?, mp_resolved=0 
+                    WHERE id=?
+                """, (mp_remark, yesterday_rec["id"]))
                 db.commit()
                 return _err("Your yesterday shift expired after 12 hours and has been recorded as a Missed Punch (MP). Please check in for today.")
             target_rec = yesterday_rec

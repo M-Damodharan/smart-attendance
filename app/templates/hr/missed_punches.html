@@ -68,6 +68,7 @@
         <th>Punch OUT</th>
         <th>Shift / Policy</th>
         <th>Status</th>
+        <th>Remark</th>
         <th style="min-width:180px">HR Actions</th>
       </tr>
     </thead>
@@ -106,6 +107,11 @@
           <span class="late" style="display:block;font-size:0.72rem;margin-top:2px;">Pending HR</span>
         </td>
         <td>
+          <span style="font-size:0.82rem;color:var(--text-main);font-weight:600;display:block;">
+            {{ r['remarks'] or 'Auto Marked – OUT Punch Not Recorded Within 12 Hours.' }}
+          </span>
+        </td>
+        <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button type="button" class="btn sm primary" onclick="openResolveModal({{ r['id'] }}, '{{ r['emp_name']|replace("'", "\\'") }}', '{{ r['emp_code'] }}', '{{ r['date'] }}', '{{ r['check_in']|hm }}')" style="font-size:0.78rem;padding:4px 8px;">
               ✏️ Resolve OUT
@@ -123,7 +129,7 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="7" class="center muted" style="padding:2.5rem 1rem">
+        <td colspan="8" class="center muted" style="padding:2.5rem 1rem">
           <div style="font-size:2rem;margin-bottom:0.5rem">🎉</div>
           <b>No Pending Missed Punches!</b>
           <p class="small muted" style="margin:4px 0 0">All employees have completed valid IN and OUT punches, or past records have been resolved by HR.</p>

@@ -392,31 +392,14 @@
         if ($('punch-modal-date') && res.date) $('punch-modal-date').textContent = res.date;
         if ($('punch-modal-time') && res.time) $('punch-modal-time').textContent = res.time;
 
-        const photoEl = $('punch-modal-photo');
         const fallbackEl = $('punch-modal-avatar-fallback');
         if (fallbackEl && res.emp_name) {
           const initials = res.emp_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
           fallbackEl.textContent = initials || '👤';
+          fallbackEl.style.display = 'flex';
         }
-
-        // Direct local selfie rendering: 0ms network latency, 100% reliable face preview
-        const displayPhoto = (selfie && typeof selfie === 'string' && selfie.startsWith('data:image')) ? selfie : (res.photo_url || '');
-        if (photoEl && displayPhoto) {
-          photoEl.src = displayPhoto;
-          photoEl.style.display = 'block';
-          if (fallbackEl) fallbackEl.style.display = 'none';
-          photoEl.onerror = () => {
-            if (res.photo_url && photoEl.src !== res.photo_url) {
-              photoEl.src = res.photo_url;
-            } else {
-              photoEl.style.display = 'none';
-              if (fallbackEl) fallbackEl.style.display = 'flex';
-            }
-          };
-        } else {
-          if (photoEl) photoEl.style.display = 'none';
-          if (fallbackEl) fallbackEl.style.display = 'flex';
-        }
+        const photoEl = $('punch-modal-photo');
+        if (photoEl) photoEl.style.display = 'none';
 
         let secondsRemaining = 5;
         let redirectTimer = null;

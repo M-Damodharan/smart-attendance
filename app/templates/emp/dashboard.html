@@ -41,7 +41,7 @@
         <div style="margin-top:6px;">{{ chip(rec['status']) }} {{ STATUS_LABELS.get(rec['status'],'') }}{% if rec['late'] %} · <span class="late">Late</span>{% endif %}</div>
       {% elif rec and rec['status'] == 'MP' %}
         <div class="state" style="background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.3)">⚠️ Missed Punch · Checked in at {{ rec['check_in']|hm }}</div>
-        <div class="muted small" style="margin-top:4px;margin-bottom:12px;">Shift expired after 12 hours without punch out</div>
+        <div class="muted small" style="margin-top:4px;margin-bottom:8px;">Auto Marked – OUT Punch Not Recorded Within 12 Hours.</div>
       {% elif rec %}
         <div class="state working">⏱️ Checked in at {{ rec['check_in']|hm }}{% if rec['late'] %} · <span class="late" style="background:rgba(239,68,68,0.18);color:#ef4444;font-size:0.75rem;padding:2px 8px;border-radius:6px;font-weight:700;">Late</span>{% endif %}</div>
         <div class="muted small" style="margin-top:4px;margin-bottom:12px;">Verified Face Attendance · Active Shift</div>
@@ -53,6 +53,25 @@
       {% endif %}
     </div>
   </section>
+
+{% if yesterday_mp %}
+<div class="card" style="background:rgba(239,68,68,0.06);border:1.5px solid rgba(239,68,68,0.35);padding:1rem 1.25rem;margin-bottom:1.25rem;border-radius:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:1.3rem">⚠️</span>
+      <b style="color:#ef4444;font-size:0.98rem">Previous Day Missed Punch (MP) · {{ yesterday_mp['date'] }}</b>
+      <span class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;font-size:0.75rem;padding:2px 8px;font-weight:700">MP – Missed OUT Punch</span>
+    </div>
+    <p class="muted small" style="margin:5px 0 0;font-size:0.86rem;line-height:1.4">
+      Punched IN at <b>{{ yesterday_mp['check_in']|hm }}</b> — No OUT punch recorded within 12 hours.<br>
+      <span style="color:#ef4444;font-weight:700">Remark:</span> {{ yesterday_mp['remarks'] or 'Auto Marked – OUT Punch Not Recorded Within 12 Hours.' }}
+    </p>
+  </div>
+  <div style="font-size:0.82rem;color:var(--text-muted);text-align:right">
+    <span class="badge" style="background:rgba(245,158,11,0.14);color:#d97706;border:1px solid rgba(245,158,11,0.3);font-weight:700">Pending HR Review</span>
+  </div>
+</div>
+{% endif %}
 
 {% if perm_today %}
 <div class="card" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);padding:0.85rem 1.25rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;border-radius:12px">

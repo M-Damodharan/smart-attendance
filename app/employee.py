@@ -24,28 +24,52 @@ def dashboard():
     check_and_sync_missed_punches(db)
     t = today()
     now_dt = now()
-    rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(t))).fetchone()
-    if not rec:
-        yesterday_rec = db.execute(
-            "SELECT * FROM attendance WHERE emp_id=? AND date=? AND check_in IS NOT NULL AND check_out IS NULL",
-            (u["id"], d2s(t - timedelta(days=1)))
-        ).fetchone()
-        if yesterday_rec:
-            cin_dt = parse_dt(yesterday_rec["check_in"])
-            if cin_dt and (now_dt - cin_dt).total_seconds() < 12 * 3600:
-                rec = yesterday_rec
+    today_rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(t))).fetchone()
+    yesterday_rec = db.execute(
+        "SELECT * FROM attendance WHERE emp_id=? AND date=?",
+        (u["id"], d2s(t - timedelta(days=1)))
+    ).fetchone()
+
+    yesterday_mp = None
+    rec = today_rec
+
+    if yesterday_rec:
+        cin_dt = parse_dt(yesterday_rec["check_in"]) if yesterday_rec["check_in"] else None
+        elapsed_sec = (now_dt - cin_dt).total_seconds() if cin_dt else 999999
+        is_over_12h = elapsed_sec >= 12 * 3600
+
+        # If unclosed and over 12h: auto-mark as MP with exact remark
+        if yesterday_rec["check_in"] and not yesterday_rec["check_out"]:
+            if is_over_12h:
+                db.execute("""
+                    UPDATE attendance 
+                    SET status='MP', work_hours=0.0, ot_hours=0.0, check_out=NULL, out_selfie=NULL,
+                        remarks='Auto Marked – OUT Punch Not Recorded Within 12 Hours.', mp_resolved=0
+                    WHERE id=?
+                """, (yesterday_rec["id"],))
+                db.commit()
+                yesterday_rec = db.execute("SELECT * FROM attendance WHERE id=?", (yesterday_rec["id"],)).fetchone()
             else:
-                # Yesterday's punch is >= 12 hours old: finalize as Missed Punch (MP)
-                if not yesterday_rec["status"] or yesterday_rec["status"] != "MP":
-                    db.execute("UPDATE attendance SET status='MP', work_hours=0.0, ot_hours=0.0 WHERE id=?", (yesterday_rec["id"],))
-                    db.commit()
-    elif rec and rec["check_in"] and not rec["check_out"]:
+                # Active night shift (< 12 hours old across midnight)
+                if not rec:
+                    rec = yesterday_rec
+
+        # If yesterday ended as an unclosed/unresolved Missed Punch, display it separately
+        if yesterday_rec["status"] == "MP" and not (dict(yesterday_rec).get("mp_resolved")):
+            yesterday_mp = yesterday_rec
+
+    if rec and rec["check_in"] and not rec["check_out"]:
         cin_dt = parse_dt(rec["check_in"])
         if cin_dt and (now_dt - cin_dt).total_seconds() >= 12 * 3600:
-            if not rec["status"] or rec["status"] != "MP":
-                db.execute("UPDATE attendance SET status='MP', work_hours=0.0, ot_hours=0.0 WHERE id=?", (rec["id"],))
-                db.commit()
-                rec = db.execute("SELECT * FROM attendance WHERE id=?", (rec["id"],)).fetchone()
+            db.execute("""
+                UPDATE attendance 
+                SET status='MP', work_hours=0.0, ot_hours=0.0, check_out=NULL, out_selfie=NULL,
+                    remarks='Auto Marked – OUT Punch Not Recorded Within 12 Hours.', mp_resolved=0
+                WHERE id=?
+            """, (rec["id"],))
+            db.commit()
+            rec = db.execute("SELECT * FROM attendance WHERE id=?", (rec["id"],)).fetchone()
+
     start, end = month_range(t.year, t.month)
     reg_start = min(start, t - timedelta(days=7))
     reg_end = max(end, t)
@@ -74,7 +98,7 @@ def dashboard():
     face_req = db.execute("SELECT * FROM face_change_requests WHERE emp_id=? ORDER BY id DESC LIMIT 1", (u["id"],)).fetchone()
     office = get_department_office(db, u)
     current_shift = _shift(u, t, rec["shift_id"] if (rec and "shift_id" in rec.keys() and rec["shift_id"]) else None)
-    return render_template("emp/dashboard.html", rec=rec, shift=current_shift, category=category, summary=reg["summary"], recent=recent,
+    return render_template("emp/dashboard.html", rec=rec, yesterday_mp=yesterday_mp, shift=current_shift, category=category, summary=reg["summary"], recent=recent,
                            pend=pend, holiday=holiday, od_today=od_today, perm_today=perm_today, face_req=face_req, today=t, month_name=t.strftime("%B %Y"),
                            office=office)
 
@@ -83,12 +107,27 @@ def dashboard():
 @employee_required
 def punch():
     db, u = get_db(), g.user
+    check_and_sync_missed_punches(db)
     t = today()
+    now_dt = now()
     today_rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(t))).fetchone()
     yesterday_rec = db.execute(
         "SELECT * FROM attendance WHERE emp_id=? AND date=? AND check_in IS NOT NULL AND check_out IS NULL",
         (u["id"], d2s(t - timedelta(days=1)))
     ).fetchone()
+
+    if yesterday_rec:
+        cin_dt = parse_dt(yesterday_rec["check_in"])
+        if not cin_dt or (now_dt - cin_dt).total_seconds() >= 12 * 3600:
+            # Over 12 hours: Auto-mark as MP with exact remark and clear yesterday_rec so it does not block today
+            db.execute("""
+                UPDATE attendance 
+                SET status='MP', work_hours=0.0, ot_hours=0.0, check_out=NULL, out_selfie=NULL,
+                    remarks='Auto Marked – OUT Punch Not Recorded Within 12 Hours.', mp_resolved=0
+                WHERE id=?
+            """, (yesterday_rec["id"],))
+            db.commit()
+            yesterday_rec = None
 
     from .api import get_department_office
     office = get_department_office(db, u)
@@ -98,7 +137,7 @@ def punch():
     elif today_rec and today_rec["check_out"]:
         rec = today_rec
         mode = "done"
-    elif today_rec:
+    elif today_rec and today_rec["check_in"]:
         rec = today_rec
         mode = "out"
     else:

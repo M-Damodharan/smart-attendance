@@ -277,6 +277,10 @@
     <b>{{ stats['od'] }}</b>
     <span>On Duty (OD)</span>
   </div>
+  <div class="kpi {% if pending_mp_count %}bad{% endif %}" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.missed_punches') }}'">
+    <b>{{ pending_mp_count }}</b>
+    <span>Missed Punches (MP)</span>
+  </div>
   <div class="kpi" style="background:var(--hero-gradient);color:#fff;border:none;">
     <b style="color:#fff;">{{ stats['working'] }}</b>
     <span style="color:rgba(255,255,255,0.85);">Currently Working</span>
