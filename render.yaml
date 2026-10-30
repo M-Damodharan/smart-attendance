@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: sbg-attendance
+    name: smart-attendance-u7e6
     runtime: python
     plan: free
     autoDeploy: true
