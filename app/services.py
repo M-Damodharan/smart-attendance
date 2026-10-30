@@ -670,22 +670,55 @@ import re as _re
 from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
-_COORD_PATTERNS = (
-    r"@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)",
-    r"!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)",
-    r"[?&](?:q|ll|query|center|destination)=(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)",
-    r"^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$",
-)
+
+def _dms_to_dd(deg, min, sec, direction):
+    dd = float(deg) + float(min) / 60.0 + float(sec) / 3600.0
+    if direction.upper() in ("S", "W"):
+        dd = -dd
+    return dd
 
 
 def coords_from_text(text):
-    text = unquote(text or "")
-    for pat in _COORD_PATTERNS:
-        m = _re.search(pat, text)
+    text = unquote(text or "").strip()
+    if not text:
+        return None
+
+    # 1. Degree Minute Second (DMS): 12°44'36.5"N 77°49'02.8"E or similar
+    dms_matches = _re.findall(
+        r"(\d{1,2})[°\s]+(\d{1,2})['′\s]+([\d.]+)[\"″\s]*([NSEWnsew])", text
+    )
+    if len(dms_matches) == 2:
+        lat = _dms_to_dd(*dms_matches[0])
+        lng = _dms_to_dd(*dms_matches[1])
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return round(lat, 6), round(lng, 6)
+
+    # 2. Signed decimal with cardinal direction: 12.743475N, 77.817446E or 12.743475° N, 77.817446° E
+    m_card = _re.search(
+        r"(-?\d{1,2}\.\d+)\s*[°]?\s*([NSns])\s*[,;\s]+\s*(-?\d{1,3}\.\d+)\s*[°]?\s*([EWew])",
+        text,
+    )
+    if m_card:
+        lat = float(m_card.group(1)) * (-1 if m_card.group(2).upper() == "S" else 1)
+        lng = float(m_card.group(3)) * (-1 if m_card.group(4).upper() == "W" else 1)
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return round(lat, 6), round(lng, 6)
+
+    # 3. Standard URL and coordinate patterns
+    patterns = (
+        r"@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)",
+        r"!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)",
+        r"[?&](?:q|ll|query|center|destination|daddr|saddr)=(?:loc:)?(-?\d{1,2}\.\d+)[,\s+](-?\d{1,3}\.\d+)",
+        r"/(?:place|search)/(-?\d{1,2}\.\d+)[,\s+](-?\d{1,3}\.\d+)",
+        r"geo:(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)",
+        r"(-?\d{1,2}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})",
+    )
+    for pat in patterns:
+        m = _re.search(pat, text, _re.I)
         if m:
             lat, lng = float(m.group(1)), float(m.group(2))
             if -90 <= lat <= 90 and -180 <= lng <= 180:
-                return lat, lng
+                return round(lat, 6), round(lng, 6)
     return None
 
 
@@ -693,20 +726,33 @@ def coords_from_maps_link(link):
     """Accepts 'lat,lng' text, a full Google Maps URL, or a maps.app.goo.gl short link
     (which is resolved by following the redirect). Returns (lat, lng) or None."""
     link = (link or "").strip()
+    if not link:
+        return None
     direct = coords_from_text(link)
     if direct:
         return direct
-    host = (urlparse(link).hostname or "").lower()
-    if not (host.endswith("google.com") or host.endswith("goo.gl") or host.endswith("g.co")):
-        return None  # only follow Google Maps links (prevents the server fetching arbitrary URLs)
+
+    # Try following redirects for short links (e.g. maps.app.goo.gl, goo.gl, bit.ly, etc.)
     try:
-        req = Request(link, headers={"User-Agent": "Mozilla/5.0 (compatible; AttendanceApp)"})
+        import requests
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(link, headers=headers, allow_redirects=True, timeout=8)
+        resolved = coords_from_text(resp.url) or coords_from_text(resp.text)
+        if resolved:
+            return resolved
+    except Exception:
+        pass
+
+    try:
+        req = Request(link, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         with urlopen(req, timeout=8) as r:
             final = r.geturl()
             body = r.read(400000).decode("utf-8", "ignore")
+            return coords_from_text(final) or coords_from_text(body)
     except Exception:
         return None
-    return coords_from_text(final) or coords_from_text(body)
 
 
 def check_and_sync_missed_punches(db=None):

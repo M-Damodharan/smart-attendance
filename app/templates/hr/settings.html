@@ -12,18 +12,27 @@
     </span>
   </div>
 
-  <!-- Quick GPS link parser -->
-  <form method="post" class="row-form" style="background:var(--bg-surface);padding:10px 14px;border-radius:10px;margin-bottom:1rem;border:1px solid var(--border-default);">
+  <!-- Quick GPS link & coordinates setter -->
+  <form method="post" id="quick-location-form" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:1rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="action" value="office_link">
-    <input name="link" placeholder="Paste Google Maps link (e.g. https://maps.app.goo.gl/... or '12.743475,77.817446')" required style="flex:3 1 260px">
-    <select name="id" title="Apply to Department Location" required style="flex:2 1 200px">
-      <option value="">Select Department Location...</option>
+    <div style="flex:3 1 260px;">
+      <input id="quick-location-input" name="link" placeholder="Paste Google Maps link, 'lat,lng', DMS or GPS coords" required style="width:100%;box-sizing:border-box;">
+    </div>
+    <select name="id" id="quick-location-dept" title="Apply to Department Location" required style="flex:2 1 200px">
+      <option value="all" selected>🏢 All Departments (Entire Campus / Company Location)</option>
       {% for o in offices %}
       <option value="{{ o['id'] }}">{{ o['name'] }} ({{ o['department'] or 'General' }})</option>
       {% endfor %}
     </select>
-    <button class="btn sm primary">Set from Link</button>
+    <div style="display:flex;gap:8px;flex:1 1 auto;">
+      <button type="button" id="quick-gps-btn" class="btn sm" onclick="useQuickGps(this)" style="white-space:nowrap;">
+        📍 Use Current GPS
+      </button>
+      <button type="submit" id="quick-set-btn" class="btn sm primary" style="white-space:nowrap;">
+        📍 Set Location
+      </button>
+    </div>
   </form>
 
   <!-- 4 Department-Separated Location Cards Grid -->
@@ -74,7 +83,7 @@
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <label class="muted small">Latitude
-          <input name="lat" value="{{ o['lat'] }}" required inputmode="decimal" placeholder="12.743475">
+          <input name="lat" value="{{ o['lat'] }}" required inputmode="decimal" placeholder="12.743475" onpaste="handleCoordPaste(event, this)">
         </label>
         <label class="muted small">Longitude
           <input name="lng" value="{{ o['lng'] }}" required inputmode="decimal" placeholder="77.817446">
@@ -93,8 +102,8 @@
         <button type="button" class="btn sm" style="flex:1;" onclick="fillLocationFor(this)">
           📍 Use My Location
         </button>
-        <button class="btn sm primary" style="flex:1;">
-          💾 Save Location
+        <button type="submit" class="btn sm primary" style="flex:1;">
+          📍 Save &amp; Set Location
         </button>
       </div>
     </form>
@@ -449,34 +458,169 @@
 </section>
 {% endblock %}
 {% block scripts %}<script>
+// Smart coordinate parser on paste (handles "12.743475, 77.817446", maps URLs, DMS, etc.)
+function parseCoordsFromStr(str){
+  str = decodeURIComponent((str || '').trim());
+  if(!str) return null;
+
+  // 1. Degree Minute Second: 12°44'36.5"N 77°49'02.8"E
+  const dms = str.match(/(\d{1,2})[°\s]+(\d{1,2})['′\s]+([\d.]+)["″\s]*([NSEWnsew])/g);
+  if(dms && dms.length === 2){
+    function parseDms(p){
+      const m = p.match(/(\d{1,2})[°\s]+(\d{1,2})['′\s]+([\d.]+)["″\s]*([NSEWnsew])/);
+      if(!m) return 0;
+      let val = parseFloat(m[1]) + parseFloat(m[2])/60 + parseFloat(m[3])/3600;
+      if(/s|w/i.test(m[4])) val = -val;
+      return val;
+    }
+    return [parseDms(dms[0]).toFixed(6), parseDms(dms[1]).toFixed(6)];
+  }
+
+  // 2. Cardinal coords: 12.743475N, 77.817446E
+  const card = str.match(/(-?\d{1,2}\.\d+)\s*[°]?\s*([NSns])\s*[,;\s]+\s*(-?\d{1,3}\.\d+)\s*[°]?\s*([EWew])/);
+  if(card){
+    let lat = parseFloat(card[1]) * (/s/i.test(card[2]) ? -1 : 1);
+    let lng = parseFloat(card[3]) * (/w/i.test(card[4]) ? -1 : 1);
+    return [lat.toFixed(6), lng.toFixed(6)];
+  }
+
+  // 3. Patterns: @lat,lng or q=lat,lng or /place/lat,lng or simple "lat, lng"
+  const patterns = [
+    /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/,
+    /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+    /[?&](?:q|ll|query|center|destination|daddr|saddr)=(?:loc:)?(-?\d{1,2}\.\d+)[,\s+](-?\d{1,3}\.\d+)/i,
+    /\/(?:place|search)\/(-?\d{1,2}\.\d+)[,\s+](-?\d{1,3}\.\d+)/i,
+    /geo:(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/i,
+    /(-?\d{1,2}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})/
+  ];
+  for(let pat of patterns){
+    const m = str.match(pat);
+    if(m) return [parseFloat(m[1]).toFixed(6), parseFloat(m[2]).toFixed(6)];
+  }
+  return null;
+}
+
+function handleCoordPaste(e, latInput){
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  const pt = parseCoordsFromStr(text);
+  if(pt){
+    e.preventDefault();
+    latInput.value = pt[0];
+    const form = latInput.closest('form');
+    const lngInput = form.querySelector('input[name=lng]');
+    if(lngInput) lngInput.value = pt[1];
+    latInput.style.borderColor = '#10b981';
+    if(lngInput) lngInput.style.borderColor = '#10b981';
+  }
+}
+
+// Resilient GPS locator with fast high-accuracy attempt + automatic low-accuracy fallback
+function acquireGpsLocation(onSuccess, onError){
+  if(!navigator.geolocation){
+    onError(new Error('GPS geolocation not supported on this browser/device'));
+    return;
+  }
+  let finished = false;
+
+  // Try high accuracy first (5 sec timeout)
+  navigator.geolocation.getCurrentPosition(pos => {
+    if(!finished){
+      finished = true;
+      onSuccess(pos);
+    }
+  }, err => {
+    // If high accuracy times out or fails (e.g. indoors/desktop), fall back to standard/network accuracy
+    if(!finished){
+      navigator.geolocation.getCurrentPosition(pos2 => {
+        if(!finished){
+          finished = true;
+          onSuccess(pos2);
+        }
+      }, err2 => {
+        if(!finished){
+          finished = true;
+          onError(err2 || err);
+        }
+      }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 });
+    }
+  }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+}
+
+// Quick GPS setter at top of page
+function useQuickGps(btn){
+  const inp = document.getElementById('quick-location-input');
+  const origText = btn.textContent;
+  btn.textContent = '⏳ Acquiring GPS…';
+  btn.disabled = true;
+
+  acquireGpsLocation(pos => {
+    const lat = pos.coords.latitude.toFixed(6);
+    const lng = pos.coords.longitude.toFixed(6);
+    const acc = Math.round(pos.coords.accuracy);
+    inp.value = `${lat}, ${lng}`;
+    inp.style.borderColor = '#10b981';
+    btn.textContent = `✓ GPS Captured (±${acc}m)`;
+    btn.disabled = false;
+    const setBtn = document.getElementById('quick-set-btn');
+    if(setBtn){
+      setBtn.style.background = '#059669';
+      setBtn.style.color = '#fff';
+      setBtn.textContent = '📍 Click to Set Location Now';
+      setTimeout(() => {
+        setBtn.style.background = '';
+        setBtn.style.color = '';
+        setBtn.textContent = '📍 Set Location';
+      }, 6000);
+    }
+    setTimeout(() => { btn.textContent = origText; }, 4000);
+  }, err => {
+    alert('GPS location error: ' + (err.message || 'Permission denied or timed out. Please allow location access.'));
+    btn.textContent = origText;
+    btn.disabled = false;
+  });
+}
+
+// Individual department card locator
 function fillLocationFor(btn){
-  if(!navigator.geolocation){ alert('GPS not available on this browser/device'); return; }
   const form = btn.closest('form');
   const latInput = form.querySelector('input[name=lat]');
   const lngInput = form.querySelector('input[name=lng]');
+  const saveBtn = form.querySelector('button[type=submit]');
+  const origText = btn.textContent;
+
   btn.textContent = '⏳ Fetching GPS…';
   btn.disabled = true;
-  navigator.geolocation.getCurrentPosition(p => {
-    latInput.value = p.coords.latitude.toFixed(6);
-    lngInput.value = p.coords.longitude.toFixed(6);
-    btn.textContent = '✓ GPS Captured (' + Math.round(p.coords.accuracy) + 'm)';
+
+  acquireGpsLocation(pos => {
+    const lat = pos.coords.latitude.toFixed(6);
+    const lng = pos.coords.longitude.toFixed(6);
+    const acc = Math.round(pos.coords.accuracy);
+    latInput.value = lat;
+    lngInput.value = lng;
+    latInput.style.borderColor = '#10b981';
+    lngInput.style.borderColor = '#10b981';
+    btn.textContent = `✓ GPS Captured (±${acc}m)`;
     btn.disabled = false;
-    setTimeout(() => { btn.textContent = '📍 Use My Location'; }, 4000);
+    if(saveBtn){
+      saveBtn.style.background = '#059669';
+      saveBtn.style.color = '#fff';
+      saveBtn.textContent = '💾 Click to Save Location';
+      setTimeout(() => {
+        saveBtn.style.background = '';
+        saveBtn.style.color = '';
+        saveBtn.textContent = '📍 Save & Set Location';
+      }, 6000);
+    }
+    setTimeout(() => { btn.textContent = origText; }, 4000);
   }, err => {
-    alert('Location permission denied or unavailable: ' + err.message);
-    btn.textContent = '📍 Use My Location';
+    alert('Location permission denied or unavailable: ' + (err.message || 'Could not acquire GPS.'));
+    btn.textContent = origText;
     btn.disabled = false;
-  }, { enableHighAccuracy: true, timeout: 20000 });
+  });
 }
 
 function useMyLocation(){
-  if(!navigator.geolocation){alert('GPS not available');return;}
-  navigator.geolocation.getCurrentPosition(p=>{
-    const f=document.querySelector('input[name=lat]'), g=document.querySelector('input[name=lng]');
-    if(f && g) {
-      f.value=p.coords.latitude.toFixed(6); g.value=p.coords.longitude.toFixed(6);
-      alert('Filled location with your current position (±'+Math.round(p.coords.accuracy)+' m). Press Save Location.');
-    }
-  },()=>alert('Location permission denied'),{enableHighAccuracy:true,timeout:20000});
+  const topBtn = document.getElementById('quick-gps-btn');
+  if(topBtn) useQuickGps(topBtn);
 }
 </script>{% endblock %}

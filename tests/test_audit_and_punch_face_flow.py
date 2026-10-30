@@ -46,7 +46,7 @@ class TestAuditAndPunchFaceFlow(unittest.TestCase):
     def test_punch_in_out_and_face_visibility_on_dashboard(self):
         with self.app.app_context():
             db = get_db()
-            emp = db.execute("SELECT id FROM employees WHERE emp_code='EMP001'").fetchone()
+            emp = db.execute("SELECT id, office_id FROM employees WHERE emp_code='EMP001'").fetchone()
             emp_id = emp["id"]
             from app.services import today, d2s
             db.execute("DELETE FROM attendance WHERE emp_id=? AND date=?", (emp_id, d2s(today())))
@@ -58,7 +58,7 @@ class TestAuditAndPunchFaceFlow(unittest.TestCase):
             db.execute("UPDATE employees SET device_registered=1, face_registered=1 WHERE id=?", (emp_id,))
             db.commit()
 
-            office = db.execute("SELECT * FROM offices WHERE active=1 LIMIT 1").fetchone()
+            office = db.execute("SELECT * FROM offices WHERE id=?", (emp["office_id"] or 1,)).fetchone() or db.execute("SELECT * FROM offices WHERE active=1 LIMIT 1").fetchone()
             lat, lng = office["lat"], office["lng"]
 
         # Login

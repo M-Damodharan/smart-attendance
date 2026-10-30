@@ -50,7 +50,11 @@
       if (retryBtn) retryBtn.style.display = 'inline-flex';
       return setStep('st-gps', 'bad', 'GPS not supported on this device', 'gps-text');
     }
-    navigator.geolocation.getCurrentPosition(async pos => {
+
+    let finished = false;
+    const handleSuccess = async pos => {
+      if (finished) return;
+      finished = true;
       const { latitude: lat, longitude: lng, accuracy } = pos.coords;
       geo = await postJSON('/api/geo-check', { lat, lng, accuracy });
       geo.lat = lat; geo.lng = lng; geo.accuracy = accuracy;
@@ -66,11 +70,23 @@
         if (retryBtn) retryBtn.style.display = 'inline-flex';
       }
       refresh();
-    }, err => {
-      const msg = err.code === 1 ? 'Location permission denied — enable it in browser settings' : 'Could not get location. Move to an open area and retry.';
+    };
+
+    const handleError = err => {
+      if (finished) return;
+      finished = true;
+      const msg = err && err.code === 1 ? 'Location permission denied — enable it in browser settings' : 'Could not get location. Move to an open area and retry.';
       setStep('st-gps', 'bad', msg, 'gps-text');
       if (retryBtn) retryBtn.style.display = 'inline-flex';
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    };
+
+    // First attempt high accuracy (5 sec timeout)
+    navigator.geolocation.getCurrentPosition(handleSuccess, () => {
+      // Automatic fallback to standard network/Wi-Fi geolocation if high-accuracy satellite fix times out
+      if (!finished) {
+        navigator.geolocation.getCurrentPosition(handleSuccess, handleError, { enableHighAccuracy: false, timeout: 6000, maximumAge: 30000 });
+      }
+    }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
   }
   window.retryGPS = locate;
 

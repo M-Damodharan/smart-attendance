@@ -928,33 +928,59 @@ def settings():
                 oid = f.get("id", type=int)
                 dept = f.get("department", "").strip() or None
                 radius = min(int(f.get("radius_m") or 50), 50)
-                vals = (f["name"].strip(), dept, float(f["lat"]), float(f["lng"]), radius, 1 if f.get("active") else 0)
+                name = f.get("name", "").strip() or (dept or "Office")
+
+                raw_lat = str(f.get("lat", "")).strip()
+                raw_lng = str(f.get("lng", "")).strip()
+                # Resilient coordinate parsing if user pasted combined coords or link
+                parsed = coords_from_maps_link(raw_lat) or coords_from_maps_link(f"{raw_lat},{raw_lng}")
+                if parsed:
+                    lat_val, lng_val = parsed
+                else:
+                    lat_val = float(raw_lat)
+                    lng_val = float(raw_lng)
+
+                if not (-90 <= lat_val <= 90 and -180 <= lng_val <= 180):
+                    flash("Invalid coordinates. Latitude must be between -90 and 90, Longitude between -180 and 180.", "err")
+                    return redirect(url_for("hr.settings"))
+
+                vals = (name, dept, lat_val, lng_val, radius, 1 if f.get("active") else 0)
                 if oid:
                     db.execute("UPDATE offices SET name=?, department=?, lat=?, lng=?, radius_m=?, active=? WHERE id=?", (*vals, oid))
                 else:
                     oid = db.execute("INSERT INTO offices (name, department, lat, lng, radius_m, active) VALUES (?,?,?,?,?,?)", vals).lastrowid
-                audit("OFFICE_SAVE", "office", oid, f"{vals[0]} dept={dept} {vals[2]},{vals[3]} r={vals[4]}m")
+                audit("OFFICE_SAVE", "office", oid, f"{vals[0]} dept={dept} {vals[2]:.6f},{vals[3]:.6f} r={vals[4]}m")
+                db.commit()
+                clear_shared_cache()
+                flash(f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict 50 m max radius).", "ok")
+                return redirect(url_for("hr.settings"))
             elif act == "office_link":
                 pt = coords_from_maps_link(f.get("link", ""))
                 if not pt:
-                    flash("Could not read coordinates from that link. Paste the full Google Maps URL, "
-                          "'lat,lng', or use the 'Use my current location' button.", "err")
+                    flash("Could not read coordinates from that input. Paste a Google Maps link, "
+                          "'lat,lng', DMS coordinates, or click '📍 Use Current GPS'.", "err")
                     return redirect(url_for("hr.settings"))
-                name = f.get("name", "").strip() or "Office"
-                oid = f.get("id", type=int)
-                dept = f.get("department", "").strip() or None
+                target_id = str(f.get("id", "")).strip()
                 radius = min(int(f.get("radius_m") or 50), 50)
-                if oid:
-                    db.execute("UPDATE offices SET lat=?, lng=?, radius_m=? WHERE id=?", (pt[0], pt[1], radius, oid))
-                    if dept:
-                        db.execute("UPDATE offices SET department=? WHERE id=?", (dept, oid))
+
+                if target_id == "all" or not target_id:
+                    # Update all active department offices in 1 click
+                    db.execute("UPDATE offices SET lat=?, lng=?, radius_m=? WHERE active=1", (pt[0], pt[1], radius))
+                    audit("OFFICE_LOCATION_ALL_SET", "offices", 0, f"{pt[0]:.6f},{pt[1]:.6f} r={radius}m")
+                    db.commit()
+                    clear_shared_cache()
+                    flash(f"All department office locations successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict 50 m policy).", "ok")
+                    return redirect(url_for("hr.settings"))
                 else:
-                    oid = db.execute("INSERT INTO offices (name, department, lat, lng, radius_m) VALUES (?,?,?,?,?)",
-                                     (name, dept, pt[0], pt[1], radius)).lastrowid
-                audit("OFFICE_LOCATION_FROM_LINK", "office", oid, f"{pt[0]:.6f},{pt[1]:.6f}")
-                db.commit()
-                flash(f"Department location set to {pt[0]:.6f}, {pt[1]:.6f} (allowed 50 m only).", "ok")
-                return redirect(url_for("hr.settings"))
+                    oid = int(target_id)
+                    db.execute("UPDATE offices SET lat=?, lng=?, radius_m=? WHERE id=?", (pt[0], pt[1], radius, oid))
+                    off_row = db.execute("SELECT name, department FROM offices WHERE id=?", (oid,)).fetchone()
+                    off_name = (off_row["name"] if off_row else None) or f"Office #{oid}"
+                    audit("OFFICE_LOCATION_FROM_LINK", "office", oid, f"{pt[0]:.6f},{pt[1]:.6f} r={radius}m")
+                    db.commit()
+                    clear_shared_cache()
+                    flash(f"Location for '{off_name}' successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict 50 m policy).", "ok")
+                    return redirect(url_for("hr.settings"))
             elif act == "shift":
                 sid = f.get("id", type=int)
                 vals = (f["name"].strip(), f["start_time"], f["end_time"], int(f["grace_min"]), float(f["full_hours"]),
