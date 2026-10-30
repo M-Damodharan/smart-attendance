@@ -6,7 +6,7 @@ from werkzeug.security import check_password_hash
 from .auth import employee_required
 from .db import get_db
 from .services import (audit, build_register, create_notification, d2s, daterange, get_employee_category,
-                       get_employee_shift_for_date, get_upcoming_holiday_cached, leave_balance, month_range, now, s2d, today,
+                       get_employee_shift_for_date, get_upcoming_holiday_cached, leave_balance, month_range, now, parse_dt, s2d, today,
                        working_days)
 
 bp = Blueprint("emp", __name__)
@@ -22,6 +22,7 @@ def _shift(user, target_date=None, shift_id=None):
 def dashboard():
     db, u = get_db(), g.user
     t = today()
+    now_dt = now()
     rec = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], d2s(t))).fetchone()
     if not rec:
         yesterday_rec = db.execute(
@@ -29,7 +30,21 @@ def dashboard():
             (u["id"], d2s(t - timedelta(days=1)))
         ).fetchone()
         if yesterday_rec:
-            rec = yesterday_rec
+            cin_dt = parse_dt(yesterday_rec["check_in"])
+            if cin_dt and (now_dt - cin_dt).total_seconds() < 12 * 3600:
+                rec = yesterday_rec
+            else:
+                # Yesterday's punch is >= 12 hours old: finalize as Missed Punch (MP)
+                if not yesterday_rec["status"] or yesterday_rec["status"] != "MP":
+                    db.execute("UPDATE attendance SET status='MP', work_hours=0.0, ot_hours=0.0 WHERE id=?", (yesterday_rec["id"],))
+                    db.commit()
+    elif rec and rec["check_in"] and not rec["check_out"]:
+        cin_dt = parse_dt(rec["check_in"])
+        if cin_dt and (now_dt - cin_dt).total_seconds() >= 12 * 3600:
+            if not rec["status"] or rec["status"] != "MP":
+                db.execute("UPDATE attendance SET status='MP', work_hours=0.0, ot_hours=0.0 WHERE id=?", (rec["id"],))
+                db.commit()
+                rec = db.execute("SELECT * FROM attendance WHERE id=?", (rec["id"],)).fetchone()
     start, end = month_range(t.year, t.month)
     reg_start = min(start, t - timedelta(days=7))
     reg_end = max(end, t)

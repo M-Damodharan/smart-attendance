@@ -37,36 +37,14 @@
 
     <div class="today-state">
       {% if rec and rec['check_out'] %}
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-          {% if rec['out_selfie'] %}
-            <a href="{{ url_for('api.selfie', name=rec['out_selfie']) }}" target="_blank" title="View Punch Out Photo">
-              <img src="{{ url_for('api.selfie', name=rec['out_selfie']) }}" alt="Punch Out Photo" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/icon.svg') }}';" style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:2px solid #10b981;box-shadow:0 2px 8px rgba(16,185,129,0.3)">
-            </a>
-          {% elif rec['in_selfie'] %}
-            <a href="{{ url_for('api.selfie', name=rec['in_selfie']) }}" target="_blank" title="View Punch In Photo">
-              <img src="{{ url_for('api.selfie', name=rec['in_selfie']) }}" alt="Punch In Photo" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/icon.svg') }}';" style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:2px solid #10b981;box-shadow:0 2px 8px rgba(16,185,129,0.3)">
-            </a>
-          {% endif %}
-          <div style="flex:1">
-            <div class="state done" style="margin:0">✓ Punch Out Complete</div>
-            <div class="muted small" style="margin-top:2px">Punch In: <b>{{ rec['check_in']|hm }}</b> · Punch Out: <b>{{ rec['check_out']|hm }}</b></div>
-          </div>
-        </div>
+        <div class="state done">✓ Punch Out Complete · {{ rec['check_in']|hm }} - {{ rec['check_out']|hm }}</div>
         <div style="margin-top:6px;">{{ chip(rec['status']) }} {{ STATUS_LABELS.get(rec['status'],'') }}{% if rec['late'] %} · <span class="late">Late</span>{% endif %}</div>
+      {% elif rec and rec['status'] == 'MP' %}
+        <div class="state" style="background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.3)">⚠️ Missed Punch · Checked in at {{ rec['check_in']|hm }}</div>
+        <div class="muted small" style="margin-top:4px;margin-bottom:12px;">Shift expired after 12 hours without punch out</div>
       {% elif rec %}
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-          {% if rec['in_selfie'] %}
-            <a href="{{ url_for('api.selfie', name=rec['in_selfie']) }}" target="_blank" title="View Punch In Photo">
-              <img src="{{ url_for('api.selfie', name=rec['in_selfie']) }}" alt="Punch In Photo" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/icon.svg') }}';" style="width:50px;height:50px;border-radius:12px;object-fit:cover;border:2px solid #10b981;box-shadow:0 2px 8px rgba(16,185,129,0.3)">
-            </a>
-          {% elif g.user['face_image'] %}
-            <img src="{{ url_for('api.selfie', name=g.user['face_image']) }}" alt="Employee Photo" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/icon.svg') }}';" style="width:50px;height:50px;border-radius:12px;object-fit:cover;border:2px solid #10b981;box-shadow:0 2px 8px rgba(16,185,129,0.3)">
-          {% endif %}
-          <div style="flex:1">
-            <div class="state working" style="margin:0">⏱️ Checked in at {{ rec['check_in']|hm }}{% if rec['late'] %} · <span class="late" style="background:rgba(239,68,68,0.18);color:#ef4444;font-size:0.75rem;padding:2px 8px;border-radius:6px;font-weight:700;">Late</span>{% endif %}</div>
-            <div class="muted small" style="margin-top:3px">Verified Face Attendance · Active Shift</div>
-          </div>
-        </div>
+        <div class="state working">⏱️ Checked in at {{ rec['check_in']|hm }}{% if rec['late'] %} · <span class="late" style="background:rgba(239,68,68,0.18);color:#ef4444;font-size:0.75rem;padding:2px 8px;border-radius:6px;font-weight:700;">Late</span>{% endif %}</div>
+        <div class="muted small" style="margin-top:4px;margin-bottom:12px;">Verified Face Attendance · Active Shift</div>
         <a class="btn primary big" href="{{ url_for('emp.punch') }}">Check out</a>
       {% else %}
         <div class="state">Not checked in today</div>

@@ -427,10 +427,12 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
     """Calculate attendance status and overtime hours based on configured attendance policy,
     employee category working hours, and shift rules.
     Rules:
+    - Standard shifts are up to 12.0 hours.
+    - If elapsed hours > 12.5 (e.g. employee forgot to punch out or punch-out missing), it is a Missed Punch ('MP') with 0.0 OT.
+    - If category does not allow overtime (e.g. Staff/Employees with overtime_hours=0.0), OT is 0.0.
     - 2.0 to 6.0 hours worked: Half Day ('HD').
-    - 6.0 to 9.0+ hours worked: Full Day Present ('P') or 'OT' if exceeding category work hours.
+    - 6.0 to 12.0 hours worked: Full Day Present ('P') or 'OT' if category permits overtime.
     - If employee clocks out after 4:00 PM (16:00) with >= 2.0 hours, counts as Full Day Present ('P').
-    - Overtime: calculated for hours worked beyond regular category working hours.
     - Less than 2.0 hours: Absent ('A') (incomplete work duration).
     """
     if not cin or not cout:
@@ -441,24 +443,33 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
 
     min_half_hours = float(category["half_day_min_hours"] if category and "half_day_min_hours" in category.keys() else 2.0)
     cat_work_hours = float(category["work_hours"] if category and "work_hours" in category.keys() else (shift["full_hours"] if shift else 8.0))
+    cat_ot_allowed = float(category["overtime_hours"] if category and "overtime_hours" in category.keys() else 0.0)
     cutoff_full_str = category["early_full_day_cutoff"] if category and "early_full_day_cutoff" in category.keys() else "16:00"
+
+    # Shifts are 12 hours max. Beyond 12.5 hours without valid checkout, it is a Missed Punch (MP)
+    if hours > 12.5:
+        return "MP", 0.0
+
+    # Overtime calculation: strictly respects category overtime_hours setting
+    if cat_ot_allowed > 0:
+        raw_ot = max(hours - cat_work_hours, 0.0)
+        ot_hours = round(min(raw_ot, cat_ot_allowed), 2)
+    else:
+        ot_hours = 0.0
 
     cutoff_h, cutoff_m = map(int, cutoff_full_str.split(":"))
     out_time = cout.time()
     cutoff_full_time = datetime.min.time().replace(hour=cutoff_h, minute=cutoff_m)
 
-    # Overtime hours: any time worked beyond required regular category work hours
-    ot_hours = round(max(hours - cat_work_hours, 0.0), 2)
-
     is_after_4pm = out_time >= cutoff_full_time
     shift_start_h = int(shift["start_time"].split(":")[0]) if shift else 8
     is_day_shift = shift_start_h < 14
 
-    # Rule: 6 to 9+ hours (or after 4 PM with >= 2.0h) -> Full Day Present (P or OT)
+    # Rule: 6 to 12 hours (or after 4 PM with >= 2.0h) -> Full Day Present (P or OT)
     if hours >= 6.0 or (is_day_shift and is_after_4pm and hours >= min_half_hours) or hours >= cat_work_hours:
         if ot_hours > 0:
             return "OT", ot_hours
-        return "P", ot_hours
+        return "P", 0.0
 
     # Rule: 2 to 6 hours -> Half Day (HD)
     if hours >= 2.0 or hours >= min_half_hours:
@@ -470,11 +481,14 @@ def compute_attendance_status(cin: datetime, cout: datetime, shift, category=Non
 
 def compute_status(hours: float, shift):
     """Calculates attendance status based on standard company rules:
+    - > 12.5 hours: Missed Punch ('MP')
     - 2.0 to 6.0 hours: Half Day ('HD')
     - 6.0+ hours: Full Day ('P')
     - Overtime: beyond full hours + ot_min_hours
     - < 2.0 hours: Absent ('A')
     """
+    if hours > 12.5:
+        return "MP", 0.0
     full = shift["full_hours"] if shift else 8.0
     ot_min = shift["ot_min_hours"] if shift else 1.0
     if hours >= max(full, 6.0) + ot_min:
@@ -508,6 +522,9 @@ def finalize_attendance(rec, shift, category=None):
         hours = max((cout - cin).total_seconds() / 3600.0, 0)
         upd["work_hours"] = round(hours, 2)
         upd["status"], upd["ot_hours"] = compute_attendance_status(cin, cout, shift, category)
+        if upd["status"] == "MP":
+            upd["work_hours"] = 0.0
+            upd["ot_hours"] = 0.0
     return upd
 
 
@@ -556,6 +573,9 @@ def day_code(d, rec, leave, od, holiday, today_, joined, shift=None):
     if rec and rec["check_in"]:
         if rec["check_out"]:
             return rec["status"] or "A"
+        cin_dt = parse_dt(rec["check_in"])
+        if cin_dt and (now() - cin_dt).total_seconds() >= 12 * 3600:
+            return "MP"
         return "IN" if d == today_ else "MP"
     if d < joined:
         return "-"
