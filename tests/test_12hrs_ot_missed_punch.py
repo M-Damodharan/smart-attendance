@@ -102,6 +102,11 @@ class Test12HrsOTAndMissedPunch(unittest.TestCase):
         self.assertNotIn("View Punch In Photo", today_state_html)
         self.assertNotIn("View Punch Out Photo", today_state_html)
 
+        resp_hist = self.client.get("/history")
+        self.assertEqual(resp_hist.status_code, 200)
+        hist_html = resp_hist.get_data(as_text=True)
+        self.assertNotIn("View Punch Face Selfie", hist_html)
+
     def test_check_and_sync_missed_punches_creates_notification_and_mp(self):
         with self.app.app_context():
             db = get_db()
