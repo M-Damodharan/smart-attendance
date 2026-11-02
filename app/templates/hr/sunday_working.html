@@ -113,8 +113,8 @@
             </td>
             <td>
               {% if r.check_in %}
-                <span style="color:#10b981;font-weight:700;">IN: {{ r.check_in[11:16] }}</span><br>
-                <span style="color:var(--text-secondary);font-weight:600;">OUT: {{ r.check_out[11:16] if r.check_out else 'In Progress' }}</span>
+                <span style="color:#10b981;font-weight:700;">IN: {{ r.check_in|hm }}</span><br>
+                <span style="color:var(--text-secondary);font-weight:600;">OUT: {{ r.check_out|hm if r.check_out else 'In Progress' }}</span>
               {% else %}
                 <span class="muted small">Not Punched</span>
               {% endif %}

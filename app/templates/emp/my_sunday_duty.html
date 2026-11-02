@@ -40,8 +40,8 @@
           </div>
           <div class="muted small" style="display:flex;gap:12px;flex-wrap:wrap;">
             <span>Shift: <b>{{ r.shift_name or 'General Shift' }}</b></span>
-            <span>Check In: <b>{{ r.check_in[11:16] if r.check_in else 'Pending' }}</b></span>
-            <span>Check Out: <b>{{ r.check_out[11:16] if r.check_out else 'Pending' }}</b></span>
+            <span>Check In: <b>{{ r.check_in|hm if r.check_in else 'Pending' }}</b></span>
+            <span>Check Out: <b>{{ r.check_out|hm if r.check_out else 'Pending' }}</b></span>
           </div>
           {% if r.hr_remarks %}
           <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:6px;">

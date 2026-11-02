@@ -27,7 +27,7 @@
         <select id="att_id" name="att_id" class="input" style="width:100%;" required>
           {% for a in late_punches %}
           <option value="{{ a.id }}">
-            {{ a.date }} &bull; Punched in at {{ a.check_in[11:16] }} (Shift start: {{ a.shift_start }})
+            {{ a.date }} &bull; Punched in at {{ a.check_in|hm }} (Shift start: {{ a.shift_start }})
           </option>
           {% endfor %}
         </select>

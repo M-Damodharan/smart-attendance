@@ -148,6 +148,9 @@
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <a class="btn sm primary" href="{{ url_for('hr.powerbi_dashboard') }}" style="background:linear-gradient(135deg, #f59e0b, #d97706);border-color:#d97706;font-weight:700;">📊 Power BI Analytics</a>
     <a class="btn sm primary" href="{{ url_for('hr.cloud_backup_sync') }}" style="background:linear-gradient(135deg, #059669, #10b981);border-color:#10b981;font-weight:700;">☁️ Cloud Backup &amp; Sync</a>
+    <a class="btn sm primary" href="{{ url_for('hr.payroll') }}" style="background:linear-gradient(135deg, #4f46e5, #6366f1);border-color:#6366f1;font-weight:700;">💰 Monthly Payroll</a>
+    <a class="btn sm" href="{{ url_for('hr.sunday_working') }}">📅 Sunday Duty</a>
+    <a class="btn sm" href="{{ url_for('hr.late_coming') }}">⏰ Late Coming</a>
     <button type="button" class="btn sm" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg, #0284c7 0%, #4f46e5 100%);color:#fff;border-color:#38bdf8;">
       <span>🤖 Ask AI Assistant</span>
     </button>

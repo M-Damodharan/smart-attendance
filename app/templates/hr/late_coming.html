@@ -73,7 +73,7 @@
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       {% for u in unsubmitted_late_today %}
       <span class="badge" style="background:var(--bg-card);border:1px solid var(--border-default);padding:6px 10px;font-size:0.82rem;">
-        <b>{{ u.emp_name }}</b> (<code>{{ u.emp_code }}</code>) &bull; In at <b>{{ u.check_in[11:16] }}</b> (Shift start: {{ u.shift_start }})
+        <b>{{ u.emp_name }}</b> (<code>{{ u.emp_code }}</code>) &bull; In at <b>{{ u.check_in|hm }}</b> (Shift start: {{ u.shift_start }})
       </span>
       {% endfor %}
     </div>
@@ -135,7 +135,7 @@
             </td>
             <td>
               {% if r.check_in %}
-                <b style="color:#f59e0b;">{{ r.check_in[11:16] }}</b>
+                <b style="color:#f59e0b;">{{ r.check_in|hm }}</b>
               {% else %}
                 <span class="muted small">-</span>
               {% endif %}
