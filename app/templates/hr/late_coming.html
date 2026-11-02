@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Late Coming HR Approval System · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1440px;margin:0 auto;padding-bottom:2rem;">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;background:var(--bg-card);padding:1rem 1.25rem;border-radius:12px;border:1px solid var(--border-default);box-shadow:var(--shadow-sm);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="background:linear-gradient(135deg, #f59e0b, #b45309);width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.4rem;font-weight:900;">
+        ⏱️
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.35rem;display:flex;align-items:center;gap:8px;">
+          <span>Late Coming — HR Approval System</span>
+          <span class="badge b-approved" style="font-size:0.72rem;">● Company HR Policy</span>
+        </h2>
+        <span class="muted small">Sri Balaji Gears &bull; Shift Punctuality, Late Explanations, Shortage Hours &amp; Approvals</span>
+      </div>
+    </div>
+
+    <!-- Date Filter -->
+    <form method="get" action="{{ url_for('hr.late_coming') }}" style="display:flex;align-items:center;gap:6px;background:var(--bg-surface);padding:4px 10px;border-radius:8px;border:1px solid var(--border-default);">
+      <input type="hidden" name="tab" value="{{ active_tab }}">
+      <label for="date_filter" style="font-size:0.8rem;font-weight:700;color:var(--text-secondary);margin:0;">Filter Date:</label>
+      <input type="date" id="date_filter" name="date" value="{{ date_filter }}" style="background:transparent;border:none;color:var(--text-main);font-size:0.85rem;font-weight:600;outline:none;" onchange="this.form.submit()">
+      {% if date_filter %}
+      <a href="{{ url_for('hr.late_coming', tab=active_tab) }}" style="color:var(--text-muted);font-size:0.8rem;text-decoration:none;margin-left:4px;">✕ Clear</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- KPI Ribbon -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(170px, 1fr));gap:12px;margin-bottom:1.25rem;">
+    <div class="card" style="padding:1rem;border-left:4px solid #f59e0b;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Pending Approval</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#f59e0b;margin-top:4px;">{{ stats.pending }}</div>
+      <span class="small" style="color:#f59e0b;font-weight:600;">Requires HR Action</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #10b981;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Approved Explanations</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#10b981;margin-top:4px;">{{ stats.approved }}</div>
+      <span class="small" style="color:#10b981;font-weight:600;">Penalty Waived</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #ef4444;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Rejected Requests</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#ef4444;margin-top:4px;">{{ stats.rejected }}</div>
+      <span class="small" style="color:#ef4444;font-weight:600;">Late Penalty Applied</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #8b5cf6;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Shortage Hours</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#8b5cf6;margin-top:4px;">{{ stats.total_shortage }}h</div>
+      <span class="small" style="color:#8b5cf6;font-weight:600;">Cumulative Shortfall</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #06b6d4;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Late Today (Unsubmitted)</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#06b6d4;margin-top:4px;">{{ stats.unsubmitted_today }}</div>
+      <span class="small" style="color:#06b6d4;font-weight:600;">Explanation Pending</span>
+    </div>
+  </div>
+
+  <!-- Unsubmitted Late Arrivals Today Warning Alert -->
+  {% if unsubmitted_late_today %}
+  <div class="card" style="margin-bottom:1.25rem;border:1px solid #f59e0b;background:rgba(245,158,11,0.06);border-radius:12px;padding:1rem 1.25rem;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="font-size:1.3rem;">⚠️</span>
+      <b style="font-size:1rem;color:#f59e0b;">{{ unsubmitted_late_today|length }} Employee(s) Arrived Late Today (No Explanation Submitted Yet):</b>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      {% for u in unsubmitted_late_today %}
+      <span class="badge" style="background:var(--bg-card);border:1px solid var(--border-default);padding:6px 10px;font-size:0.82rem;">
+        <b>{{ u.emp_name }}</b> (<code>{{ u.emp_code }}</code>) &bull; In at <b>{{ u.check_in[11:16] }}</b> (Shift start: {{ u.shift_start }})
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tab Navigation -->
+  <div class="tab-row" style="margin-bottom:1rem;border-bottom:1px solid var(--border-default);padding-bottom:4px;">
+    <a href="{{ url_for('hr.late_coming', tab='pending') }}" class="tab-link {% if active_tab == 'pending' %}active{% endif %}">
+      <span>Pending Requests ({{ stats.pending }})</span>
+    </a>
+    <a href="{{ url_for('hr.late_coming', tab='approved') }}" class="tab-link {% if active_tab == 'approved' %}active{% endif %}">
+      <span>Approved ({{ stats.approved }})</span>
+    </a>
+    <a href="{{ url_for('hr.late_coming', tab='rejected') }}" class="tab-link {% if active_tab == 'rejected' %}active{% endif %}">
+      <span>Rejected ({{ stats.rejected }})</span>
+    </a>
+  </div>
+
+  <!-- Requests Table -->
+  <div class="card" style="padding:1.25rem;border-radius:12px;">
+    {% if not records %}
+    <div style="text-align:center;padding:3rem 1rem;background:var(--bg-surface);border-radius:8px;border:1px dashed var(--border-default);">
+      <div style="font-size:2.5rem;margin-bottom:8px;">✨</div>
+      <b style="font-size:1.1rem;display:block;">No {{ active_tab|capitalize }} Late Coming Requests</b>
+      <span class="muted small">All employee late coming requests in this category have been processed.</span>
+    </div>
+    {% else %}
+    <div style="overflow-x:auto;">
+      <table class="table" style="width:100%;margin:0;font-size:0.88rem;">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Date &amp; Shift</th>
+            <th>Check-In Time</th>
+            <th style="text-align:center;">Late Minutes</th>
+            <th style="text-align:center;">Work Hours</th>
+            <th style="text-align:center;">Shortage Hours</th>
+            <th>Employee Explanation</th>
+            <th>Status</th>
+            <th>HR Remarks</th>
+            {% if active_tab == 'pending' %}
+            <th style="text-align:right;">HR Decision</th>
+            {% else %}
+            <th>Decided By</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td>
+              <b>{{ r.emp_name }}</b><br>
+              <code style="font-size:0.75rem;color:var(--text-muted)">{{ r.emp_code }}</code> &bull; <span class="muted small">{{ r.department }}</span>
+            </td>
+            <td>
+              <b>{{ r.date }}</b><br>
+              <span class="muted small">{{ r.shift_name }} (Start: {{ r.shift_start }})</span>
+            </td>
+            <td>
+              {% if r.check_in %}
+                <b style="color:#f59e0b;">{{ r.check_in[11:16] }}</b>
+              {% else %}
+                <span class="muted small">-</span>
+              {% endif %}
+            </td>
+            <td style="text-align:center;">
+              <span class="badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;font-weight:800;">
+                +{{ r.late_minutes }} min
+              </span>
+            </td>
+            <td style="text-align:center;font-weight:700;">
+              {{ r.work_hours }}h
+            </td>
+            <td style="text-align:center;font-weight:800;color:#ef4444;">
+              {{ r.shortage_hours }}h
+            </td>
+            <td style="max-width:240px;">
+              <span style="font-weight:600;display:block;">{{ r.reason }}</span>
+              <span class="muted small">{{ r.created_at }}</span>
+            </td>
+            <td>
+              {% if r.status == 'Approved' %}
+                <span class="badge b-approved">✓ Approved</span>
+              {% elif r.status == 'Rejected' %}
+                <span class="badge b-rejected">✗ Rejected</span>
+              {% else %}
+                <span class="badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;font-weight:700;">Pending</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="muted small">{{ r.hr_remarks or '-' }}</span>
+            </td>
+
+            {% if active_tab == 'pending' %}
+            <td style="text-align:right;">
+              <div style="display:inline-flex;gap:4px;">
+                <!-- Approve Form -->
+                <form method="post" action="{{ url_for('hr.late_coming_decide', req_id=r.id) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="status" value="Approved">
+                  <input type="hidden" name="hr_remarks" value="Late arrival approved per HR policy">
+                  <button type="submit" class="btn sm primary" style="background:#10b981;border-color:#10b981;font-weight:700;" title="Approve &amp; Waive Penalty">
+                    Approve
+                  </button>
+                </form>
+
+                <!-- Reject Form -->
+                <form method="post" action="{{ url_for('hr.late_coming_decide', req_id=r.id) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="status" value="Rejected">
+                  <input type="hidden" name="hr_remarks" value="Late explanation rejected">
+                  <button type="submit" class="btn sm" style="color:#ef4444;border-color:#ef4444;" title="Reject">
+                    Reject
+                  </button>
+                </form>
+              </div>
+            </td>
+            {% else %}
+            <td>
+              {% if r.decided_by_name %}
+                <b>{{ r.decided_by_name }}</b><br>
+                <span class="muted small">{{ r.decided_at[:10] }}</span>
+              {% else %}
+                <span class="muted small">-</span>
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

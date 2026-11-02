@@ -146,6 +146,7 @@
   </div>
 
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn sm primary" href="{{ url_for('hr.powerbi_dashboard') }}" style="background:linear-gradient(135deg, #f59e0b, #d97706);border-color:#d97706;font-weight:700;">📊 Power BI Analytics</a>
     <a class="btn sm primary" href="{{ url_for('hr.cloud_backup_sync') }}" style="background:linear-gradient(135deg, #059669, #10b981);border-color:#10b981;font-weight:700;">☁️ Cloud Backup &amp; Sync</a>
     <button type="button" class="btn sm" onclick="toggleAIChat(true)" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg, #0284c7 0%, #4f46e5 100%);color:#fff;border-color:#38bdf8;">
       <span>🤖 Ask AI Assistant</span>
@@ -268,6 +269,10 @@
   <div class="kpi warn" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.attendance') }}'">
     <b>{{ stats['late'] }}</b>
     <span>Late Arrivals</span>
+  </div>
+  <div class="kpi" style="cursor:pointer;border-left:3px solid #8b5cf6;" onclick="location.href='{{ url_for('hr.attendance') }}?filter=present'">
+    <b style="color:#8b5cf6;">{{ stats.get('half_day', 0) }}</b>
+    <span>Half-Day (HD)</span>
   </div>
   <div class="kpi" style="cursor:pointer;" onclick="location.href='{{ url_for('hr.approvals') }}'">
     <b>{{ stats['leave'] }}</b>

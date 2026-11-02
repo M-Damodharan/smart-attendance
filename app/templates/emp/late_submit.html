@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Submit Late Coming Explanation · SBG{% endblock %}
+{% block content %}
+<div class="container" style="max-width:880px;margin:0 auto;padding-bottom:2rem;">
+
+  <!-- Header -->
+  <div class="ph" style="margin-bottom:1.25rem;">
+    <div>
+      <h2 style="margin:0;">Late Coming — Submit Explanation</h2>
+      <span class="muted small">Sri Balaji Gears &bull; Punctuality Review &amp; HR Waiver Request</span>
+    </div>
+  </div>
+
+  <!-- Form: Submit Explanation for Late Arrival -->
+  <div class="card" style="padding:1.25rem;border-radius:12px;margin-bottom:1.25rem;">
+    <h3 style="margin:0 0 10px;font-size:1.05rem;">Submit Reason for Late Arrival</h3>
+    <p class="muted small" style="margin:0 0 16px;">
+      If you arrived past your shift's designated start time, submit your reason below. Upon HR review and approval, your punctuality penalty will be waived.
+    </p>
+
+    <form method="post" action="{{ url_for('emp.late_coming_submit') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      {% if late_punches %}
+      <div class="form-group" style="margin-bottom:14px;">
+        <label for="att_id" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Select Late Attendance Record *</label>
+        <select id="att_id" name="att_id" class="input" style="width:100%;" required>
+          {% for a in late_punches %}
+          <option value="{{ a.id }}">
+            {{ a.date }} &bull; Punched in at {{ a.check_in[11:16] }} (Shift start: {{ a.shift_start }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% else %}
+      <div class="form-group" style="margin-bottom:14px;">
+        <label for="date" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Attendance Date *</label>
+        <input type="date" id="date" name="date" value="{{ today.strftime('%Y-%m-%d') }}" class="input" style="width:100%;" required>
+      </div>
+      {% endif %}
+
+      <div class="form-group" style="margin-bottom:16px;">
+        <label for="reason" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Detailed Reason for Late Arrival *</label>
+        <textarea id="reason" name="reason" rows="3" required placeholder="Please state the specific reason (e.g. Heavy traffic congestion, bike breakdown, unexpected family emergency)..." class="input" style="width:100%;box-sizing:border-box;"></textarea>
+      </div>
+
+      <button type="submit" class="btn primary sm" style="font-weight:700;">
+        📤 Submit to HR for Approval
+      </button>
+    </form>
+  </div>
+
+  <!-- History of Submitted Explanations -->
+  <div class="card" style="padding:1.25rem;border-radius:12px;">
+    <h3 style="margin:0 0 12px;font-size:1.05rem;">My Submitted Late Explanations</h3>
+
+    {% if not submitted_requests %}
+    <div style="text-align:center;padding:2rem 1rem;background:var(--bg-surface);border-radius:8px;border:1px dashed var(--border-default);">
+      <div style="font-size:2rem;margin-bottom:6px;">⏱️</div>
+      <b style="font-size:0.95rem;display:block;">No Late Requests Submitted</b>
+      <span class="muted small">All your submitted late arrival explanations and HR approvals will appear here.</span>
+    </div>
+    {% else %}
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      {% for s in submitted_requests %}
+      <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+            <b style="font-size:0.95rem;">{{ s.date }}</b>
+            <span class="badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;font-weight:700;">+{{ s.late_minutes }}m late</span>
+            {% if s.status == 'Approved' %}
+              <span class="badge b-approved">✓ Approved</span>
+            {% elif s.status == 'Rejected' %}
+              <span class="badge b-rejected">✗ Rejected</span>
+            {% else %}
+              <span class="badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;">Pending</span>
+            {% endif %}
+          </div>
+          <div style="font-size:0.85rem;color:var(--text-main);margin-bottom:4px;">
+            <b>Reason:</b> {{ s.reason }}
+          </div>
+          {% if s.hr_remarks %}
+          <div style="font-size:0.8rem;color:var(--text-secondary);">
+            <b>HR Remarks:</b> {{ s.hr_remarks }}
+          </div>
+          {% endif %}
+        </div>
+
+        <div style="text-align:right;">
+          <span class="muted small" style="display:block;">Shortage:</span>
+          <b style="color:#ef4444;">{{ s.shortage_hours }}h</b>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

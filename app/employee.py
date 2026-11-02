@@ -425,3 +425,150 @@ def permission():
     rows = db.execute("SELECT * FROM permission_requests WHERE emp_id=? ORDER BY id DESC LIMIT 30", (u["id"],)).fetchall()
     return render_template("emp/permission.html", rows=rows, today=t)
 
+
+# ------------------------------------------------------------------ my salary
+@bp.route("/my-salary")
+@employee_required
+def my_salary():
+    db, u = get_db(), g.user
+    rows = db.execute("""
+        SELECT p.*, esp.payment_mode, esp.bank_name, esp.account_no, esp.ifsc_code,
+               appr.name as approved_by_name
+        FROM monthly_payroll p
+        LEFT JOIN employee_salary_profiles esp ON esp.emp_id=p.emp_id
+        LEFT JOIN employees appr ON appr.id=p.approved_by
+        WHERE p.emp_id=?
+        ORDER BY p.month DESC
+    """, (u["id"],)).fetchall()
+
+    profile = db.execute("""
+        SELECT * FROM employee_salary_profiles WHERE emp_id=?
+    """, (u["id"],)).fetchone()
+
+    return render_template("emp/my_salary.html", rows=rows, profile=profile)
+
+
+@bp.route("/my-salary/payslip/<int:payroll_id>")
+@employee_required
+def my_payslip(payroll_id):
+    db, u = get_db(), g.user
+    rec = db.execute("""
+        SELECT p.*, e.emp_code, e.name as emp_name, e.department, e.designation, e.email, e.phone, e.joined_on,
+               esp.payment_mode, esp.bank_name, esp.account_no, esp.ifsc_code,
+               appr.name as approved_by_name
+        FROM monthly_payroll p
+        JOIN employees e ON e.id=p.emp_id
+        LEFT JOIN employee_salary_profiles esp ON esp.emp_id=p.emp_id
+        LEFT JOIN employees appr ON appr.id=p.approved_by
+        WHERE p.id=? AND p.emp_id=?
+    """, (payroll_id, u["id"])).fetchone()
+
+    if not rec:
+        flash("Salary slip not found or access restricted.", "err")
+        return redirect(url_for("emp.my_salary"))
+
+    return render_template("hr/payslip.html", p=rec)
+
+
+# ------------------------------------------------------------------ my sunday duty
+@bp.route("/my-sunday-duty")
+@employee_required
+def my_sunday_duty():
+    db, u = get_db(), g.user
+    rows = db.execute("""
+        SELECT sw.*, s.name as shift_name, s.start_time, s.end_time,
+               appr.name as approved_by_name
+        FROM sunday_working sw
+        LEFT JOIN shifts s ON s.id=sw.shift_id
+        LEFT JOIN employees appr ON appr.id=sw.approved_by
+        WHERE sw.emp_id=?
+        ORDER BY sw.sunday_date DESC
+    """, (u["id"],)).fetchall()
+
+    return render_template("emp/my_sunday_duty.html", rows=rows, today=today())
+
+
+# ------------------------------------------------------------------ late coming submit
+@bp.route("/late-coming/submit", methods=["GET", "POST"])
+@employee_required
+def late_coming_submit():
+    db, u, t = get_db(), g.user, today()
+    if request.method == "POST":
+        att_id = request.form.get("att_id")
+        date_str = request.form.get("date", d2s(t)).strip()
+        reason = request.form.get("reason", "").strip()
+
+        if not reason:
+            flash("Please provide a valid explanation for arriving late.", "warn")
+            return redirect(url_for("emp.late_coming_submit"))
+
+        att = None
+        if att_id:
+            att = db.execute("SELECT * FROM attendance WHERE id=? AND emp_id=?", (att_id, u["id"])).fetchone()
+        if not att:
+            att = db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (u["id"], date_str)).fetchone()
+
+        shift_id = att["shift_id"] if att else u.get("shift_id")
+        cin = att["check_in"] if att else None
+        work_h = float(att["work_hours"] or 0.0) if att else 0.0
+
+        late_min = 0
+        shortage_h = 0.0
+        if cin and shift_id:
+            shift = db.execute("SELECT * FROM shifts WHERE id=?", (shift_id,)).fetchone()
+            if shift:
+                try:
+                    cin_dt = parse_dt(cin)
+                    s_hour, s_min = [int(x) for x in shift["start_time"].split(":")]
+                    sched_dt = cin_dt.replace(hour=s_hour, minute=s_min, second=0)
+                    if cin_dt > sched_dt:
+                        late_min = max(0, int((cin_dt - sched_dt).total_seconds() / 60))
+                    full_h = float(shift["full_hours"] or 8.0)
+                    if work_h > 0 and work_h < full_h:
+                        shortage_h = round(full_h - work_h, 1)
+                except Exception:
+                    pass
+
+        cur = db.execute("""
+            INSERT INTO late_coming_requests
+            (att_id, emp_id, date, shift_id, check_in, late_minutes, work_hours, shortage_hours, reason, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+        """, (att["id"] if att else None, u["id"], date_str, shift_id, cin, late_min, work_h, shortage_h, reason))
+
+        create_notification(
+            title="Late Coming Explanation Submitted",
+            message=f"{u['name']} ({u['emp_code']}) submitted an explanation for late arrival on {date_str}: {reason}",
+            kind="warn",
+            target_role="hr",
+            link_url=url_for("hr.late_coming", tab="pending"),
+            db=db
+        )
+        audit("LATE_COMING_SUBMIT", "late_coming_requests", cur.lastrowid, f"{date_str} ({late_min}m late): {reason}")
+        db.commit()
+        flash("Your late arrival reason has been submitted to HR for review and approval.", "ok")
+        return redirect(url_for("emp.late_coming_submit"))
+
+    late_punches = db.execute("""
+        SELECT a.*, s.name as shift_name, s.start_time as shift_start
+        FROM attendance a
+        LEFT JOIN shifts s ON s.id=a.shift_id
+        WHERE a.emp_id=? AND a.late=1 AND a.id NOT IN (SELECT att_id FROM late_coming_requests WHERE att_id IS NOT NULL)
+        ORDER BY a.date DESC LIMIT 10
+    """, (u["id"],)).fetchall()
+
+    submitted_requests = db.execute("""
+        SELECT lr.*, s.name as shift_name, dec.name as decided_by_name
+        FROM late_coming_requests lr
+        LEFT JOIN shifts s ON s.id=lr.shift_id
+        LEFT JOIN employees dec ON dec.id=lr.decided_by
+        WHERE lr.emp_id=?
+        ORDER BY lr.date DESC, lr.id DESC LIMIT 20
+    """, (u["id"],)).fetchall()
+
+    return render_template(
+        "emp/late_submit.html",
+        late_punches=late_punches,
+        submitted_requests=submitted_requests,
+        today=t
+    )
+

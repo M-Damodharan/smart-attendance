@@ -54,7 +54,7 @@ def dashboard():
     emps = _employees()
     reg = build_register(emps, t, t)
     shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
-    stats = {"present": 0, "absent": 0, "late": 0, "leave": 0, "od": 0, "working": 0}
+    stats = {"present": 0, "absent": 0, "late": 0, "leave": 0, "od": 0, "working": 0, "half_day": 0}
     by_shift = {s["id"]: {"shift": s, "present": 0, "absent": 0, "total": 0} for s in shifts}
     for e in emps:
         code = reg[e["id"]]["days"][t]
@@ -69,6 +69,8 @@ def dashboard():
             bs["total"] += 1
         if present:
             stats["present"] += 1
+            if code == "HD":
+                stats["half_day"] += 1
             if bs:
                 bs["present"] += 1
         elif code in ("L", "HL"):
@@ -1585,5 +1587,911 @@ def cloud_backup_download(backup_id):
         logger.exception("Failed downloading cloud backup snapshot %s: %s", backup_id, e)
         flash(f"Download failed: {str(e)}", "err")
         return redirect(url_for("hr.cloud_backup_sync"))
+
+
+# ==============================================================================
+# MODULE 1: POWER BI ATTENDANCE ANALYTICS DASHBOARD
+# ==============================================================================
+@bp.route("/powerbi-dashboard")
+@hr_required
+def powerbi_dashboard():
+    db, t = get_db(), today()
+    total_emps = db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND role='employee'").fetchone()[0]
+    return render_template("hr/powerbi_dashboard.html", today=t, total_emps=total_emps)
+
+
+@bp.route("/api/powerbi-analytics")
+@hr_required
+def api_powerbi_analytics():
+    db, t = get_db(), today()
+    sel_date_str = request.args.get("date", d2s(t))
+    try:
+        target_date = s2d(sel_date_str)
+    except Exception:
+        target_date = t
+
+    active_emps = db.execute("SELECT id, emp_code, name, department, designation, shift_id FROM employees WHERE active=1 AND role='employee'").fetchall()
+    total_emps = len(active_emps)
+
+    att_rows = db.execute("""
+        SELECT a.*, e.department, s.name as shift_name
+        FROM attendance a
+        JOIN employees e ON e.id=a.emp_id
+        LEFT JOIN shifts s ON s.id=a.shift_id
+        WHERE a.date=? AND e.active=1
+    """, (d2s(target_date),)).fetchall()
+
+    present_emp_ids = set()
+    late_count = 0
+    half_day_count = 0
+    working_count = 0
+    mp_count = 0
+
+    dept_map = {}
+    for e in active_emps:
+        dept = e["department"] or "General"
+        if dept not in dept_map:
+            dept_map[dept] = {"total": 0, "present": 0, "absent": 0, "late": 0, "half_day": 0}
+        dept_map[dept]["total"] += 1
+
+    for row in att_rows:
+        status = row["status"]
+        is_pres = status in ("P", "OT", "HD", "IN", "MP")
+        if is_pres:
+            present_emp_ids.add(row["emp_id"])
+            dept = row["department"] or "General"
+            if dept in dept_map:
+                dept_map[dept]["present"] += 1
+        if status == "HD":
+            half_day_count += 1
+            if dept in dept_map:
+                dept_map[dept]["half_day"] += 1
+        if status == "MP":
+            mp_count += 1
+        if row["late"] == 1:
+            late_count += 1
+            if dept in dept_map:
+                dept_map[dept]["late"] += 1
+        if row["check_in"] and not row["check_out"] and status != "MP":
+            working_count += 1
+
+    present_count = len(present_emp_ids)
+    absent_count = max(0, total_emps - present_count)
+    present_pct = round((present_count / total_emps * 100), 1) if total_emps > 0 else 0
+
+    for dname, dinfo in dept_map.items():
+        dinfo["absent"] = max(0, dinfo["total"] - dinfo["present"])
+        dinfo["pct"] = round((dinfo["present"] / dinfo["total"] * 100), 1) if dinfo["total"] > 0 else 0
+
+    hourly_counts = {f"{h:02d}:00": 0 for h in range(6, 23)}
+    for row in att_rows:
+        cin = row["check_in"]
+        if cin and len(cin) >= 13:
+            try:
+                hour_str = cin[11:13] + ":00"
+                if hour_str in hourly_counts:
+                    hourly_counts[hour_str] += 1
+            except Exception:
+                pass
+
+    past_days_7 = [target_date - timedelta(days=i) for i in range(6, -1, -1)]
+    past_days_30 = [target_date - timedelta(days=i) for i in range(29, -1, -1)]
+
+    trend_rows = db.execute("""
+        SELECT a.date,
+               COUNT(DISTINCT CASE WHEN a.status IN ('P','OT','HD','IN','MP') THEN a.emp_id END) as present_count,
+               COUNT(DISTINCT CASE WHEN a.late=1 THEN a.emp_id END) as late_count,
+               COUNT(DISTINCT CASE WHEN a.status='HD' THEN a.emp_id END) as hd_count
+        FROM attendance a
+        JOIN employees e ON e.id=a.emp_id
+        WHERE a.date >= ? AND a.date <= ? AND e.active=1
+        GROUP BY a.date
+    """, (d2s(past_days_30[0]), d2s(past_days_30[-1]))).fetchall()
+    trend_dict = {r["date"]: r for r in trend_rows}
+
+    weekly_data = []
+    for d in past_days_7:
+        ds = d2s(d)
+        tr = trend_dict.get(ds)
+        p = tr["present_count"] if tr else 0
+        l = tr["late_count"] if tr else 0
+        hd = tr["hd_count"] if tr else 0
+        ab = max(0, total_emps - p)
+        weekly_data.append({
+            "date": ds,
+            "day": d.strftime("%a"),
+            "present": p,
+            "absent": ab,
+            "late": l,
+            "half_day": hd,
+            "pct": round((p / total_emps * 100), 1) if total_emps > 0 else 0
+        })
+
+    monthly_data = []
+    for d in past_days_30:
+        ds = d2s(d)
+        tr = trend_dict.get(ds)
+        p = tr["present_count"] if tr else 0
+        ab = max(0, total_emps - p)
+        monthly_data.append({
+            "date": ds,
+            "day": d.strftime("%d %b"),
+            "present": p,
+            "absent": ab,
+            "pct": round((p / total_emps * 100), 1) if total_emps > 0 else 0
+        })
+
+    shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+    shift_stats = []
+    for s in shifts:
+        s_emps = [e for e in active_emps if e["shift_id"] == s["id"]]
+        stot = len(s_emps)
+        spres = len([r for r in att_rows if r["shift_id"] == s["id"] and r["status"] in ("P", "OT", "HD", "IN", "MP")])
+        slate = len([r for r in att_rows if r["shift_id"] == s["id"] and r["late"] == 1])
+        sabs = max(0, stot - spres)
+        shift_stats.append({
+            "id": s["id"],
+            "name": s["name"],
+            "start_time": s["start_time"],
+            "end_time": s["end_time"],
+            "total": stot,
+            "present": spres,
+            "absent": sabs,
+            "late": slate,
+            "pct": round((spres / stot * 100), 1) if stot > 0 else 0
+        })
+
+    return jsonify({
+        "success": True,
+        "date": d2s(target_date),
+        "kpis": {
+            "total_employees": total_emps,
+            "present": present_count,
+            "absent": absent_count,
+            "late": late_count,
+            "half_day": half_day_count,
+            "working": working_count,
+            "missed_punch": mp_count,
+            "present_pct": present_pct,
+            "absent_pct": round(100.0 - present_pct, 1) if total_emps > 0 else 0
+        },
+        "daily_hourly": {
+            "labels": list(hourly_counts.keys()),
+            "values": list(hourly_counts.values())
+        },
+        "weekly": weekly_data,
+        "monthly": monthly_data,
+        "departments": [{"name": k, **v} for k, v in dept_map.items()],
+        "shifts": shift_stats
+    })
+
+
+# ==============================================================================
+# MODULE 2: SUNDAY WORKING MANAGEMENT
+# ==============================================================================
+def _nearest_sunday(ref_date=None):
+    if ref_date is None:
+        ref_date = today()
+    days_ahead = 6 - ref_date.weekday()
+    if days_ahead < 0:
+        days_ahead += 7
+    return ref_date + timedelta(days=days_ahead)
+
+
+@bp.route("/sunday-working")
+@hr_required
+def sunday_working():
+    db = get_db()
+    req_date = request.args.get("date")
+    if req_date:
+        try:
+            target_sunday = s2d(req_date)
+        except Exception:
+            target_sunday = _nearest_sunday()
+    else:
+        target_sunday = _nearest_sunday()
+
+    sun_str = d2s(target_sunday)
+    records = db.execute("""
+        SELECT sw.*, e.emp_code, e.name as emp_name, e.department, e.designation,
+               s.name as shift_name, s.start_time, s.end_time,
+               appr.name as approved_by_name
+        FROM sunday_working sw
+        JOIN employees e ON e.id=sw.emp_id
+        LEFT JOIN shifts s ON s.id=sw.shift_id
+        LEFT JOIN employees appr ON appr.id=sw.approved_by
+        WHERE sw.sunday_date=?
+        ORDER BY e.emp_code
+    """, (sun_str,)).fetchall()
+
+    all_active_emps = db.execute("SELECT id, emp_code, name, department, designation, shift_id FROM employees WHERE active=1 AND role='employee' ORDER BY emp_code").fetchall()
+    shifts = db.execute("SELECT * FROM shifts WHERE active=1 ORDER BY id").fetchall()
+
+    total_assigned = len(records)
+    total_completed = len([r for r in records if r["status"] in ("Completed", "Approved")])
+    total_approved = len([r for r in records if r["status"] == "Approved"])
+    total_pending = len([r for r in records if r["status"] in ("Scheduled", "Completed")])
+    total_hours = sum([float(r["work_hours"] or 0.0) for r in records])
+
+    stats = {
+        "assigned": total_assigned,
+        "completed": total_completed,
+        "approved": total_approved,
+        "pending": total_pending,
+        "hours": round(total_hours, 1)
+    }
+
+    return render_template(
+        "hr/sunday_working.html",
+        sunday_date=target_sunday,
+        records=records,
+        employees=all_active_emps,
+        shifts=shifts,
+        stats=stats
+    )
+
+
+@bp.route("/sunday-working/assign", methods=["POST"])
+@hr_required
+def sunday_working_assign():
+    db = get_db()
+    emp_ids = request.form.getlist("emp_ids")
+    sunday_date = request.form.get("sunday_date", "").strip()
+    shift_id = request.form.get("shift_id")
+    duty_type = request.form.get("duty_type", "Full Day").strip()
+    remarks = request.form.get("remarks", "").strip()
+
+    if not emp_ids or not sunday_date:
+        flash("Please select at least one employee and a valid Sunday date.", "warn")
+        return redirect(url_for("hr.sunday_working", date=sunday_date))
+
+    assigned_count = 0
+    for eid_str in emp_ids:
+        try:
+            eid = int(eid_str)
+            db.execute("""
+                INSERT INTO sunday_working (emp_id, sunday_date, shift_id, duty_type, hr_remarks, status)
+                VALUES (?, ?, ?, ?, ?, 'Scheduled')
+                ON CONFLICT(emp_id, sunday_date) DO UPDATE SET
+                    shift_id=excluded.shift_id,
+                    duty_type=excluded.duty_type,
+                    hr_remarks=excluded.hr_remarks
+            """, (eid, sunday_date, shift_id or None, duty_type, remarks))
+            assigned_count += 1
+
+            create_notification(
+                user_id=eid,
+                title="Sunday Duty Scheduled",
+                message=f"You have been assigned to Sunday duty on {sunday_date} ({duty_type}).",
+                kind="info",
+                link_url=url_for("emp.my_sunday_duty")
+            )
+        except Exception as e:
+            logger.error("Error assigning Sunday duty to emp %s: %s", eid_str, e)
+
+    db.commit()
+    audit("SUNDAY_DUTY_ASSIGN", "sunday_working", sunday_date, f"Assigned {assigned_count} employees")
+    flash(f"Successfully scheduled Sunday duty for {assigned_count} employee(s) on {sunday_date}.", "ok")
+    return redirect(url_for("hr.sunday_working", date=sunday_date))
+
+
+@bp.route("/sunday-working/record-punch", methods=["POST"])
+@hr_required
+def sunday_working_record_punch():
+    db = get_db()
+    sw_id = request.form.get("sw_id")
+    check_in = request.form.get("check_in", "").strip() or None
+    check_out = request.form.get("check_out", "").strip() or None
+    work_hours = float(request.form.get("work_hours") or 0.0)
+    ot_hours = float(request.form.get("ot_hours") or 0.0)
+    status = request.form.get("status", "Completed").strip()
+
+    sw = db.execute("SELECT * FROM sunday_working WHERE id=?", (sw_id,)).fetchone()
+    if not sw:
+        flash("Sunday duty record not found.", "err")
+        return redirect(url_for("hr.sunday_working"))
+
+    db.execute("""
+        UPDATE sunday_working
+        SET check_in=?, check_out=?, work_hours=?, ot_hours=?, status=?
+        WHERE id=?
+    """, (check_in, check_out, work_hours, ot_hours, status, sw_id))
+    db.commit()
+    audit("SUNDAY_DUTY_PUNCH_RECORD", "sunday_working", str(sw_id), f"Recorded check-in: {check_in}, out: {check_out}, hours: {work_hours}")
+    flash("Sunday attendance punch recorded successfully.", "ok")
+    return redirect(url_for("hr.sunday_working", date=sw["sunday_date"]))
+
+
+@bp.route("/sunday-working/approve/<int:sw_id>", methods=["POST"])
+@hr_required
+def sunday_working_approve(sw_id):
+    db = get_db()
+    action = request.form.get("action", "Approved").strip()
+    hr_remarks = request.form.get("hr_remarks", "").strip()
+
+    sw = db.execute("SELECT * FROM sunday_working WHERE id=?", (sw_id,)).fetchone()
+    if not sw:
+        flash("Sunday duty record not found.", "err")
+        return redirect(url_for("hr.sunday_working"))
+
+    now_ts = d2s(today()) + " " + datetime.now().strftime("%H:%M:%S")
+    db.execute("""
+        UPDATE sunday_working
+        SET status=?, hr_remarks=?, approved_by=?, approved_at=?
+        WHERE id=?
+    """, (action, hr_remarks, g.user["id"], now_ts, sw_id))
+    db.commit()
+
+    create_notification(
+        user_id=sw["emp_id"],
+        title=f"Sunday Duty {action}",
+        message=f"Your Sunday duty for {sw['sunday_date']} was marked as {action} by HR.",
+        kind="ok" if action == "Approved" else "warn",
+        link_url=url_for("emp.my_sunday_duty")
+    )
+    audit(f"SUNDAY_DUTY_{action.upper()}", "sunday_working", str(sw_id), hr_remarks)
+    flash(f"Sunday duty record marked as {action}.", "ok")
+    return redirect(url_for("hr.sunday_working", date=sw["sunday_date"]))
+
+
+@bp.route("/sunday-working/export")
+@hr_required
+def sunday_working_export():
+    import csv
+    db = get_db()
+    req_date = request.args.get("date")
+    q = """
+        SELECT sw.*, e.emp_code, e.name as emp_name, e.department, e.designation,
+               s.name as shift_name, appr.name as approved_by_name
+        FROM sunday_working sw
+        JOIN employees e ON e.id=sw.emp_id
+        LEFT JOIN shifts s ON s.id=sw.shift_id
+        LEFT JOIN employees appr ON appr.id=sw.approved_by
+    """
+    args = []
+    if req_date:
+        q += " WHERE sw.sunday_date=?"
+        args.append(req_date)
+    q += " ORDER BY sw.sunday_date DESC, e.emp_code"
+    rows = db.execute(q, args).fetchall()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Sunday Date", "Employee Code", "Employee Name", "Department", "Designation",
+        "Shift", "Duty Type", "Check In", "Check Out", "Work Hours", "OT Hours",
+        "Status", "HR Remarks", "Approved By", "Approved At"
+    ])
+    for r in rows:
+        writer.writerow([
+            r["sunday_date"], r["emp_code"], r["emp_name"], r["department"], r["designation"],
+            r["shift_name"], r["duty_type"], r["check_in"] or "-", r["check_out"] or "-",
+            r["work_hours"], r["ot_hours"], r["status"], r["hr_remarks"] or "-",
+            r["approved_by_name"] or "-", r["approved_at"] or "-"
+        ])
+
+    buf.seek(0)
+    filename = f"sbg_sunday_working_{req_date or 'all'}.csv"
+    return send_file(
+        io.BytesIO(buf.getvalue().encode("utf-8")),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+# ==============================================================================
+# MODULE 4: LATE COMING HR APPROVAL SYSTEM
+# ==============================================================================
+@bp.route("/late-coming")
+@hr_required
+def late_coming():
+    db, t = get_db(), today()
+    active_tab = request.args.get("tab", "pending")
+    date_filter = request.args.get("date", "")
+
+    base_query = """
+        SELECT lr.*, e.emp_code, e.name as emp_name, e.department, e.designation,
+               s.name as shift_name, s.start_time as shift_start,
+               dec.name as decided_by_name
+        FROM late_coming_requests lr
+        JOIN employees e ON e.id=lr.emp_id
+        LEFT JOIN shifts s ON s.id=lr.shift_id
+        LEFT JOIN employees dec ON dec.id=lr.decided_by
+    """
+    args = []
+    where_clauses = []
+    if active_tab == "pending":
+        where_clauses.append("lr.status='Pending'")
+    elif active_tab == "approved":
+        where_clauses.append("lr.status='Approved'")
+    elif active_tab == "rejected":
+        where_clauses.append("lr.status='Rejected'")
+
+    if date_filter:
+        where_clauses.append("lr.date=?")
+        args.append(date_filter)
+
+    if where_clauses:
+        base_query += " WHERE " + " AND ".join(where_clauses)
+    base_query += " ORDER BY lr.date DESC, lr.id DESC"
+
+    records = db.execute(base_query, args).fetchall()
+
+    counts = db.execute("""
+        SELECT
+            SUM(CASE WHEN status='Pending' THEN 1 ELSE 0 END) as pending_cnt,
+            SUM(CASE WHEN status='Approved' THEN 1 ELSE 0 END) as approved_cnt,
+            SUM(CASE WHEN status='Rejected' THEN 1 ELSE 0 END) as rejected_cnt,
+            SUM(shortage_hours) as total_shortage_hours
+        FROM late_coming_requests
+    """).fetchone()
+
+    unsubmitted_late_today = db.execute("""
+        SELECT a.*, e.emp_code, e.name as emp_name, e.department, s.name as shift_name, s.start_time as shift_start
+        FROM attendance a
+        JOIN employees e ON e.id=a.emp_id
+        LEFT JOIN shifts s ON s.id=a.shift_id
+        WHERE a.date=? AND a.late=1 AND a.id NOT IN (SELECT att_id FROM late_coming_requests WHERE att_id IS NOT NULL)
+    """, (d2s(t),)).fetchall()
+
+    stats = {
+        "pending": (counts["pending_cnt"] if counts else 0) or 0,
+        "approved": (counts["approved_cnt"] if counts else 0) or 0,
+        "rejected": (counts["rejected_cnt"] if counts else 0) or 0,
+        "total_shortage": round(float((counts["total_shortage_hours"] if counts else 0) or 0.0), 1),
+        "unsubmitted_today": len(unsubmitted_late_today)
+    }
+
+    return render_template(
+        "hr/late_coming.html",
+        active_tab=active_tab,
+        records=records,
+        stats=stats,
+        unsubmitted_late_today=unsubmitted_late_today,
+        today=t,
+        date_filter=date_filter
+    )
+
+
+@bp.route("/late-coming/decide/<int:req_id>", methods=["POST"])
+@hr_required
+def late_coming_decide(req_id):
+    db = get_db()
+    action = request.form.get("status", "Approved").strip()
+    hr_remarks = request.form.get("hr_remarks", "").strip()
+
+    req = db.execute("SELECT * FROM late_coming_requests WHERE id=?", (req_id,)).fetchone()
+    if not req:
+        flash("Late coming request not found.", "err")
+        return redirect(url_for("hr.late_coming"))
+
+    now_ts = d2s(today()) + " " + datetime.now().strftime("%H:%M:%S")
+    db.execute("""
+        UPDATE late_coming_requests
+        SET status=?, hr_remarks=?, decided_by=?, decided_at=?
+        WHERE id=?
+    """, (action, hr_remarks, g.user["id"], now_ts, req_id))
+
+    if action == "Approved":
+        if req["att_id"]:
+            db.execute("UPDATE attendance SET late=0 WHERE id=?", (req["att_id"],))
+        else:
+            db.execute("UPDATE attendance SET late=0 WHERE emp_id=? AND date=?", (req["emp_id"], req["date"]))
+
+    db.commit()
+
+    create_notification(
+        user_id=req["emp_id"],
+        title=f"Late Coming Request {action}",
+        message=f"Your late explanation for {req['date']} was {action} by HR. Remarks: {hr_remarks or 'None'}",
+        kind="ok" if action == "Approved" else "warn",
+        link_url=url_for("emp.history")
+    )
+    audit(f"LATE_COMING_{action.upper()}", "late_coming_requests", str(req_id), hr_remarks)
+    flash(f"Late arrival request marked as {action}.", "ok")
+    return redirect(url_for("hr.late_coming", tab=action.lower()))
+
+
+# ==============================================================================
+# MODULE 5: MONTHLY SALARY CALCULATION – HR MODULE
+# ==============================================================================
+@bp.route("/payroll")
+@hr_required
+def payroll():
+    db, t = get_db(), today()
+    month_param = request.args.get("month", t.strftime("%Y-%m"))
+    parts = month_param.split("-")
+    try:
+        yr = int(parts[0])
+        mo = int(parts[1])
+    except Exception:
+        yr, mo = t.year, t.month
+        month_param = f"{yr:04d}-{mo:02d}"
+
+    records = db.execute("""
+        SELECT p.*, e.emp_code, e.name as emp_name, e.department, e.designation,
+               esp.payment_mode, esp.bank_name, esp.account_no, esp.ifsc_code,
+               appr.name as approved_by_name
+        FROM monthly_payroll p
+        JOIN employees e ON e.id=p.emp_id
+        LEFT JOIN employee_salary_profiles esp ON esp.emp_id=p.emp_id
+        LEFT JOIN employees appr ON appr.id=p.approved_by
+        WHERE p.month=?
+        ORDER BY e.emp_code
+    """, (month_param,)).fetchall()
+
+    total_gross = sum([float(r["gross_salary"] or 0) for r in records])
+    total_net = sum([float(r["net_salary"] or 0) for r in records])
+    total_paid_leave = sum([float(r["paid_leave_days"] or 0) for r in records])
+    total_unpaid_ded = sum([float(r["unpaid_leave_deduction"] or 0) for r in records])
+    total_sunday_pay = sum([float(r["sunday_working_pay"] or 0) for r in records])
+    total_ot_pay = sum([float(r["ot_pay"] or 0) for r in records])
+    approved_count = len([r for r in records if r["status"] in ("Approved", "Paid")])
+    draft_count = len([r for r in records if r["status"] == "Draft"])
+
+    stats = {
+        "count": len(records),
+        "total_gross": round(total_gross, 2),
+        "total_net": round(total_net, 2),
+        "total_paid_leave": round(total_paid_leave, 1),
+        "total_unpaid_ded": round(total_unpaid_ded, 2),
+        "total_sunday_pay": round(total_sunday_pay, 2),
+        "total_ot_pay": round(total_ot_pay, 2),
+        "approved_count": approved_count,
+        "draft_count": draft_count
+    }
+
+    return render_template(
+        "hr/payroll.html",
+        month=month_param,
+        records=records,
+        stats=stats
+    )
+
+
+@bp.route("/payroll/setup", methods=["GET", "POST"])
+@hr_required
+def payroll_setup():
+    db = get_db()
+    if request.method == "POST":
+        emp_ids = request.form.getlist("emp_id")
+        for eid_str in emp_ids:
+            try:
+                eid = int(eid_str)
+                basic = float(request.form.get(f"basic_{eid}") or 25000.0)
+                paid_quota = float(request.form.get(f"quota_{eid}") or 2.0)
+                calc_days = int(request.form.get(f"days_{eid}") or 30)
+                ot_rate = float(request.form.get(f"ot_rate_{eid}") or 0.0)
+                sun_rate = float(request.form.get(f"sun_rate_{eid}") or 0.0)
+                allowance = float(request.form.get(f"allowance_{eid}") or 0.0)
+                deduction = float(request.form.get(f"deduction_{eid}") or 0.0)
+                pay_mode = request.form.get(f"pay_mode_{eid}", "Bank Transfer").strip()
+                bank_name = request.form.get(f"bank_name_{eid}", "").strip()
+                account_no = request.form.get(f"account_no_{eid}", "").strip()
+                ifsc_code = request.form.get(f"ifsc_code_{eid}", "").strip()
+
+                db.execute("""
+                    INSERT INTO employee_salary_profiles
+                    (emp_id, basic_salary, monthly_paid_leave_quota, calculation_days,
+                     ot_hourly_rate, sunday_daily_rate, fixed_allowance, standard_deduction,
+                     payment_mode, bank_name, account_no, ifsc_code, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+5 hours', '+30 minutes'))
+                    ON CONFLICT(emp_id) DO UPDATE SET
+                        basic_salary=excluded.basic_salary,
+                        monthly_paid_leave_quota=excluded.monthly_paid_leave_quota,
+                        calculation_days=excluded.calculation_days,
+                        ot_hourly_rate=excluded.ot_hourly_rate,
+                        sunday_daily_rate=excluded.sunday_daily_rate,
+                        fixed_allowance=excluded.fixed_allowance,
+                        standard_deduction=excluded.standard_deduction,
+                        payment_mode=excluded.payment_mode,
+                        bank_name=excluded.bank_name,
+                        account_no=excluded.account_no,
+                        ifsc_code=excluded.ifsc_code,
+                        updated_at=excluded.updated_at
+                """, (eid, basic, paid_quota, calc_days, ot_rate, sun_rate, allowance, deduction, pay_mode, bank_name, account_no, ifsc_code))
+            except Exception as e:
+                logger.error("Error updating salary profile for emp %s: %s", eid_str, e)
+
+        db.commit()
+        audit("SALARY_SETUP_UPDATE", "employee_salary_profiles", "BULK", f"Updated profiles for {len(emp_ids)} employees")
+        flash("Employee salary profiles updated successfully.", "ok")
+        return redirect(url_for("hr.payroll_setup"))
+
+    profiles = db.execute("""
+        SELECT e.id as emp_id, e.emp_code, e.name as emp_name, e.department, e.designation,
+               COALESCE(esp.basic_salary, 25000.0) as basic_salary,
+               COALESCE(esp.monthly_paid_leave_quota, 2.0) as monthly_paid_leave_quota,
+               COALESCE(esp.calculation_days, 30) as calculation_days,
+               COALESCE(esp.ot_hourly_rate, 0.0) as ot_hourly_rate,
+               COALESCE(esp.sunday_daily_rate, 0.0) as sunday_daily_rate,
+               COALESCE(esp.fixed_allowance, 0.0) as fixed_allowance,
+               COALESCE(esp.standard_deduction, 0.0) as standard_deduction,
+               COALESCE(esp.payment_mode, 'Bank Transfer') as payment_mode,
+               esp.bank_name, esp.account_no, esp.ifsc_code
+        FROM employees e
+        LEFT JOIN employee_salary_profiles esp ON esp.emp_id=e.id
+        WHERE e.active=1 AND e.role='employee'
+        ORDER BY e.emp_code
+    """).fetchall()
+
+    return render_template("hr/payroll_setup.html", profiles=profiles)
+
+
+@bp.route("/payroll/calculate", methods=["POST"])
+@hr_required
+def payroll_calculate():
+    import calendar
+    db = get_db()
+    month_param = request.form.get("month", "").strip()
+    if not month_param or "-" not in month_param:
+        flash("Please select a valid month (YYYY-MM).", "warn")
+        return redirect(url_for("hr.payroll"))
+
+    parts = month_param.split("-")
+    yr = int(parts[0])
+    mo = int(parts[1])
+
+    first_day, last_day = month_range(yr, mo)
+    cal_days = calendar.monthrange(yr, mo)[1]
+
+    active_emps = db.execute("""
+        SELECT e.id, e.emp_code, e.name, e.department, e.designation,
+               COALESCE(esp.basic_salary, 25000.0) as basic_salary,
+               COALESCE(esp.monthly_paid_leave_quota, 2.0) as monthly_paid_leave_quota,
+               COALESCE(esp.calculation_days, 30) as calculation_days,
+               COALESCE(esp.ot_hourly_rate, 0.0) as ot_hourly_rate,
+               COALESCE(esp.sunday_daily_rate, 0.0) as sunday_daily_rate,
+               COALESCE(esp.fixed_allowance, 0.0) as fixed_allowance,
+               COALESCE(esp.standard_deduction, 0.0) as standard_deduction
+        FROM employees e
+        LEFT JOIN employee_salary_profiles esp ON esp.emp_id=e.id
+        WHERE e.active=1 AND e.role='employee'
+    """).fetchall()
+
+    calculated_count = 0
+    now_ts = d2s(today()) + " " + datetime.now().strftime("%H:%M:%S")
+
+    for emp in active_emps:
+        eid = emp["id"]
+        basic_sal = float(emp["basic_salary"])
+        calc_days = int(emp["calculation_days"]) if emp["calculation_days"] else 30
+        per_day = round(basic_sal / calc_days, 2)
+        paid_leave_quota = float(emp["monthly_paid_leave_quota"])
+
+        att_rows = db.execute("""
+            SELECT * FROM attendance
+            WHERE emp_id=? AND date >= ? AND date <= ?
+        """, (eid, d2s(first_day), d2s(last_day))).fetchall()
+
+        present_days = 0.0
+        ot_hours = 0.0
+        late_count = 0
+
+        for a in att_rows:
+            st = a["status"]
+            if st in ("P", "OT", "IN", "MP"):
+                present_days += 1.0
+            elif st == "HD":
+                present_days += 0.5
+            ot_hours += float(a["ot_hours"] or 0.0)
+            if a["late"] == 1:
+                late_count += 1
+
+        leave_rows = db.execute("""
+            SELECT SUM(days) as total_leave_days FROM leaves
+            WHERE emp_id=? AND status='Approved'
+            AND (
+                (from_date >= ? AND from_date <= ?) OR
+                (to_date >= ? AND to_date <= ?)
+            )
+        """, (eid, d2s(first_day), d2s(last_day), d2s(first_day), d2s(last_day))).fetchone()
+        approved_leave_days = float((leave_rows["total_leave_days"] if leave_rows else 0) or 0.0)
+
+        sun_rows = db.execute("""
+            SELECT COUNT(*) as sun_days FROM sunday_working
+            WHERE emp_id=? AND status='Approved'
+            AND sunday_date >= ? AND sunday_date <= ?
+        """, (eid, d2s(first_day), d2s(last_day))).fetchone()
+        sunday_working_days = int((sun_rows["sun_days"] if sun_rows else 0) or 0)
+
+        working_days = max(1, cal_days - 4)
+        unexcused_absent = max(0.0, working_days - (present_days + approved_leave_days))
+        total_absent_days = unexcused_absent
+
+        total_leave_taken = approved_leave_days + unexcused_absent
+        if total_leave_taken <= paid_leave_quota:
+            paid_leave_days = total_leave_taken
+            unpaid_leave_days = 0.0
+            remaining_leave_balance = round(paid_leave_quota - total_leave_taken, 1)
+            unpaid_leave_deduction = 0.0
+        else:
+            paid_leave_days = paid_leave_quota
+            unpaid_leave_days = round(total_leave_taken - paid_leave_quota, 1)
+            remaining_leave_balance = 0.0
+            unpaid_leave_deduction = round(unpaid_leave_days * per_day, 2)
+
+        ot_rate = float(emp["ot_hourly_rate"])
+        if ot_rate <= 0:
+            ot_rate = round((per_day / 8.0) * 1.5, 2)
+        ot_pay = round(ot_hours * ot_rate, 2)
+
+        sun_rate = float(emp["sunday_daily_rate"])
+        if sun_rate <= 0:
+            sun_rate = round(per_day * 1.5, 2)
+        sunday_working_pay = round(sunday_working_days * sun_rate, 2)
+
+        bonus_allowance = float(emp["fixed_allowance"])
+        other_deductions = float(emp["standard_deduction"])
+        late_deduction = 0.0
+
+        gross_salary = round(basic_sal + bonus_allowance + ot_pay + sunday_working_pay, 2)
+        net_salary = round(gross_salary - unpaid_leave_deduction - other_deductions - late_deduction, 2)
+        net_salary = max(0.0, net_salary)
+
+        db.execute("""
+            INSERT INTO monthly_payroll (
+                emp_id, month, basic_salary, per_day_salary, calendar_days, working_days,
+                present_days, absent_days, paid_leave_days, unpaid_leave_days,
+                remaining_leave_balance, sunday_working_days, sunday_working_pay,
+                ot_hours, ot_pay, late_count, late_deduction, unpaid_leave_deduction,
+                other_deductions, bonus_allowance, gross_salary, net_salary,
+                status, calculated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                'Draft', ?
+            )
+            ON CONFLICT(emp_id, month) DO UPDATE SET
+                basic_salary=excluded.basic_salary,
+                per_day_salary=excluded.per_day_salary,
+                calendar_days=excluded.calendar_days,
+                working_days=excluded.working_days,
+                present_days=excluded.present_days,
+                absent_days=excluded.absent_days,
+                paid_leave_days=excluded.paid_leave_days,
+                unpaid_leave_days=excluded.unpaid_leave_days,
+                remaining_leave_balance=excluded.remaining_leave_balance,
+                sunday_working_days=excluded.sunday_working_days,
+                sunday_working_pay=excluded.sunday_working_pay,
+                ot_hours=excluded.ot_hours,
+                ot_pay=excluded.ot_pay,
+                late_count=excluded.late_count,
+                late_deduction=excluded.late_deduction,
+                unpaid_leave_deduction=excluded.unpaid_leave_deduction,
+                other_deductions=excluded.other_deductions,
+                bonus_allowance=excluded.bonus_allowance,
+                gross_salary=excluded.gross_salary,
+                net_salary=excluded.net_salary,
+                calculated_at=excluded.calculated_at
+        """, (
+            eid, month_param, basic_sal, per_day, cal_days, working_days,
+            present_days, total_absent_days, paid_leave_days, unpaid_leave_days,
+            remaining_leave_balance, sunday_working_days, sunday_working_pay,
+            ot_hours, ot_pay, late_count, late_deduction, unpaid_leave_deduction,
+            other_deductions, bonus_allowance, gross_salary, net_salary,
+            now_ts
+        ))
+        calculated_count += 1
+
+    db.commit()
+    audit("PAYROLL_CALCULATE", "monthly_payroll", month_param, f"Calculated payroll for {calculated_count} employees")
+    flash(f"Monthly salary calculation complete for {calculated_count} employees ({month_param}). Ready for HR verification and approval.", "ok")
+    return redirect(url_for("hr.payroll", month=month_param))
+
+
+@bp.route("/payroll/approve/<int:payroll_id>", methods=["POST"])
+@hr_required
+def payroll_approve(payroll_id):
+    db = get_db()
+    action = request.form.get("action", "Approved").strip()
+    remarks = request.form.get("remarks", "").strip()
+
+    rec = db.execute("SELECT * FROM monthly_payroll WHERE id=?", (payroll_id,)).fetchone()
+    if not rec:
+        flash("Payroll record not found.", "err")
+        return redirect(url_for("hr.payroll"))
+
+    now_ts = d2s(today()) + " " + datetime.now().strftime("%H:%M:%S")
+    db.execute("""
+        UPDATE monthly_payroll
+        SET status=?, approved_by=?, approved_at=?, remarks=?
+        WHERE id=?
+    """, (action, g.user["id"], now_ts, remarks, payroll_id))
+
+    db.execute("""
+        INSERT INTO payroll_audit_log (payroll_id, emp_id, action, old_values, new_values, hr_actor_id, reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (payroll_id, rec["emp_id"], f"STATUS_{action.upper()}", rec["status"], action, g.user["id"], remarks))
+
+    db.commit()
+    create_notification(
+        user_id=rec["emp_id"],
+        title=f"Salary Slip {action}",
+        message=f"Your salary statement for {rec['month']} has been marked as {action} by HR.",
+        kind="ok",
+        link_url=url_for("emp.my_salary")
+    )
+    audit(f"PAYROLL_{action.upper()}", "monthly_payroll", str(payroll_id), remarks)
+    flash(f"Payroll record marked as {action}.", "ok")
+    return redirect(url_for("hr.payroll", month=rec["month"]))
+
+
+@bp.route("/payroll/payslip/<int:payroll_id>")
+@hr_required
+def payroll_payslip(payroll_id):
+    db = get_db()
+    rec = db.execute("""
+        SELECT p.*, e.emp_code, e.name as emp_name, e.department, e.designation, e.email, e.phone, e.joined_on,
+               esp.payment_mode, esp.bank_name, esp.account_no, esp.ifsc_code,
+               appr.name as approved_by_name
+        FROM monthly_payroll p
+        JOIN employees e ON e.id=p.emp_id
+        LEFT JOIN employee_salary_profiles esp ON esp.emp_id=p.emp_id
+        LEFT JOIN employees appr ON appr.id=p.approved_by
+        WHERE p.id=?
+    """, (payroll_id,)).fetchone()
+
+    if not rec:
+        flash("Salary slip record not found.", "err")
+        return redirect(url_for("hr.payroll"))
+
+    return render_template("hr/payslip.html", p=rec)
+
+
+@bp.route("/payroll/export")
+@hr_required
+def payroll_export():
+    import csv
+    db = get_db()
+    month_param = request.args.get("month", today().strftime("%Y-%m"))
+    rows = db.execute("""
+        SELECT p.*, e.emp_code, e.name as emp_name, e.department, e.designation,
+               esp.payment_mode, esp.bank_name, esp.account_no, esp.ifsc_code,
+               appr.name as approved_by_name
+        FROM monthly_payroll p
+        JOIN employees e ON e.id=p.emp_id
+        LEFT JOIN employee_salary_profiles esp ON esp.emp_id=p.emp_id
+        LEFT JOIN employees appr ON appr.id=p.approved_by
+        WHERE p.month=?
+        ORDER BY e.emp_code
+    """, (month_param,)).fetchall()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Month", "Employee Code", "Employee Name", "Department", "Designation",
+        "Basic Salary", "Per Day Salary", "Calendar Days", "Working Days",
+        "Present Days", "Absent Days", "Paid Leave", "Unpaid Leave", "Remaining Leave Quota",
+        "Sunday Working Days", "Sunday Working Pay", "OT Hours", "OT Pay",
+        "Late Arrivals", "Unpaid Leave Deduction", "Other Deductions", "Bonus & Allowances",
+        "Gross Salary", "Net Salary", "Status", "Payment Mode", "Bank Name", "Account No", "IFSC",
+        "Approved By", "Approved At"
+    ])
+    for r in rows:
+        writer.writerow([
+            r["month"], r["emp_code"], r["emp_name"], r["department"], r["designation"],
+            r["basic_salary"], r["per_day_salary"], r["calendar_days"], r["working_days"],
+            r["present_days"], r["absent_days"], r["paid_leave_days"], r["unpaid_leave_days"],
+            r["remaining_leave_balance"], r["sunday_working_days"], r["sunday_working_pay"],
+            r["ot_hours"], r["ot_pay"], r["late_count"], r["unpaid_leave_deduction"],
+            r["other_deductions"], r["bonus_allowance"], r["gross_salary"], r["net_salary"],
+            r["status"], r["payment_mode"] or "Bank Transfer", r["bank_name"] or "-",
+            r["account_no"] or "-", r["ifsc_code"] or "-",
+            r["approved_by_name"] or "-", r["approved_at"] or "-"
+        ])
+
+    buf.seek(0)
+    filename = f"sbg_payroll_{month_param}.csv"
+    return send_file(
+        io.BytesIO(buf.getvalue().encode("utf-8")),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=filename
+    )
 
 

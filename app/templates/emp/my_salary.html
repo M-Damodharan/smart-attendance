@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}My Salary &amp; Payslips · SBG{% endblock %}
+{% block content %}
+<div class="container" style="max-width:960px;margin:0 auto;padding-bottom:2rem;">
+
+  <!-- Header -->
+  <div class="ph" style="margin-bottom:1.25rem;">
+    <div>
+      <h2 style="margin:0;">My Salary &amp; Compensation Statements</h2>
+      <span class="muted small">Sri Balaji Gears &bull; Employee Self-Service Salary Portal</span>
+    </div>
+  </div>
+
+  <!-- Salary Profile Overview Card -->
+  {% if profile %}
+  <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;border-radius:12px;background:linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.04));border:1px solid rgba(16,185,129,0.3);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="font-weight:700;font-size:0.82rem;color:#10b981;text-transform:uppercase;letter-spacing:0.5px;">My Compensation Structure</span>
+        <h3 style="margin:2px 0 0;font-size:1.3rem;">Monthly Basic: ₹{{ "{:,.2f}".format(profile.basic_salary) }}</h3>
+      </div>
+      <span class="badge b-approved" style="font-size:0.8rem;">Active Profile</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:10px;font-size:0.86rem;margin-top:8px;">
+      <div><span class="muted small">Paid Leave Quota:</span> <b>{{ profile.monthly_paid_leave_quota }} Days/mo</b></div>
+      <div><span class="muted small">Calculation Basis:</span> <b>{{ profile.calculation_days }} Days</b></div>
+      <div><span class="muted small">Payment Mode:</span> <b>{{ profile.payment_mode or 'Bank Transfer' }}</b></div>
+      <div><span class="muted small">Bank Account:</span> <b>{{ profile.account_no or 'On File' }}</b></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Monthly Salary Slips List -->
+  <div class="card" style="padding:1.25rem;border-radius:12px;">
+    <h3 style="margin:0 0 12px;font-size:1.05rem;">My Monthly Salary Slips</h3>
+
+    {% if not rows %}
+    <div style="text-align:center;padding:2.5rem 1rem;background:var(--bg-surface);border-radius:8px;border:1px dashed var(--border-default);">
+      <div style="font-size:2.5rem;margin-bottom:8px;">📄</div>
+      <b style="font-size:1rem;display:block;">No Salary Slips Generated Yet</b>
+      <span class="muted small">Monthly salary statements will appear here once processed and approved by HR.</span>
+    </div>
+    {% else %}
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      {% for r in rows %}
+      <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <b style="font-size:1.1rem;">{{ r.month }}</b>
+            {% if r.status in ('Approved', 'Paid') %}
+              <span class="badge b-approved">✓ {{ r.status }}</span>
+            {% else %}
+              <span class="badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;">{{ r.status }}</span>
+            {% endif %}
+          </div>
+          <div class="muted small" style="display:flex;gap:12px;flex-wrap:wrap;">
+            <span>Present: <b>{{ r.present_days }}d</b></span>
+            <span>Paid Leave: <b>{{ r.paid_leave_days }}d</b></span>
+            <span>Sunday Working: <b>{{ r.sunday_working_days }}d</b></span>
+            <span>OT Hours: <b>{{ r.ot_hours }}h</b></span>
+          </div>
+        </div>
+
+        <div style="text-align:right;">
+          <div style="margin-bottom:6px;">
+            <span class="muted small" style="display:block;">Net Payable:</span>
+            <b style="color:#10b981;font-size:1.35rem;">₹{{ "{:,.2f}".format(r.net_salary) }}</b>
+          </div>
+          <a href="{{ url_for('emp.my_payslip', payroll_id=r.id) }}" class="btn sm primary">
+            📄 View Official Payslip &rarr;
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

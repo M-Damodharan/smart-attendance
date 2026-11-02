@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}Sunday Working Duty Management · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1440px;margin:0 auto;padding-bottom:2rem;">
+
+  <!-- Header & Actions -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;background:var(--bg-card);padding:1rem 1.25rem;border-radius:12px;border:1px solid var(--border-default);box-shadow:var(--shadow-sm);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="background:linear-gradient(135deg, #8b5cf6, #6d28d9);width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.4rem;font-weight:900;">
+        📅
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.35rem;display:flex;align-items:center;gap:8px;">
+          <span>Sunday Working Duty Management</span>
+          <span class="badge b-approved" style="font-size:0.72rem;">● Active Module</span>
+        </h2>
+        <span class="muted small">Sri Balaji Gears &bull; Shift Scheduling, Overtime &amp; Sunday Duty Approvals</span>
+      </div>
+    </div>
+
+    <!-- Sunday Date Selector & Action Buttons -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <form method="get" action="{{ url_for('hr.sunday_working') }}" style="display:flex;align-items:center;gap:6px;background:var(--bg-surface);padding:4px 10px;border-radius:8px;border:1px solid var(--border-default);">
+        <label for="sunday_date" style="font-size:0.8rem;font-weight:700;color:var(--text-secondary);margin:0;">Sunday:</label>
+        <input type="date" id="sunday_date" name="date" value="{{ sunday_date.strftime('%Y-%m-%d') }}" style="background:transparent;border:none;color:var(--text-main);font-size:0.85rem;font-weight:600;outline:none;" onchange="this.form.submit()">
+      </form>
+
+      <button type="button" class="btn sm primary" onclick="openAssignModal()" style="background:linear-gradient(135deg, #8b5cf6, #7c3aed);border-color:#7c3aed;font-weight:700;">
+        <span>+ Assign Sunday Shift</span>
+      </button>
+
+      <a href="{{ url_for('hr.sunday_working_export', date=sunday_date.strftime('%Y-%m-%d')) }}" class="btn sm">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export CSV</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Cards Ribbon -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:1.25rem;">
+    <div class="card" style="padding:1rem;border-left:4px solid #8b5cf6;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Assigned for Sunday</span>
+      <div style="font-size:1.85rem;font-weight:900;color:var(--text-main);margin-top:4px;">{{ stats.assigned }}</div>
+      <span class="small" style="color:#8b5cf6;font-weight:600;">{{ sunday_date.strftime('%d %B %Y') }}</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #10b981;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">HR Approved</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#10b981;margin-top:4px;">{{ stats.approved }}</div>
+      <span class="small" style="color:#10b981;font-weight:600;">Eligible for Sunday Pay</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #f59e0b;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Pending Approval</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#f59e0b;margin-top:4px;">{{ stats.pending }}</div>
+      <span class="small" style="color:#f59e0b;font-weight:600;">Awaiting HR Review</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #06b6d4;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Sunday Hours</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#06b6d4;margin-top:4px;">{{ stats.hours }}h</div>
+      <span class="small" style="color:#06b6d4;font-weight:600;">Actual Hours Logged</span>
+    </div>
+  </div>
+
+  <!-- Assigned Sunday Duty Table -->
+  <div class="card" style="padding:1.25rem;border-radius:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <h3 style="margin:0;font-size:1.05rem;">Sunday Duty Workforce Ledger &bull; {{ sunday_date.strftime('%A, %d %B %Y') }}</h3>
+        <span class="muted small">List of employees designated for Sunday operations</span>
+      </div>
+    </div>
+
+    {% if not records %}
+    <div style="text-align:center;padding:3rem 1rem;background:var(--bg-surface);border-radius:8px;border:1px dashed var(--border-default);">
+      <div style="font-size:2.5rem;margin-bottom:8px;">📅</div>
+      <b style="font-size:1.1rem;display:block;">No Employees Assigned for this Sunday</b>
+      <span class="muted small" style="display:block;margin:4px 0 14px;">Schedule employees for Sunday shift to enable check-in, tracking, and Sunday duty pay.</span>
+      <button type="button" class="btn primary sm" onclick="openAssignModal()">+ Schedule Employees for Sunday</button>
+    </div>
+    {% else %}
+    <div style="overflow-x:auto;">
+      <table class="table" style="width:100%;margin:0;font-size:0.88rem;">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Department &amp; Shift</th>
+            <th>Duty Type</th>
+            <th>Punch In / Out</th>
+            <th style="text-align:center;">Work Hours</th>
+            <th style="text-align:center;">OT Hours</th>
+            <th>Status</th>
+            <th>HR Remarks</th>
+            <th>Approved By</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td>
+              <b>{{ r.emp_name }}</b><br>
+              <code style="font-size:0.75rem;color:var(--text-muted)">{{ r.emp_code }}</code>
+            </td>
+            <td>
+              <span>{{ r.department or 'General' }}</span><br>
+              <span class="muted small">{{ r.shift_name or 'General Shift' }}</span>
+            </td>
+            <td>
+              <span class="badge" style="background:var(--bg-surface-hover);font-weight:700;">{{ r.duty_type }}</span>
+            </td>
+            <td>
+              {% if r.check_in %}
+                <span style="color:#10b981;font-weight:700;">IN: {{ r.check_in[11:16] }}</span><br>
+                <span style="color:var(--text-secondary);font-weight:600;">OUT: {{ r.check_out[11:16] if r.check_out else 'In Progress' }}</span>
+              {% else %}
+                <span class="muted small">Not Punched</span>
+              {% endif %}
+            </td>
+            <td style="text-align:center;font-weight:800;">
+              {{ r.work_hours }}h
+            </td>
+            <td style="text-align:center;font-weight:800;color:#f59e0b;">
+              {{ r.ot_hours }}h
+            </td>
+            <td>
+              {% if r.status == 'Approved' %}
+                <span class="badge b-approved">✓ Approved</span>
+              {% elif r.status == 'Completed' %}
+                <span class="badge" style="background:rgba(6,182,212,0.15);color:#06b6d4;font-weight:700;">Completed</span>
+              {% elif r.status == 'Rejected' %}
+                <span class="badge b-rejected">✗ Rejected</span>
+              {% else %}
+                <span class="badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;font-weight:700;">Scheduled</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="muted small">{{ r.hr_remarks or '-' }}</span>
+            </td>
+            <td>
+              {% if r.approved_by_name %}
+                <b>{{ r.approved_by_name }}</b><br>
+                <span class="muted small">{{ r.approved_at[:10] }}</span>
+              {% else %}
+                <span class="muted small">-</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <div style="display:inline-flex;gap:4px;">
+                <!-- Manual Punch Trigger -->
+                <button type="button" class="btn sm" onclick="openPunchModal({{ r.id }}, '{{ r.emp_name }}', '{{ r.check_in or '' }}', '{{ r.check_out or '' }}', {{ r.work_hours }}, {{ r.ot_hours }}, '{{ r.status }}')" title="Record / Adjust Punch">
+                  ✏️
+                </button>
+
+                <!-- Approval Form -->
+                {% if r.status != 'Approved' %}
+                <form method="post" action="{{ url_for('hr.sunday_working_approve', sw_id=r.id) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="action" value="Approved">
+                  <button type="submit" class="btn sm primary" style="background:#10b981;border-color:#10b981;font-weight:700;" title="Approve Sunday Duty">
+                    Approve
+                  </button>
+                </form>
+                {% endif %}
+
+                {% if r.status != 'Rejected' %}
+                <form method="post" action="{{ url_for('hr.sunday_working_approve', sw_id=r.id) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="action" value="Rejected">
+                  <button type="submit" class="btn sm" style="color:#ef4444;border-color:#ef4444;" title="Reject Sunday Duty">
+                    Reject
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Modal: Assign Sunday Duty -->
+<div id="assignModal" class="modal-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:none;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border-default);box-shadow:var(--shadow-lg);border-radius:14px;max-width:540px;width:100%;overflow:hidden;">
+    <div style="background:var(--bg-surface);padding:14px 18px;border-bottom:1px solid var(--border-default);display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;font-size:1.1rem;font-weight:800;">📅 Assign Sunday Duty Shift</h3>
+      <button type="button" onclick="closeAssignModal()" style="background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+    <form method="post" action="{{ url_for('hr.sunday_working_assign') }}" style="padding:18px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label for="modal_sunday_date" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Sunday Date *</label>
+        <input type="date" id="modal_sunday_date" name="sunday_date" value="{{ sunday_date.strftime('%Y-%m-%d') }}" required class="input" style="width:100%;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Select Employees * (Hold Ctrl/Cmd for multiple)</label>
+        <select name="emp_ids" multiple required class="input" style="width:100%;height:130px;">
+          {% for e in employees %}
+          <option value="{{ e.id }}">{{ e.emp_code }} — {{ e.name }} ({{ e.department or 'General' }})</option>
+          {% endfor %}
+        </select>
+        <span class="muted small" style="display:block;margin-top:2px;">Select one or more employees assigned to work this Sunday.</span>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label for="modal_shift_id" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Assigned Shift</label>
+        <select id="modal_shift_id" name="shift_id" class="input" style="width:100%;">
+          {% for s in shifts %}
+          <option value="{{ s.id }}">{{ s.name }} ({{ s.start_time }} – {{ s.end_time }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label for="duty_type" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Duty Type</label>
+        <select id="duty_type" name="duty_type" class="input" style="width:100%;">
+          <option value="Full Day">Full Day Sunday Shift</option>
+          <option value="Half Day">Half Day Shift</option>
+          <option value="Emergency Maintenance">Emergency Maintenance</option>
+          <option value="Production Overhaul">Production Overhaul</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:16px;">
+        <label for="remarks" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">HR Instructions / Remarks</label>
+        <input type="text" id="remarks" name="remarks" placeholder="e.g. Critical gear hobbing production run" class="input" style="width:100%;">
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border-default);padding-top:14px;">
+        <button type="button" class="btn sm" onclick="closeAssignModal()">Cancel</button>
+        <button type="submit" class="btn sm primary">Assign &amp; Notify Employees</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Record / Adjust Punch -->
+<div id="punchModal" class="modal-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;display:none;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border-default);box-shadow:var(--shadow-lg);border-radius:14px;max-width:440px;width:100%;overflow:hidden;">
+    <div style="background:var(--bg-surface);padding:14px 18px;border-bottom:1px solid var(--border-default);display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;font-size:1.1rem;font-weight:800;">✏️ Record Sunday Punch Details</h3>
+      <button type="button" onclick="closePunchModal()" style="background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+    <form method="post" action="{{ url_for('hr.sunday_working_record_punch') }}" style="padding:18px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" id="p_sw_id" name="sw_id" value="">
+
+      <div style="margin-bottom:12px;">
+        <span class="muted small">Employee:</span>
+        <b id="p_emp_name" style="display:block;font-size:1rem;">-</b>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label for="p_cin" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Check-In Time</label>
+        <input type="text" id="p_cin" name="check_in" placeholder="YYYY-MM-DD HH:MM:SS" class="input" style="width:100%;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label for="p_cout" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Check-Out Time</label>
+        <input type="text" id="p_cout" name="check_out" placeholder="YYYY-MM-DD HH:MM:SS" class="input" style="width:100%;">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div class="form-group">
+          <label for="p_work_h" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Work Hours</label>
+          <input type="number" step="0.1" id="p_work_h" name="work_hours" class="input" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label for="p_ot_h" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">OT Hours</label>
+          <input type="number" step="0.1" id="p_ot_h" name="ot_hours" class="input" style="width:100%;">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:16px;">
+        <label for="p_status" style="font-weight:700;font-size:0.85rem;display:block;margin-bottom:4px;">Status</label>
+        <select id="p_status" name="status" class="input" style="width:100%;">
+          <option value="Completed">Completed</option>
+          <option value="Approved">Approved</option>
+          <option value="Scheduled">Scheduled</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border-default);padding-top:14px;">
+        <button type="button" class="btn sm" onclick="closePunchModal()">Cancel</button>
+        <button type="submit" class="btn sm primary">Save Punch Details</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function openAssignModal() {
+    document.getElementById('assignModal').style.display = 'flex';
+  }
+  function closeAssignModal() {
+    document.getElementById('assignModal').style.display = 'none';
+  }
+
+  function openPunchModal(swId, empName, cin, cout, workH, otH, status) {
+    document.getElementById('p_sw_id').value = swId;
+    document.getElementById('p_emp_name').textContent = empName;
+    document.getElementById('p_cin').value = cin;
+    document.getElementById('p_cout').value = cout;
+    document.getElementById('p_work_h').value = workH;
+    document.getElementById('p_ot_h').value = otH;
+    document.getElementById('p_status').value = status;
+    document.getElementById('punchModal').style.display = 'flex';
+  }
+  function closePunchModal() {
+    document.getElementById('punchModal').style.display = 'none';
+  }
+</script>
+{% endblock %}

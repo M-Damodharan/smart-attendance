@@ -292,6 +292,119 @@ CREATE TABLE IF NOT EXISTS durable_photos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_durable_photos_emp ON durable_photos(emp_code);
+
+CREATE TABLE IF NOT EXISTS sunday_working (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    sunday_date TEXT NOT NULL,
+    shift_id INTEGER REFERENCES shifts(id),
+    duty_type TEXT NOT NULL DEFAULT 'Full Day',
+    check_in TEXT,
+    check_out TEXT,
+    work_hours REAL NOT NULL DEFAULT 0.0,
+    ot_hours REAL NOT NULL DEFAULT 0.0,
+    status TEXT NOT NULL DEFAULT 'Scheduled',
+    hr_remarks TEXT,
+    approved_by INTEGER REFERENCES employees(id),
+    approved_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    UNIQUE(emp_id, sunday_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sunday_date ON sunday_working(sunday_date);
+CREATE INDEX IF NOT EXISTS idx_sunday_emp ON sunday_working(emp_id, sunday_date);
+CREATE INDEX IF NOT EXISTS idx_sunday_status ON sunday_working(status);
+
+CREATE TABLE IF NOT EXISTS late_coming_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    att_id INTEGER REFERENCES attendance(id),
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    date TEXT NOT NULL,
+    shift_id INTEGER REFERENCES shifts(id),
+    check_in TEXT,
+    late_minutes INTEGER NOT NULL DEFAULT 0,
+    work_hours REAL NOT NULL DEFAULT 0.0,
+    shortage_hours REAL NOT NULL DEFAULT 0.0,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Pending',
+    hr_remarks TEXT,
+    decided_by INTEGER REFERENCES employees(id),
+    decided_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_late_req_emp ON late_coming_requests(emp_id, date);
+CREATE INDEX IF NOT EXISTS idx_late_req_status ON late_coming_requests(status);
+CREATE INDEX IF NOT EXISTS idx_late_req_date ON late_coming_requests(date);
+
+CREATE TABLE IF NOT EXISTS employee_salary_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emp_id INTEGER NOT NULL UNIQUE REFERENCES employees(id),
+    basic_salary REAL NOT NULL DEFAULT 25000.0,
+    monthly_paid_leave_quota REAL NOT NULL DEFAULT 2.0,
+    calculation_days INTEGER NOT NULL DEFAULT 30,
+    ot_hourly_rate REAL NOT NULL DEFAULT 0.0,
+    sunday_daily_rate REAL NOT NULL DEFAULT 0.0,
+    fixed_allowance REAL NOT NULL DEFAULT 0.0,
+    standard_deduction REAL NOT NULL DEFAULT 0.0,
+    payment_mode TEXT NOT NULL DEFAULT 'Bank Transfer',
+    bank_name TEXT,
+    account_no TEXT,
+    ifsc_code TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_salary_profiles_emp ON employee_salary_profiles(emp_id);
+
+CREATE TABLE IF NOT EXISTS monthly_payroll (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    month TEXT NOT NULL,
+    basic_salary REAL NOT NULL DEFAULT 0.0,
+    per_day_salary REAL NOT NULL DEFAULT 0.0,
+    calendar_days INTEGER NOT NULL DEFAULT 30,
+    working_days INTEGER NOT NULL DEFAULT 26,
+    present_days REAL NOT NULL DEFAULT 0.0,
+    absent_days REAL NOT NULL DEFAULT 0.0,
+    paid_leave_days REAL NOT NULL DEFAULT 0.0,
+    unpaid_leave_days REAL NOT NULL DEFAULT 0.0,
+    remaining_leave_balance REAL NOT NULL DEFAULT 0.0,
+    sunday_working_days INTEGER NOT NULL DEFAULT 0,
+    sunday_working_pay REAL NOT NULL DEFAULT 0.0,
+    ot_hours REAL NOT NULL DEFAULT 0.0,
+    ot_pay REAL NOT NULL DEFAULT 0.0,
+    late_count INTEGER NOT NULL DEFAULT 0,
+    late_deduction REAL NOT NULL DEFAULT 0.0,
+    unpaid_leave_deduction REAL NOT NULL DEFAULT 0.0,
+    other_deductions REAL NOT NULL DEFAULT 0.0,
+    bonus_allowance REAL NOT NULL DEFAULT 0.0,
+    gross_salary REAL NOT NULL DEFAULT 0.0,
+    net_salary REAL NOT NULL DEFAULT 0.0,
+    status TEXT NOT NULL DEFAULT 'Draft',
+    calculated_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    approved_by INTEGER REFERENCES employees(id),
+    approved_at TEXT,
+    remarks TEXT,
+    UNIQUE(emp_id, month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payroll_emp_month ON monthly_payroll(emp_id, month);
+CREATE INDEX IF NOT EXISTS idx_payroll_month ON monthly_payroll(month);
+CREATE INDEX IF NOT EXISTS idx_payroll_status ON monthly_payroll(status);
+
+CREATE TABLE IF NOT EXISTS payroll_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payroll_id INTEGER NOT NULL REFERENCES monthly_payroll(id),
+    emp_id INTEGER NOT NULL REFERENCES employees(id),
+    action TEXT NOT NULL,
+    old_values TEXT,
+    new_values TEXT,
+    hr_actor_id INTEGER REFERENCES employees(id),
+    reason TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_payroll_audit_p ON payroll_audit_log(payroll_id);
 """
 
 
@@ -613,6 +726,12 @@ def init_db(app):
     """)
     con.execute("CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, status);")
     con.execute("CREATE INDEX IF NOT EXISTS idx_notif_role ON notifications(target_role, status);")
+
+    # Seed default salary profiles for active employees if missing
+    con.execute("""
+        INSERT OR IGNORE INTO employee_salary_profiles (emp_id, basic_salary, monthly_paid_leave_quota, calculation_days)
+        SELECT id, 25000.0, 2.0, 30 FROM employees WHERE active = 1
+    """)
 
     if app.config["DEMO_DATA"] and con.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == 0:
         _seed_demo(con)

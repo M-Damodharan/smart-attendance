@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+{% block title %}Power BI Attendance Analytics · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="powerbi-container" style="max-width:1440px;margin:0 auto;padding-bottom:2rem;">
+
+  <!-- Power BI Top Navigation & Header Bar -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;background:var(--bg-card);padding:1rem 1.25rem;border-radius:12px;border:1px solid var(--border-default);box-shadow:var(--shadow-sm);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="background:linear-gradient(135deg, #f59e0b, #d97706);width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.4rem;font-weight:900;">
+        📊
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.35rem;display:flex;align-items:center;gap:8px;">
+          <span>Daily Attendance — Power BI Dashboard</span>
+          <span class="badge b-approved" style="font-size:0.72rem;vertical-align:middle;">● Live Sync</span>
+        </h2>
+        <span class="muted small">Sri Balaji Gears &bull; Real-Time Attendance Intelligence &amp; Analytics</span>
+      </div>
+    </div>
+
+    <!-- Date Filter & Quick Actions -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;background:var(--bg-surface);padding:4px 10px;border-radius:8px;border:1px solid var(--border-default);">
+        <label for="pbi-date-picker" style="font-size:0.8rem;font-weight:700;color:var(--text-secondary);margin:0;">Date:</label>
+        <input type="date" id="pbi-date-picker" value="{{ today.strftime('%Y-%m-%d') }}" style="background:transparent;border:none;color:var(--text-main);font-size:0.85rem;font-weight:600;outline:none;" onchange="loadAnalytics()">
+      </div>
+
+      <button type="button" class="btn sm" onclick="loadAnalytics()" title="Refresh live telemetry">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <span>Refresh</span>
+      </button>
+
+      <button type="button" class="btn sm" onclick="window.print()" title="Print Dashboard / Export PDF">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span>Export Report</span>
+      </button>
+
+      <a href="{{ url_for('hr.dashboard') }}" class="btn sm primary">
+        <span>Executive Dashboard &rarr;</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Power BI KPI Cards Ribbon -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:12px;margin-bottom:1.25rem;">
+    <!-- Total Employees -->
+    <div class="card" style="padding:1rem;border-left:4px solid #3b82f6;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Employees</span>
+      <div id="kpi-total" style="font-size:1.85rem;font-weight:900;color:var(--text-main);margin-top:4px;">{{ total_emps }}</div>
+      <span class="small" style="color:#3b82f6;font-weight:600;">100% Workforce</span>
+    </div>
+
+    <!-- Present -->
+    <div class="card" style="padding:1rem;border-left:4px solid #10b981;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Present / On Duty</span>
+      <div id="kpi-present" style="font-size:1.85rem;font-weight:900;color:#10b981;margin-top:4px;">--</div>
+      <span id="kpi-present-pct" class="small" style="color:#10b981;font-weight:700;">--% Attended</span>
+    </div>
+
+    <!-- Absent -->
+    <div class="card" style="padding:1rem;border-left:4px solid #ef4444;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Absent / Unpunched</span>
+      <div id="kpi-absent" style="font-size:1.85rem;font-weight:900;color:#ef4444;margin-top:4px;">--</div>
+      <span id="kpi-absent-pct" class="small" style="color:#ef4444;font-weight:700;">--% Absenteeism</span>
+    </div>
+
+    <!-- Late Arrivals -->
+    <div class="card" style="padding:1rem;border-left:4px solid #f59e0b;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Late Coming</span>
+      <div id="kpi-late" style="font-size:1.85rem;font-weight:900;color:#f59e0b;margin-top:4px;">--</div>
+      <span class="small" style="color:#f59e0b;font-weight:600;">Punctuality Watch</span>
+    </div>
+
+    <!-- Half-Day -->
+    <div class="card" style="padding:1rem;border-left:4px solid #8b5cf6;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Half-Day (HD)</span>
+      <div id="kpi-halfday" style="font-size:1.85rem;font-weight:900;color:#8b5cf6;margin-top:4px;">--</div>
+      <span class="small" style="color:#8b5cf6;font-weight:600;">Early Departure</span>
+    </div>
+
+    <!-- Currently Working -->
+    <div class="card" style="padding:1rem;border-left:4px solid #06b6d4;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Currently Working</span>
+      <div id="kpi-working" style="font-size:1.85rem;font-weight:900;color:#06b6d4;margin-top:4px;">--</div>
+      <span class="small" style="color:#06b6d4;font-weight:600;">On Factory Floor</span>
+    </div>
+  </div>
+
+  <!-- ROW 1: Separate Present and Absent Graphs (Requested Specification) -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1.25rem;">
+    <!-- Present Trend Graph -->
+    <div class="card" style="padding:1.25rem;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;color:#10b981;">📈 Present Attendance Trend</h3>
+          <span class="muted small">Daily Present employee count (Past 30 Days)</span>
+        </div>
+        <span class="badge" style="background:rgba(16,185,129,0.15);color:#10b981;font-weight:700;">Live Present Metric</span>
+      </div>
+      <div style="position:relative;height:240px;width:100%;">
+        <canvas id="presentTrendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Absent Trend Graph -->
+    <div class="card" style="padding:1.25rem;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;color:#ef4444;">📉 Absenteeism Volume Trend</h3>
+          <span class="muted small">Daily Absent staff volume (Past 30 Days)</span>
+        </div>
+        <span class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;font-weight:700;">Absence Tracking</span>
+      </div>
+      <div style="position:relative;height:240px;width:100%;">
+        <canvas id="absentTrendChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 2: Daily Hourly Inflow & 7-Day Multi-Metric Breakdown -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1.25rem;">
+    <!-- Daily Hourly Distribution Graph -->
+    <div class="card" style="padding:1.25rem;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;">⏰ Daily Punch-In Hourly Inflow</h3>
+          <span class="muted small">Distribution of punch-ins across 06:00 to 22:00</span>
+        </div>
+        <span class="badge" style="background:var(--bg-surface-hover);color:var(--text-secondary);font-weight:600;">Today</span>
+      </div>
+      <div style="position:relative;height:240px;width:100%;">
+        <canvas id="hourlyInflowChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Weekly 7-Day Multi-Metric Trend -->
+    <div class="card" style="padding:1.25rem;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;">📅 Weekly Attendance Overview</h3>
+          <span class="muted small">Past 7 Days: Present vs Absent vs Late vs Half-Day</span>
+        </div>
+        <span class="badge" style="background:var(--bg-surface-hover);color:var(--brand-accent);font-weight:700;">7-Day Summary</span>
+      </div>
+      <div style="position:relative;height:240px;width:100%;">
+        <canvas id="weeklySummaryChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 3: Department-Wise and Shift-Wise Attendance Reports -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1.25rem;">
+    <!-- Department-Wise Report & Chart -->
+    <div class="card" style="padding:1.25rem;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;">🏢 Department-Wise Attendance</h3>
+          <span class="muted small">Attendance rate and presence across all departments</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:170px 1fr;gap:16px;align-items:center;">
+        <div style="position:relative;height:170px;width:170px;margin:0 auto;">
+          <canvas id="deptDoughnutChart"></canvas>
+        </div>
+        <div id="dept-progress-list" style="display:flex;flex-direction:column;gap:10px;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Shift-Wise Attendance Report -->
+    <div class="card" style="padding:1.25rem;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;">⚡ Shift-Wise Attendance Report</h3>
+          <span class="muted small">Scheduled vs Present by assigned shift</span>
+        </div>
+        <a href="{{ url_for('hr.shifts') }}" class="muted small" style="color:var(--brand-accent);">Manage Shifts &rarr;</a>
+      </div>
+      <div id="shift-progress-list" style="display:flex;flex-direction:column;gap:12px;margin-top:6px;">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Live Telemetry Ledger Table -->
+  <div class="card" style="padding:1.25rem;border-radius:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <h3 style="margin:0;font-size:1.05rem;">📋 Department-Wise Attendance Summary Register</h3>
+        <span class="muted small">Comprehensive live departmental metrics &bull; Calculated in real-time</span>
+      </div>
+      <a href="{{ url_for('hr.attendance') }}" class="btn sm">
+        <span>View Full Attendance Register &rarr;</span>
+      </a>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="table" style="width:100%;margin:0;font-size:0.88rem;">
+        <thead>
+          <tr>
+            <th>Department</th>
+            <th style="text-align:center;">Total Staff</th>
+            <th style="text-align:center;">Present</th>
+            <th style="text-align:center;">Absent</th>
+            <th style="text-align:center;">Late Arrivals</th>
+            <th style="text-align:center;">Half-Day</th>
+            <th>Attendance Rate %</th>
+          </tr>
+        </thead>
+        <tbody id="dept-table-body">
+          <tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">Loading real-time departmental telemetry...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script>
+  let presentChart = null;
+  let absentChart = null;
+  let hourlyChart = null;
+  let weeklyChart = null;
+  let deptChart = null;
+
+  async function loadAnalytics() {
+    const dateInput = document.getElementById('pbi-date-picker');
+    const selDate = dateInput ? dateInput.value : '';
+    try {
+      const resp = await fetch(`{{ url_for('hr.api_powerbi_analytics') }}?date=${encodeURIComponent(selDate)}`);
+      const data = await resp.json();
+      if (!data.success) {
+        console.error('Analytics failed:', data);
+        return;
+      }
+      renderKPIs(data.kpis);
+      renderPresentTrend(data.monthly);
+      renderAbsentTrend(data.monthly);
+      renderHourlyInflow(data.daily_hourly);
+      renderWeeklySummary(data.weekly);
+      renderDepartments(data.departments);
+      renderShifts(data.shifts);
+    } catch (e) {
+      console.error('Error fetching analytics:', e);
+    }
+  }
+
+  function renderKPIs(kpis) {
+    document.getElementById('kpi-total').textContent = kpis.total_employees;
+    document.getElementById('kpi-present').textContent = kpis.present;
+    document.getElementById('kpi-present-pct').textContent = `${kpis.present_pct}% Attended`;
+    document.getElementById('kpi-absent').textContent = kpis.absent;
+    document.getElementById('kpi-absent-pct').textContent = `${kpis.absent_pct}% Absenteeism`;
+    document.getElementById('kpi-late').textContent = kpis.late;
+    document.getElementById('kpi-halfday').textContent = kpis.half_day;
+    document.getElementById('kpi-working').textContent = kpis.working;
+  }
+
+  function renderPresentTrend(monthly) {
+    const ctx = document.getElementById('presentTrendChart');
+    if (!ctx) return;
+    const labels = monthly.map(m => m.day);
+    const values = monthly.map(m => m.present);
+
+    if (presentChart) presentChart.destroy();
+    presentChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Present Employees',
+          data: values,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.12)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 2.5,
+          pointHoverRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+          y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { precision: 0, font: { size: 10 }, color: '#94a3b8' } }
+        }
+      }
+    });
+  }
+
+  function renderAbsentTrend(monthly) {
+    const ctx = document.getElementById('absentTrendChart');
+    if (!ctx) return;
+    const labels = monthly.map(m => m.day);
+    const values = monthly.map(m => m.absent);
+
+    if (absentChart) absentChart.destroy();
+    absentChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Absent Staff',
+          data: values,
+          backgroundColor: 'rgba(239, 68, 68, 0.65)',
+          hoverBackgroundColor: '#ef4444',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+          y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { precision: 0, font: { size: 10 }, color: '#94a3b8' } }
+        }
+      }
+    });
+  }
+
+  function renderHourlyInflow(hourly) {
+    const ctx = document.getElementById('hourlyInflowChart');
+    if (!ctx) return;
+    if (hourlyChart) hourlyChart.destroy();
+
+    hourlyChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: hourly.labels,
+        datasets: [{
+          label: 'Punch-Ins',
+          data: hourly.values,
+          backgroundColor: 'rgba(59, 130, 246, 0.7)',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#94a3b8' } },
+          y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { precision: 0, font: { size: 10 }, color: '#94a3b8' } }
+        }
+      }
+    });
+  }
+
+  function renderWeeklySummary(weekly) {
+    const ctx = document.getElementById('weeklySummaryChart');
+    if (!ctx) return;
+    if (weeklyChart) weeklyChart.destroy();
+
+    const labels = weekly.map(w => `${w.day} (${w.date.slice(5)})`);
+    weeklyChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Present', data: weekly.map(w => w.present), backgroundColor: '#10b981', borderRadius: 3 },
+          { label: 'Absent', data: weekly.map(w => w.absent), backgroundColor: '#ef4444', borderRadius: 3 },
+          { label: 'Late', data: weekly.map(w => w.late), backgroundColor: '#f59e0b', borderRadius: 3 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 }, color: '#94a3b8' } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#94a3b8' } },
+          y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { precision: 0, font: { size: 10 }, color: '#94a3b8' } }
+        }
+      }
+    });
+  }
+
+  function renderDepartments(depts) {
+    const progList = document.getElementById('dept-progress-list');
+    const tableBody = document.getElementById('dept-table-body');
+    const doughnutCtx = document.getElementById('deptDoughnutChart');
+
+    if (progList) {
+      progList.innerHTML = depts.map(d => `
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:0.84rem;margin-bottom:3px;">
+            <b>${d.name}</b>
+            <span style="font-weight:700;color:var(--brand-accent);">${d.present}/${d.total} (${d.pct}%)</span>
+          </div>
+          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+            <div style="width:${d.pct}%;height:100%;background:linear-gradient(90deg, #10b981, #059669);border-radius:3px;"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    if (tableBody) {
+      tableBody.innerHTML = depts.map(d => `
+        <tr>
+          <td><b>${d.name}</b></td>
+          <td style="text-align:center;"><b>${d.total}</b></td>
+          <td style="text-align:center;color:#10b981;font-weight:800;">${d.present}</td>
+          <td style="text-align:center;color:#ef4444;font-weight:700;">${d.absent}</td>
+          <td style="text-align:center;color:#f59e0b;font-weight:700;">${d.late}</td>
+          <td style="text-align:center;color:#8b5cf6;font-weight:700;">${d.half_day}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+                <div style="width:${d.pct}%;height:100%;background:#10b981;"></div>
+              </div>
+              <span style="font-weight:800;font-size:0.82rem;">${d.pct}%</span>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    if (doughnutCtx) {
+      if (deptChart) deptChart.destroy();
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+      deptChart = new Chart(doughnutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: depts.map(d => d.name),
+          datasets: [{
+            data: depts.map(d => d.present),
+            backgroundColor: colors.slice(0, depts.length),
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          cutout: '72%'
+        }
+      });
+    }
+  }
+
+  function renderShifts(shifts) {
+    const shiftList = document.getElementById('shift-progress-list');
+    if (!shiftList) return;
+    shiftList.innerHTML = shifts.map(s => `
+      <div style="background:var(--bg-surface);padding:10px 12px;border-radius:8px;border:1px solid var(--border-default);">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <div>
+            <b style="font-size:0.9rem;">${s.name}</b>
+            <span class="muted small">(${s.start_time} – ${s.end_time})</span>
+          </div>
+          <span style="font-weight:800;color:var(--brand-accent);font-size:0.9rem;">${s.present}/${s.total} Present (${s.pct}%)</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin:6px 0;">
+          <div style="width:${s.pct}%;height:100%;background:linear-gradient(90deg, #3b82f6, #6366f1);border-radius:3px;"></div>
+        </div>
+        <div class="muted small" style="display:flex;gap:12px;">
+          <span>On-Duty: <b>${s.present}</b></span>
+          <span>Not Clocked: <b>${s.absent}</b></span>
+          <span>Late: <b style="color:#f59e0b">${s.late}</b></span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  document.addEventListener('DOMContentLoaded', loadAnalytics);
+</script>
+{% endblock %}

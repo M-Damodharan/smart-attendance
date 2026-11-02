@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Employee Salary Setup · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1440px;margin:0 auto;padding-bottom:2rem;">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;background:var(--bg-card);padding:1rem 1.25rem;border-radius:12px;border:1px solid var(--border-default);box-shadow:var(--shadow-sm);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="background:linear-gradient(135deg, #3b82f6, #1d4ed8);width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.4rem;font-weight:900;">
+        ⚙️
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.35rem;display:flex;align-items:center;gap:8px;">
+          <span>HR Salary Setup &amp; Compensation Structure</span>
+        </h2>
+        <span class="muted small">Configure basic salary, monthly paid leave quota, calculation base, rates and bank details</span>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="{{ url_for('hr.payroll') }}" class="btn sm">
+        <span>&larr; Back to Payroll</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Salary Policy Instruction Alert -->
+  <div class="card" style="margin-bottom:1.25rem;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;padding:0.9rem 1.25rem;font-size:0.84rem;">
+    <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--brand-accent);margin-bottom:4px;">
+      <span>💡</span> Standard HR Salary Configuration Guidelines
+    </div>
+    <div style="color:var(--text-secondary);line-height:1.5;">
+      • <b>Monthly Basic Salary:</b> Base monthly pay (e.g. ₹25,000.00).<br>
+      • <b>Paid Leave Quota:</b> Number of monthly paid leaves allowed (Default: <b>2.0 Days</b>). Leaves beyond quota become unpaid.<br>
+      • <b>Calculation Days:</b> Standard denominator for per-day rate (Default: <b>30 Days</b>).<br>
+      • <b>OT &amp; Sunday Rates:</b> Leave at 0.0 to automatically derive from standard formula (1.5x regular rate) or enter fixed override rates.
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('hr.payroll_setup') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="card" style="padding:1.25rem;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <h3 style="margin:0;font-size:1.05rem;">Employee Compensation Profiles ({{ profiles|length }} Total)</h3>
+        <button type="submit" class="btn primary sm" style="font-weight:700;">
+          💾 Save All Salary Profiles
+        </button>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="table" style="width:100%;margin:0;font-size:0.86rem;">
+          <thead>
+            <tr>
+              <th style="min-width:170px;">Employee</th>
+              <th style="min-width:130px;">Monthly Basic (₹)</th>
+              <th style="min-width:90px;">Paid Leave Quota</th>
+              <th style="min-width:90px;">Calc Days</th>
+              <th style="min-width:110px;">OT Rate (₹/h)</th>
+              <th style="min-width:120px;">Sunday Rate (₹/d)</th>
+              <th style="min-width:110px;">Allowance (₹)</th>
+              <th style="min-width:110px;">Deduction (₹)</th>
+              <th style="min-width:120px;">Pay Mode</th>
+              <th style="min-width:130px;">Bank Name</th>
+              <th style="min-width:130px;">Account Number</th>
+              <th style="min-width:110px;">IFSC Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in profiles %}
+            <tr>
+              <td>
+                <input type="hidden" name="emp_id" value="{{ p.emp_id }}">
+                <b>{{ p.emp_name }}</b><br>
+                <code style="font-size:0.75rem;color:var(--text-muted)">{{ p.emp_code }}</code> &bull; <span class="muted small">{{ p.department }}</span>
+              </td>
+              <td>
+                <input type="number" step="0.01" name="basic_{{ p.emp_id }}" value="{{ p.basic_salary }}" class="input" style="width:100%;padding:4px 8px;font-weight:700;" required>
+              </td>
+              <td>
+                <input type="number" step="0.5" name="quota_{{ p.emp_id }}" value="{{ p.monthly_paid_leave_quota }}" class="input" style="width:100%;padding:4px 8px;text-align:center;" required>
+              </td>
+              <td>
+                <input type="number" name="days_{{ p.emp_id }}" value="{{ p.calculation_days }}" class="input" style="width:100%;padding:4px 8px;text-align:center;" required>
+              </td>
+              <td>
+                <input type="number" step="0.01" name="ot_rate_{{ p.emp_id }}" value="{{ p.ot_hourly_rate }}" placeholder="Auto" class="input" style="width:100%;padding:4px 8px;">
+              </td>
+              <td>
+                <input type="number" step="0.01" name="sun_rate_{{ p.emp_id }}" value="{{ p.sunday_daily_rate }}" placeholder="Auto" class="input" style="width:100%;padding:4px 8px;">
+              </td>
+              <td>
+                <input type="number" step="0.01" name="allowance_{{ p.emp_id }}" value="{{ p.fixed_allowance }}" class="input" style="width:100%;padding:4px 8px;">
+              </td>
+              <td>
+                <input type="number" step="0.01" name="deduction_{{ p.emp_id }}" value="{{ p.standard_deduction }}" class="input" style="width:100%;padding:4px 8px;">
+              </td>
+              <td>
+                <select name="pay_mode_{{ p.emp_id }}" class="input" style="width:100%;padding:4px 6px;">
+                  <option value="Bank Transfer" {% if p.payment_mode == 'Bank Transfer' %}selected{% endif %}>Bank Transfer</option>
+                  <option value="Cash" {% if p.payment_mode == 'Cash' %}selected{% endif %}>Cash</option>
+                  <option value="Cheque" {% if p.payment_mode == 'Cheque' %}selected{% endif %}>Cheque</option>
+                </select>
+              </td>
+              <td>
+                <input type="text" name="bank_name_{{ p.emp_id }}" value="{{ p.bank_name or '' }}" placeholder="Bank Name" class="input" style="width:100%;padding:4px 8px;">
+              </td>
+              <td>
+                <input type="text" name="account_no_{{ p.emp_id }}" value="{{ p.account_no or '' }}" placeholder="Account #" class="input" style="width:100%;padding:4px 8px;">
+              </td>
+              <td>
+                <input type="text" name="ifsc_code_{{ p.emp_id }}" value="{{ p.ifsc_code or '' }}" placeholder="IFSC" class="input" style="width:100%;padding:4px 8px;text-transform:uppercase;">
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid var(--border-default);padding-top:14px;">
+        <a href="{{ url_for('hr.payroll') }}" class="btn sm">Cancel</a>
+        <button type="submit" class="btn primary sm" style="font-weight:700;">💾 Save All Salary Profiles</button>
+      </div>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

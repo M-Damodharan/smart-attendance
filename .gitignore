@@ -12,6 +12,7 @@ android-sbg/app/build/
 android-sbg/local.properties
 app/static/downloads/SBG.apk
 cloudflared.exe
+app/seed_data/selfies/
 scratch/
 .idea/
 *.pyc

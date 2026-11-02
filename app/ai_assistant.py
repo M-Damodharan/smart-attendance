@@ -20,6 +20,15 @@ def _get_user_today_attendance(user_id: int):
     return db.execute("SELECT * FROM attendance WHERE emp_id=? AND date=?", (user_id, t_str)).fetchone()
 
 
+def _nearest_sunday(ref_date=None):
+    if ref_date is None:
+        ref_date = today()
+    days_ahead = 6 - ref_date.weekday()
+    if days_ahead < 0:
+        days_ahead += 7
+    return ref_date + timedelta(days=days_ahead)
+
+
 def _get_company_today_stats():
     db = get_db()
     t_str = d2s(today())
@@ -112,6 +121,15 @@ def process_ai_query(user, query: str):
     # -------------------------------------------------------------------------
     # 1. Company-wide / HR restricted queries
     # -------------------------------------------------------------------------
+    is_asking_daily_report = any(k in q_clean for k in ["daily report", "daily attendance report", "generate daily report", "todays report", "executive report today", "attendance report today"])
+    is_asking_weekly_report = any(k in q_clean for k in ["weekly report", "weekly attendance", "past 7 days report", "generate weekly report", "last 7 days"])
+    is_asking_monthly_report = any(k in q_clean for k in ["monthly report", "monthly attendance report", "generate monthly report", "month report", "full month report"])
+    is_asking_missed_punches = any(k in q_clean for k in ["missed punch", "missed punches", "missing punch", "missing punches", "mp list", "missed out punch", "show missed punches"])
+    is_asking_security_suspicious = any(k in q_clean for k in ["suspicious", "suspicious activity", "duplicate face", "duplicate attendance", "buddy punch", "face alerts", "security alerts", "breach"])
+    is_asking_dept_summary = any(k in q_clean for k in ["department summary", "department attendance", "department wise", "dept summary", "by department"])
+    is_asking_sunday_duty = any(k in q_clean for k in ["sunday working", "sunday duty", "sunday shift", "sunday attendance", "assigned to sunday"])
+    is_asking_salary_summary = any(k in q_clean for k in ["salary summary", "payroll summary", "payroll status", "monthly salary", "calculate salary"])
+
     is_asking_present_count = any(k in q_clean for k in ["how many employees are present", "how many are present", "employees present today", "present count", "total present today", "who is present", "present employees", "present list"])
     is_asking_absent_count = any(k in q_clean for k in ["how many employees are absent today", "how many employees are absent", "how many are absent today", "how many are absent", "how many absent", "absent count", "total absent today", "employees absent today"])
     is_asking_od_pending = any(k in q_clean for k in ["show pending od approvals", "pending od approvals", "pending od", "od approvals", "pending on duty", "pending od requests", "show pending od"])
@@ -120,6 +138,240 @@ def process_ai_query(user, query: str):
     is_asking_absent_list = any(k in q_clean for k in ["show todays absent employees", "show absent employees", "who is absent today", "absent employees today", "absent list", "todays absent"])
     is_asking_working_now = any(k in q_clean for k in ["who is working", "currently working", "who punched in", "active employees now"])
     is_asking_late_list = any(k in q_clean for k in ["who is late", "who was late", "late arrivals", "late today"])
+
+    if is_asking_daily_report:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Executive company attendance reports are restricted to HR administrators.", "type": "restricted"}
+        stats = _get_company_today_stats()
+        tot = stats["total"]
+        pres_cnt = len(stats["present"])
+        abs_cnt = len(stats["absent"])
+        late_cnt = len(stats["late"])
+        work_cnt = len(stats["working"])
+        pct = round((pres_cnt / tot * 100), 1) if tot > 0 else 0
+        
+        dept_rows = db.execute("""
+            SELECT e.department, COUNT(DISTINCT e.id) as total,
+                   COUNT(DISTINCT CASE WHEN a.status IN ('P','OT','HD','IN','MP') THEN a.emp_id END) as present
+            FROM employees e
+            LEFT JOIN attendance a ON a.emp_id=e.id AND a.date=?
+            WHERE e.active=1 AND e.role='employee'
+            GROUP BY e.department
+        """, (d2s(t),)).fetchall()
+        dept_lines = [f"• **{r['department'] or 'General'}:** {r['present']}/{r['total']} present ({round(r['present']/r['total']*100, 1) if r['total'] else 0}%)" for r in dept_rows]
+        
+        return {
+            "reply": f"📑 **Executive Daily Attendance Report — {t.strftime('%A, %d %B %Y')}**\n\n"
+                     f"**1. High-Level Metrics:**\n"
+                     f"• **Total Active Workforce:** **{tot}** employees\n"
+                     f"• **Present & On Duty:** **{pres_cnt}** ({pct}% attendance rate)\n"
+                     f"• **Currently Clocked In:** **{work_cnt}** employees\n"
+                     f"• **Absent / Unpunched:** **{abs_cnt}** employees\n"
+                     f"• **Late Arrivals:** **{late_cnt}** employees\n"
+                     f"• **On Approved Leave:** **{len(stats['on_leave'])}** employees\n\n"
+                     f"**2. Department Breakdown:**\n" + "\n".join(dept_lines) + "\n\n"
+                     f"💡 *Live data synced from 24/7 attendance database.*",
+            "type": "hr_report"
+        }
+
+    if is_asking_weekly_report:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Weekly reports are restricted to HR administrators.", "type": "restricted"}
+        tot_emps = db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND role='employee'").fetchone()[0]
+        past_7 = [t - timedelta(days=i) for i in range(6, -1, -1)]
+        d_start, d_end = d2s(past_7[0]), d2s(past_7[-1])
+        rows = db.execute("""
+            SELECT a.date,
+                   COUNT(DISTINCT CASE WHEN a.status IN ('P','OT','HD','IN','MP') THEN a.emp_id END) as pres,
+                   COUNT(DISTINCT CASE WHEN a.late=1 THEN a.emp_id END) as lates
+            FROM attendance a
+            JOIN employees e ON e.id=a.emp_id
+            WHERE a.date >= ? AND a.date <= ? AND e.active=1
+            GROUP BY a.date
+        """, (d_start, d_end)).fetchall()
+        row_dict = {r["date"]: r for r in rows}
+        
+        lines = []
+        tot_pres_sum = 0
+        for d in past_7:
+            ds = d2s(d)
+            rec = row_dict.get(ds)
+            p = rec["pres"] if rec else 0
+            l = rec["lates"] if rec else 0
+            ab = max(0, tot_emps - p)
+            pct = round(p / tot_emps * 100, 1) if tot_emps else 0
+            tot_pres_sum += p
+            lines.append(f"| {d.strftime('%a, %d %b')} | {p} | {ab} | {l} | **{pct}%** |")
+            
+        avg_pct = round(tot_pres_sum / (tot_emps * 7) * 100, 1) if tot_emps else 0
+        table_md = "| Date | Present | Absent | Late | Attendance % |\n| :--- | :---: | :---: | :---: | :---: |\n" + "\n".join(lines)
+        return {
+            "reply": f"📊 **7-Day Weekly Attendance Report ({d_start} to {d_end}):**\n\n"
+                     f"• **Total Employees:** {tot_emps}\n"
+                     f"• **Average Weekly Attendance:** **{avg_pct}%**\n\n"
+                     + table_md + "\n\n"
+                     f"💡 *Live metrics generated from historical attendance records.*",
+            "type": "hr_report"
+        }
+
+    if is_asking_monthly_report:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Monthly reports are restricted to HR administrators.", "type": "restricted"}
+        tot_emps = db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND role='employee'").fetchone()[0]
+        start_d, end_d = month_range(t.year, t.month)
+        
+        stats_row = db.execute("""
+            SELECT
+                COUNT(DISTINCT a.date) as active_days,
+                COUNT(CASE WHEN a.status IN ('P','OT','HD','IN','MP') THEN 1 END) as total_present_punches,
+                COUNT(CASE WHEN a.late=1 THEN 1 END) as total_late_punches,
+                SUM(a.ot_hours) as total_ot_hours
+            FROM attendance a
+            JOIN employees e ON e.id=a.emp_id
+            WHERE a.date >= ? AND a.date <= ? AND e.active=1
+        """, (d2s(start_d), d2s(end_d))).fetchone()
+        
+        active_days = (stats_row["active_days"] if stats_row else 0) or 1
+        tot_pres = (stats_row["total_present_punches"] if stats_row else 0) or 0
+        tot_late = (stats_row["total_late_punches"] if stats_row else 0) or 0
+        tot_ot = round(float((stats_row["total_ot_hours"] if stats_row else 0) or 0.0), 1)
+        avg_pres_day = round(tot_pres / active_days, 1)
+        
+        leave_sum = db.execute("""
+            SELECT SUM(days) as l_days FROM leaves WHERE status='Approved' AND from_date >= ? AND to_date <= ?
+        """, (d2s(start_d), d2s(end_d))).fetchone()
+        l_days = float((leave_sum["l_days"] if leave_sum else 0) or 0.0)
+
+        return {
+            "reply": f"📅 **Executive Monthly Attendance Report — {t.strftime('%B %Y')}:**\n\n"
+                     f"• **Total Active Employees:** **{tot_emps}**\n"
+                     f"• **Days Recorded This Month:** **{active_days}** days\n"
+                     f"• **Average Daily Present:** **{avg_pres_day}** employees/day\n"
+                     f"• **Total Working Overtime Logged:** **{tot_ot} hrs**\n"
+                     f"• **Total Late Punch Incidents:** **{tot_late}**\n"
+                     f"• **Total Approved Leave Days:** **{l_days:g}** days\n\n"
+                     f"💡 *Generated from live cloud attendance register.*",
+            "type": "hr_report"
+        }
+
+    if is_asking_missed_punches:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Missed punch management is restricted to HR administrators.", "type": "restricted"}
+        mp_rows = db.execute("""
+            SELECT a.*, e.name as emp_name, e.emp_code, e.department
+            FROM attendance a
+            JOIN employees e ON e.id=a.emp_id
+            WHERE a.check_in IS NOT NULL AND (a.status='MP' OR a.check_out IS NULL)
+            AND (a.mp_resolved IS NULL OR a.mp_resolved=0)
+            ORDER BY a.date DESC, a.check_in DESC LIMIT 15
+        """).fetchall()
+        if not mp_rows:
+            return {"reply": "✨ **No Pending Missed Punches!** All employee punches are complete and resolved.", "type": "hr_mp"}
+        lines = [f"{i+1}. **{r['emp_name']}** (`{r['emp_code']}`) — Date: **{r['date']}** | In: **{r['check_in'][11:16]}** | Status: **{r['status']}** ({r['department'] or 'General'})" for i, r in enumerate(mp_rows)]
+        return {
+            "reply": f"⚠️ **Pending Missed OUT Punches ({len(mp_rows)} records):**\n\n"
+                     f"Employees who punched in but did not punch out within 12 hours:\n\n" + "\n".join(lines) + "\n\n"
+                     f"👉 *Review or approve in [Missed Punches List](/hr/missed-punches).*",
+            "type": "hr_mp"
+        }
+
+    if is_asking_security_suspicious:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Security audit alerts are restricted to HR administrators.", "type": "restricted"}
+        alerts = db.execute("""
+            SELECT a.*, e1.name as emp_name, e1.emp_code, e2.name as target_name, e2.emp_code as target_code
+            FROM ai_face_alerts a
+            JOIN employees e1 ON e1.id=a.emp_id
+            LEFT JOIN employees e2 ON e2.id=a.target_emp_id
+            WHERE a.status='BLOCKED'
+            ORDER BY a.id DESC LIMIT 5
+        """).fetchall()
+        if not alerts:
+            return {"reply": "🛡️ **Security Status Normal:** No active biometric duplicate or buddy-punching alerts detected.", "type": "hr_security"}
+        lines = [f"• 🚨 **{a['emp_name']}** (`{a['emp_code']}`) matched with **{a['target_name'] or 'Unknown'}** (`{a['target_code'] or 'ID'}`) — **{round(a['similarity']*100, 1)}% face similarity** on {a['date']}" for a in alerts]
+        return {
+            "reply": f"🚨 **AI Security & Duplicate Face Alerts ({len(alerts)} Active):**\n\n" + "\n".join(lines) + "\n\n"
+                     f"👉 *Review in [AI Face Security Audit](/hr/face-security-audit).*",
+            "type": "hr_security"
+        }
+
+    if is_asking_dept_summary:
+        if role != "hr":
+            return {"reply": "🔒 **Access Restricted:** Departmental summaries are restricted to HR administrators.", "type": "restricted"}
+        rows = db.execute("""
+            SELECT e.department,
+                   COUNT(DISTINCT e.id) as total,
+                   COUNT(DISTINCT CASE WHEN a.status IN ('P','OT','HD','IN','MP') THEN a.emp_id END) as present,
+                   COUNT(DISTINCT CASE WHEN a.late=1 THEN a.emp_id END) as late
+            FROM employees e
+            LEFT JOIN attendance a ON a.emp_id=e.id AND a.date=?
+            WHERE e.active=1 AND e.role='employee'
+            GROUP BY e.department
+        """, (d2s(t),)).fetchall()
+        lines = []
+        for r in rows:
+            tot = r["total"]
+            p = r["present"]
+            ab = max(0, tot - p)
+            pct = round(p / tot * 100, 1) if tot else 0
+            lines.append(f"| {r['department'] or 'General'} | {tot} | {p} | {ab} | {r['late']} | **{pct}%** |")
+        table_md = "| Department | Total Staff | Present | Absent | Late | Attendance % |\n| :--- | :---: | :---: | :---: | :---: | :---: |\n" + "\n".join(lines)
+        return {
+            "reply": f"🏢 **Department-Wise Attendance Breakdown ({t.strftime('%d %b %Y')}):**\n\n" + table_md,
+            "type": "hr_dept"
+        }
+
+    if is_asking_sunday_duty:
+        if role != "hr":
+            sw_my = db.execute("SELECT * FROM sunday_working WHERE emp_id=? ORDER BY sunday_date DESC LIMIT 3", (uid,)).fetchall()
+            if not sw_my:
+                return {"reply": "You do not have any Sunday shifts assigned currently.", "type": "sunday"}
+            lines = [f"• **{r['sunday_date']}:** {r['duty_type']} ({r['status']})" for r in sw_my]
+            return {"reply": "📅 **Your Sunday Duty Schedule:**\n\n" + "\n".join(lines), "type": "sunday"}
+        
+        sun_rows = db.execute("""
+            SELECT sw.*, e.name as emp_name, e.emp_code, e.department
+            FROM sunday_working sw
+            JOIN employees e ON e.id=sw.emp_id
+            WHERE sw.sunday_date >= date('now', '-7 days')
+            ORDER BY sw.sunday_date DESC, e.emp_code
+        """).fetchall()
+        if not sun_rows:
+            return {"reply": f"📅 **Sunday Working Management:** No employees are currently scheduled for Sunday shifts. You can assign them in the [Sunday Working Module](/hr/sunday-working).", "type": "hr_sunday"}
+        lines = [f"• **{r['emp_name']}** (`{r['emp_code']}`) — {r['sunday_date']} | {r['duty_type']} | Status: **{r['status']}**" for r in sun_rows[:10]]
+        return {
+            "reply": f"📅 **Sunday Working Duty Summary ({len(sun_rows)} Scheduled):**\n\n" + "\n".join(lines) + "\n\n"
+                     f"👉 *Manage in [Sunday Working Module](/hr/sunday-working).*",
+            "type": "hr_sunday"
+        }
+
+    if is_asking_salary_summary:
+        if role != "hr":
+            pay = db.execute("SELECT * FROM monthly_payroll WHERE emp_id=? ORDER BY month DESC LIMIT 1", (uid,)).fetchone()
+            if not pay:
+                return {"reply": "No salary record generated for your account yet.", "type": "salary"}
+            return {
+                "reply": f"💳 **Your Latest Salary Slip ({pay['month']}):**\n\n"
+                         f"• **Gross Salary:** ₹{pay['gross_salary']:,.2f}\n"
+                         f"• **Net Payable:** **₹{pay['net_salary']:,.2f}**\n"
+                         f"• **Status:** {pay['status']}\n\n"
+                         f"👉 *View breakdown in [My Salary](/my-salary).*",
+                "type": "salary"
+            }
+        
+        latest_month = db.execute("SELECT month FROM monthly_payroll ORDER BY month DESC LIMIT 1").fetchone()
+        if not latest_month:
+            return {"reply": "No monthly payroll records calculated yet. Calculate payroll in [HR Payroll Module](/hr/payroll).", "type": "hr_payroll"}
+        m = latest_month["month"]
+        pays = db.execute("SELECT COUNT(*) as count, SUM(net_salary) as tot_net, SUM(gross_salary) as tot_gross FROM monthly_payroll WHERE month=?", (m,)).fetchone()
+        return {
+            "reply": f"💳 **Payroll Summary for {m}:**\n\n"
+                     f"• **Employees Processed:** {pays['count']}\n"
+                     f"• **Total Gross Salary:** ₹{float(pays['tot_gross'] or 0):,.2f}\n"
+                     f"• **Total Net Payable:** **₹{float(pays['tot_net'] or 0):,.2f}**\n\n"
+                     f"👉 *Manage in [HR Payroll Management](/hr/payroll).*",
+            "type": "hr_payroll"
+        }
 
     if is_asking_shift1:
         if role != "hr":

@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Monthly Salary Calculation &amp; Payroll · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1440px;margin:0 auto;padding-bottom:2rem;">
+
+  <!-- Header & Toolbar -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;background:var(--bg-card);padding:1rem 1.25rem;border-radius:12px;border:1px solid var(--border-default);box-shadow:var(--shadow-sm);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="background:linear-gradient(135deg, #10b981, #047857);width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.4rem;font-weight:900;">
+        💳
+      </div>
+      <div>
+        <h2 style="margin:0;font-size:1.35rem;display:flex;align-items:center;gap:8px;">
+          <span>Monthly Salary Calculation — HR Module</span>
+          <span class="badge b-approved" style="font-size:0.72rem;">● Verified Payroll</span>
+        </h2>
+        <span class="muted small">Sri Balaji Gears &bull; 30-Day Base &bull; Paid Leave Allowance &bull; Sunday &amp; Overtime Pay</span>
+      </div>
+    </div>
+
+    <!-- Actions & Month Selector -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <form method="get" action="{{ url_for('hr.payroll') }}" style="display:flex;align-items:center;gap:6px;background:var(--bg-surface);padding:4px 10px;border-radius:8px;border:1px solid var(--border-default);">
+        <label for="payroll_month" style="font-size:0.8rem;font-weight:700;color:var(--text-secondary);margin:0;">Month:</label>
+        <input type="month" id="payroll_month" name="month" value="{{ month }}" style="background:transparent;border:none;color:var(--text-main);font-size:0.85rem;font-weight:600;outline:none;" onchange="this.form.submit()">
+      </form>
+
+      <!-- Auto Calculate Trigger Form -->
+      <form method="post" action="{{ url_for('hr.payroll_calculate') }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="month" value="{{ month }}">
+        <button type="submit" class="btn sm primary" style="background:linear-gradient(135deg, #10b981, #059669);border-color:#059669;font-weight:700;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <span>Calculate / Sync Salary ({{ month }})</span>
+        </button>
+      </form>
+
+      <a href="{{ url_for('hr.payroll_setup') }}" class="btn sm">
+        <span>⚙️ Salary Setup</span>
+      </a>
+
+      <a href="{{ url_for('hr.payroll_export', month=month) }}" class="btn sm">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export Excel / CSV</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Ribbon -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:1.25rem;">
+    <div class="card" style="padding:1rem;border-left:4px solid #10b981;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Net Payable</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#10b981;margin-top:4px;">₹{{ "{:,.2f}".format(stats.total_net) }}</div>
+      <span class="small" style="color:#10b981;font-weight:600;">Disbursement Amount</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #3b82f6;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Gross Salary</span>
+      <div style="font-size:1.85rem;font-weight:900;color:var(--text-main);margin-top:4px;">₹{{ "{:,.2f}".format(stats.total_gross) }}</div>
+      <span class="small" style="color:#3b82f6;font-weight:600;">Before Deductions</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #ef4444;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Unpaid Leave Deductions</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#ef4444;margin-top:4px;">-₹{{ "{:,.2f}".format(stats.total_unpaid_ded) }}</div>
+      <span class="small" style="color:#ef4444;font-weight:600;">Excess Absence Penalty</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #8b5cf6;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Sunday Working Pay</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#8b5cf6;margin-top:4px;">+₹{{ "{:,.2f}".format(stats.total_sunday_pay) }}</div>
+      <span class="small" style="color:#8b5cf6;font-weight:600;">Approved Sunday Duty</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #f59e0b;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Overtime (OT) Pay</span>
+      <div style="font-size:1.85rem;font-weight:900;color:#f59e0b;margin-top:4px;">+₹{{ "{:,.2f}".format(stats.total_ot_pay) }}</div>
+      <span class="small" style="color:#f59e0b;font-weight:600;">Extra Hours Worked</span>
+    </div>
+
+    <div class="card" style="padding:1rem;border-left:4px solid #06b6d4;border-radius:10px;">
+      <span class="muted small" style="font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Approval Status</span>
+      <div style="font-size:1.55rem;font-weight:900;color:var(--text-main);margin-top:6px;">
+        <span style="color:#10b981">{{ stats.approved_count }}</span> / {{ stats.count }}
+      </div>
+      <span class="small" style="color:var(--text-muted);font-weight:600;">{{ stats.draft_count }} Pending Review</span>
+    </div>
+  </div>
+
+  <!-- Payroll Calculation Logic Callout Box -->
+  <div class="card" style="margin-bottom:1.25rem;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;padding:0.9rem 1.25rem;font-size:0.84rem;">
+    <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--brand-accent);margin-bottom:4px;">
+      <span>💡</span> Company Salary Calculation Policy (30-Day Basis &amp; 2-Day Paid Leave Quota)
+    </div>
+    <div style="color:var(--text-secondary);line-height:1.5;">
+      • <b>Per-Day Salary:</b> <code>Basic Salary ÷ 30 Days</code> (e.g. ₹25,000 ÷ 30 = ₹833.33/day).<br>
+      • <b>Paid Leave Allowance:</b> 2 Days/month. Approved leaves up to 2 days are never deducted.<br>
+      • <b>Unpaid Leave:</b> Any absence beyond 2 paid leave days is deducted at the exact per-day rate.<br>
+      • <b>Sunday Working &amp; Overtime:</b> Calculated and added to Gross Salary before final approval.
+    </div>
+  </div>
+
+  <!-- Payroll Records Table -->
+  <div class="card" style="padding:1.25rem;border-radius:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <h3 style="margin:0;font-size:1.05rem;">Monthly Employee Payroll Register &bull; {{ month }}</h3>
+        <span class="muted small">Detailed breakdown of attendance, leave balance, earnings and deductions</span>
+      </div>
+    </div>
+
+    {% if not records %}
+    <div style="text-align:center;padding:3rem 1rem;background:var(--bg-surface);border-radius:8px;border:1px dashed var(--border-default);">
+      <div style="font-size:2.5rem;margin-bottom:8px;">💳</div>
+      <b style="font-size:1.1rem;display:block;">No Payroll Generated Yet for {{ month }}</b>
+      <span class="muted small" style="display:block;margin:4px 0 14px;">Click the button below to automatically calculate salary from live attendance and approved leaves.</span>
+      <form method="post" action="{{ url_for('hr.payroll_calculate') }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="month" value="{{ month }}">
+        <button type="submit" class="btn primary sm">Run Salary Calculation for {{ month }}</button>
+      </form>
+    </div>
+    {% else %}
+    <div style="overflow-x:auto;">
+      <table class="table" style="width:100%;margin:0;font-size:0.86rem;">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Basic Salary</th>
+            <th style="text-align:center;">Days (Pres/Abs)</th>
+            <th style="text-align:center;">Leave (Paid/Unpaid)</th>
+            <th style="text-align:center;">Leave Quota Left</th>
+            <th style="text-align:center;">Sunday Pay</th>
+            <th style="text-align:center;">OT Pay</th>
+            <th style="text-align:center;">Deductions</th>
+            <th>Net Payable</th>
+            <th>Status</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td>
+              <b>{{ r.emp_name }}</b><br>
+              <code style="font-size:0.75rem;color:var(--text-muted)">{{ r.emp_code }}</code> &bull; <span class="muted small">{{ r.department }}</span>
+            </td>
+            <td>
+              <b>₹{{ "{:,.2f}".format(r.basic_salary) }}</b><br>
+              <span class="muted small">₹{{ "{:,.2f}".format(r.per_day_salary) }}/day</span>
+            </td>
+            <td style="text-align:center;">
+              <span style="color:#10b981;font-weight:700;">{{ r.present_days }} P</span> /
+              <span style="color:#ef4444;font-weight:700;">{{ r.absent_days }} A</span><br>
+              <span class="muted small">{{ r.calendar_days }} Cal. Days</span>
+            </td>
+            <td style="text-align:center;">
+              <span style="color:#10b981;font-weight:700;">{{ r.paid_leave_days }} Paid</span> /
+              <span style="color:#ef4444;font-weight:700;">{{ r.unpaid_leave_days }} Unpaid</span>
+            </td>
+            <td style="text-align:center;font-weight:700;">
+              <span class="badge" style="background:var(--bg-surface-hover);">{{ r.remaining_leave_balance }}d Left</span>
+            </td>
+            <td style="text-align:center;">
+              {% if r.sunday_working_pay > 0 %}
+                <b style="color:#8b5cf6;">+₹{{ "{:,.2f}".format(r.sunday_working_pay) }}</b><br>
+                <span class="muted small">{{ r.sunday_working_days }} day(s)</span>
+              {% else %}
+                <span class="muted small">-</span>
+              {% endif %}
+            </td>
+            <td style="text-align:center;">
+              {% if r.ot_pay > 0 %}
+                <b style="color:#f59e0b;">+₹{{ "{:,.2f}".format(r.ot_pay) }}</b><br>
+                <span class="muted small">{{ r.ot_hours }} hrs</span>
+              {% else %}
+                <span class="muted small">-</span>
+              {% endif %}
+            </td>
+            <td style="text-align:center;">
+              {% if r.unpaid_leave_deduction > 0 or r.other_deductions > 0 %}
+                <b style="color:#ef4444;">-₹{{ "{:,.2f}".format(r.unpaid_leave_deduction + r.other_deductions) }}</b>
+              {% else %}
+                <span class="muted small">₹0.00</span>
+              {% endif %}
+            </td>
+            <td>
+              <b style="color:#10b981;font-size:1.05rem;">₹{{ "{:,.2f}".format(r.net_salary) }}</b><br>
+              <span class="muted small">Gross: ₹{{ "{:,.2f}".format(r.gross_salary) }}</span>
+            </td>
+            <td>
+              {% if r.status == 'Approved' or r.status == 'Paid' %}
+                <span class="badge b-approved">✓ {{ r.status }}</span>
+              {% elif r.status == 'Verified' %}
+                <span class="badge" style="background:rgba(6,182,212,0.15);color:#06b6d4;font-weight:700;">Verified</span>
+              {% else %}
+                <span class="badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;font-weight:700;">Draft</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <div style="display:inline-flex;gap:4px;">
+                <!-- View / Print Payslip -->
+                <a href="{{ url_for('hr.payroll_payslip', payroll_id=r.id) }}" class="btn sm" title="View &amp; Print Payslip">
+                  📄 Payslip
+                </a>
+
+                <!-- Approval Form -->
+                {% if r.status != 'Approved' %}
+                <form method="post" action="{{ url_for('hr.payroll_approve', payroll_id=r.id) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="action" value="Approved">
+                  <input type="hidden" name="remarks" value="Approved by HR Admin">
+                  <button type="submit" class="btn sm primary" style="background:#10b981;border-color:#10b981;font-weight:700;" title="Approve Salary">
+                    Approve
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Payslip · {{ p.emp_code }} · {{ p.month }} · Sri Balaji Gears</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/sbg_logo.png') }}">
+  <style>
+    @media print {
+      body { background: #fff !important; color: #000 !important; margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+      .payslip-card { box-shadow: none !important; border: 1px solid #ccc !important; margin: 0 !important; max-width: 100% !important; }
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #0f172a;
+      color: #1e293b;
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .payslip-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      max-width: 820px;
+      width: 100%;
+      padding: 32px 36px;
+      box-sizing: border-box;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 18px;
+      margin-bottom: 20px;
+    }
+    .company-info h1 {
+      margin: 0;
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: 0.5px;
+    }
+    .company-info p {
+      margin: 2px 0 0;
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+    .payslip-badge {
+      background: #e0f2fe;
+      border: 1px solid #7dd3fc;
+      color: #0369a1;
+      font-size: 0.95rem;
+      font-weight: 800;
+      padding: 6px 14px;
+      border-radius: 6px;
+      text-align: right;
+    }
+    .grid-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .meta-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .meta-table td.label {
+      color: #64748b;
+      font-weight: 600;
+      width: 40%;
+    }
+    .meta-table td.value {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 0.88rem;
+    }
+    .breakdown-table th {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 8px 12px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .breakdown-table td {
+      border: 1px solid #e2e8f0;
+      padding: 8px 12px;
+    }
+    .net-salary-banner {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: #ffffff;
+      padding: 16px 20px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    .net-salary-banner .amount {
+      font-size: 1.8rem;
+      font-weight: 900;
+    }
+    .sign-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 36px;
+      padding-top: 18px;
+      border-top: 1px dashed #cbd5e1;
+      font-size: 0.85rem;
+      color: #475569;
+    }
+    .sign-box {
+      text-align: center;
+      min-width: 180px;
+    }
+    .sign-line {
+      border-bottom: 1px solid #94a3b8;
+      height: 40px;
+      margin-bottom: 6px;
+    }
+    .actions-bar {
+      margin-bottom: 16px;
+      display: flex;
+      gap: 10px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid transparent;
+    }
+    .btn-primary { background: #0284c7; color: #fff; }
+    .btn-secondary { background: #334155; color: #fff; border-color: #475569; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Utilities Bar (Hidden during Print) -->
+  <div class="actions-bar no-print">
+    <button type="button" class="btn btn-primary" onclick="window.print()">
+      🖨️ Print / Download PDF
+    </button>
+    <a href="javascript:history.back()" class="btn btn-secondary">
+      ↩️ Go Back
+    </a>
+  </div>
+
+  <div class="payslip-card">
+
+    <!-- Header with Official Logo -->
+    <div class="header-row">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <img src="{{ url_for('static', filename='img/sbg_logo.png') }}" alt="Sri Balaji Gears" style="width:68px;height:68px;object-fit:contain;border-radius:8px;">
+        <div class="company-info">
+          <h1>SRI BALAJI GEARS</h1>
+          <p>Precision Gear Manufacturing &bull; Smart HR Management System</p>
+          <p style="font-size:0.75rem;">Official Biometric Verified Compensation Statement</p>
+        </div>
+      </div>
+      <div class="payslip-badge">
+        SALARY STATEMENT<br>
+        <span style="font-size:1.15rem;color:#0c4a6e;">{{ p.month }}</span>
+      </div>
+    </div>
+
+    <!-- Employee & Bank Information Grid -->
+    <div class="grid-2col">
+      <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+        <span style="font-size:0.78rem;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Employee Information</span>
+        <table class="meta-table">
+          <tr><td class="label">Employee Name:</td><td class="value">{{ p.emp_name }}</td></tr>
+          <tr><td class="label">Employee ID:</td><td class="value">{{ p.emp_code }}</td></tr>
+          <tr><td class="label">Department:</td><td class="value">{{ p.department or 'General' }}</td></tr>
+          <tr><td class="label">Designation:</td><td class="value">{{ p.designation or 'Staff' }}</td></tr>
+          <tr><td class="label">Date of Joining:</td><td class="value">{{ p.joined_on or '-' }}</td></tr>
+        </table>
+      </div>
+
+      <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+        <span style="font-size:0.78rem;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Bank &amp; Payment Details</span>
+        <table class="meta-table">
+          <tr><td class="label">Payment Mode:</td><td class="value">{{ p.payment_mode or 'Bank Transfer' }}</td></tr>
+          <tr><td class="label">Bank Name:</td><td class="value">{{ p.bank_name or '-' }}</td></tr>
+          <tr><td class="label">Account Number:</td><td class="value">{{ p.account_no or '-' }}</td></tr>
+          <tr><td class="label">IFSC Code:</td><td class="value">{{ p.ifsc_code or '-' }}</td></tr>
+          <tr><td class="label">Slip Status:</td><td class="value" style="color:#059669;">{{ p.status }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Attendance & Leave Breakdown Row -->
+    <div style="background:#f1f5f9;border-radius:8px;padding:10px 14px;margin-bottom:18px;display:grid;grid-template-columns:repeat(auto-fit, minmax(110px, 1fr));gap:8px;text-align:center;font-size:0.8rem;">
+      <div><span style="color:#64748b;display:block;">Cal. Days</span><b style="font-size:1rem;">{{ p.calendar_days }}</b></div>
+      <div><span style="color:#64748b;display:block;">Work Days</span><b style="font-size:1rem;">{{ p.working_days }}</b></div>
+      <div><span style="color:#64748b;display:block;">Present</span><b style="font-size:1rem;color:#059669;">{{ p.present_days }}</b></div>
+      <div><span style="color:#64748b;display:block;">Absent</span><b style="font-size:1rem;color:#dc2626;">{{ p.absent_days }}</b></div>
+      <div><span style="color:#64748b;display:block;">Paid Leave</span><b style="font-size:1rem;color:#0284c7;">{{ p.paid_leave_days }}</b></div>
+      <div><span style="color:#64748b;display:block;">Unpaid Leave</span><b style="font-size:1rem;color:#dc2626;">{{ p.unpaid_leave_days }}</b></div>
+      <div><span style="color:#64748b;display:block;">Sunday Duty</span><b style="font-size:1rem;color:#7c3aed;">{{ p.sunday_working_days }}d</b></div>
+      <div><span style="color:#64748b;display:block;">OT Hours</span><b style="font-size:1rem;color:#d97706;">{{ p.ot_hours }}h</b></div>
+    </div>
+
+    <!-- Earnings & Deductions Tables -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
+      <!-- Earnings Table -->
+      <div>
+        <table class="breakdown-table">
+          <thead>
+            <tr>
+              <th>Earnings Description</th>
+              <th style="text-align:right;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Basic Monthly Salary</td>
+              <td style="text-align:right;font-weight:700;">{{ "{:,.2f}".format(p.basic_salary) }}</td>
+            </tr>
+            <tr>
+              <td>Overtime (OT) Pay</td>
+              <td style="text-align:right;font-weight:700;color:#d97706;">+{{ "{:,.2f}".format(p.ot_pay) }}</td>
+            </tr>
+            <tr>
+              <td>Sunday Working Pay</td>
+              <td style="text-align:right;font-weight:700;color:#7c3aed;">+{{ "{:,.2f}".format(p.sunday_working_pay) }}</td>
+            </tr>
+            <tr>
+              <td>Fixed Bonus &amp; Allowances</td>
+              <td style="text-align:right;font-weight:700;">+{{ "{:,.2f}".format(p.bonus_allowance) }}</td>
+            </tr>
+            <tr style="background:#f8fafc;">
+              <td style="font-weight:800;">Total Gross Earnings</td>
+              <td style="text-align:right;font-weight:900;color:#0f172a;">₹{{ "{:,.2f}".format(p.gross_salary) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Deductions Table -->
+      <div>
+        <table class="breakdown-table">
+          <thead>
+            <tr>
+              <th>Deductions Description</th>
+              <th style="text-align:right;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Unpaid Leave ({{ p.unpaid_leave_days }} Days)</td>
+              <td style="text-align:right;font-weight:700;color:#dc2626;">-{{ "{:,.2f}".format(p.unpaid_leave_deduction) }}</td>
+            </tr>
+            <tr>
+              <td>Late Coming Deductions</td>
+              <td style="text-align:right;font-weight:700;">-{{ "{:,.2f}".format(p.late_deduction) }}</td>
+            </tr>
+            <tr>
+              <td>Standard Deductions / TDS</td>
+              <td style="text-align:right;font-weight:700;">-{{ "{:,.2f}".format(p.other_deductions) }}</td>
+            </tr>
+            <tr>
+              <td>Paid Leave Benefit (2 Days Quota)</td>
+              <td style="text-align:right;font-weight:700;color:#059669;">₹0.00 (Exempt)</td>
+            </tr>
+            <tr style="background:#f8fafc;">
+              <td style="font-weight:800;">Total Deductions</td>
+              <td style="text-align:right;font-weight:900;color:#dc2626;">-₹{{ "{:,.2f}".format(p.unpaid_leave_deduction + p.late_deduction + p.other_deductions) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Highlighted Net Payable Banner -->
+    <div class="net-salary-banner">
+      <div>
+        <span style="font-size:0.9rem;text-transform:uppercase;letter-spacing:0.5px;opacity:0.9;display:block;">Net Payable Salary</span>
+        <span style="font-size:0.85rem;opacity:0.95;">Disbursed via {{ p.payment_mode or 'Bank Transfer' }}</span>
+      </div>
+      <div class="amount">
+        ₹{{ "{:,.2f}".format(p.net_salary) }}
+      </div>
+    </div>
+
+    <!-- Authorization Signatures & Stamp -->
+    <div class="sign-row">
+      <div class="sign-box">
+        <div class="sign-line"></div>
+        <span>Employee Signature</span>
+      </div>
+      <div class="sign-box">
+        <div class="sign-line"></div>
+        <span>Authorized HR Signature &bull; Sri Balaji Gears</span>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
