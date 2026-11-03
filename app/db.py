@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS offices (
     department TEXT,
     lat REAL NOT NULL,
     lng REAL NOT NULL,
-    radius_m INTEGER NOT NULL DEFAULT 30,
+    radius_m INTEGER NOT NULL DEFAULT 5,
     active INTEGER NOT NULL DEFAULT 1
 );
 

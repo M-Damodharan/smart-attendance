@@ -93,8 +93,8 @@
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-surface);padding:8px 10px;border-radius:8px;">
         <span class="small muted">Allowed Radius:</span>
         <div style="display:flex;align-items:center;gap:6px;">
-          <input name="radius_m" type="number" min="10" max="30" value="{{ o['radius_m'] or 30 }}" required style="width:55px;padding:2px 6px;" readonly>
-          <span class="badge b-approved" style="font-size:0.72rem;">Strict 30m Max</span>
+          <input name="radius_m" type="number" min="1" max="100" value="{{ o['radius_m'] or 5 }}" required style="width:55px;padding:2px 6px;">
+          <span class="badge b-approved" style="font-size:0.72rem;">Strict {{ o['radius_m'] or 5 }}m Radius</span>
         </div>
       </div>
 
@@ -119,12 +119,14 @@
     <input type="hidden" name="action" value="system_settings">
     <div style="flex:1 1 180px">
       <label>Max GPS Inaccuracy (m)
-        <input type="number" name="max_gps_accuracy_m" min="50" max="2000" step="10" value="{{ sys_settings.get('max_gps_accuracy_m', '350') }}" required>
+        <input type="number" name="max_gps_accuracy_m" min="5" max="500" step="1" value="{{ sys_settings.get('max_gps_accuracy_m', '15') }}" required>
+        <span class="muted small" style="display:block;margin-top:2px;font-size:0.72rem">≤ 15m required for 5m office geofence</span>
       </label>
     </div>
     <div style="flex:1 1 180px">
       <label>Geofence Tolerance (m)
-        <input type="number" name="geofence_tolerance_m" min="0" max="500" step="5" value="{{ sys_settings.get('geofence_tolerance_m', '50') }}" required>
+        <input type="number" name="geofence_tolerance_m" min="0" max="100" step="1" value="{{ sys_settings.get('geofence_tolerance_m', '0') }}" required>
+        <span class="muted small" style="display:block;margin-top:2px;font-size:0.72rem">0m = strictly inside 5m office radius</span>
       </label>
     </div>
     <div style="flex:1 1 180px">

@@ -8,7 +8,7 @@
   <a class="btn" href="{{ url_for('emp.dashboard') }}">Back home</a>
 </section>
 {% else %}
-<section class="card punch" id="punch" data-mode="{{ mode }}">
+<section class="card punch" id="punch" data-mode="{{ mode }}" data-office-lat="{{ office['lat'] if office else '' }}" data-office-lng="{{ office['lng'] if office else '' }}" data-office-radius="{{ office['radius_m'] if office and office['radius_m'] else 5 }}" data-office-name="{{ office['name'] if office else 'Main Office' }}">
   <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
   <h2>{{ 'Check out' if mode=='out' else 'Check in' }}</h2>
 
@@ -45,7 +45,34 @@
         <div class="muted small">Department: <b>{{ office['department'] if office and office['department'] else 'General' }}</b> &bull; Shift: <b>{{ shift['name'] }}</b></div>
       </div>
     </div>
-    <span class="badge" style="background:rgba(16,185,129,0.14);color:#059669;font-weight:700;border:1px solid rgba(16,185,129,0.3);box-shadow:0 2px 4px rgba(16,185,129,0.15)">Strict {{ office['radius_m'] if office and office['radius_m'] else 30 }}m Geofence</span>
+    <span class="badge" style="background:rgba(16,185,129,0.14);color:#059669;font-weight:700;border:1px solid rgba(16,185,129,0.3);box-shadow:0 2px 4px rgba(16,185,129,0.15)">Strict {{ office['radius_m'] if office and office['radius_m'] else 5 }}m Geofence</span>
+  </div>
+
+  <!-- Live Geofence Distance & Accuracy Monitor (Rules: 5 Meters Inside Accepted) -->
+  <div id="geo-live-card" style="background:var(--bg-surface);border:1.5px solid var(--border-default);border-radius:14px;padding:14px 16px;margin-bottom:1.15rem;box-shadow:0 4px 12px rgba(0,0,0,0.04)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="geo-status-indicator" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>
+        <b style="font-size:0.86rem;letter-spacing:0.4px;text-transform:uppercase;color:var(--text-muted)">Live Distance &amp; GPS Telemetry</b>
+      </div>
+      <span id="geo-rule-pill" class="badge" style="background:rgba(59,130,246,0.12);color:#2563eb;font-size:0.75rem;font-weight:700;border:1px solid rgba(59,130,246,0.25)">5 Meters Inside Accepted</span>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:10px;padding:10px 12px">
+        <div class="muted small" style="font-size:0.75rem">📍 Live Distance to Office</div>
+        <div id="live-distance-val" style="font-size:1.25rem;font-weight:800;color:var(--text-main);margin-top:2px">Calculating…</div>
+        <div id="live-distance-sub" class="muted small" style="font-size:0.74rem">Permitted: ≤ {{ office['radius_m'] if office and office['radius_m'] else 5 }} m</div>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:10px;padding:10px 12px">
+        <div class="muted small" style="font-size:0.75rem">📡 GPS Accuracy</div>
+        <div id="live-accuracy-val" style="font-size:1.25rem;font-weight:800;color:var(--text-main);margin-top:2px">Acquiring…</div>
+        <div id="live-accuracy-sub" class="muted small" style="font-size:0.74rem">High Accuracy: ≤ 15 m</div>
+      </div>
+    </div>
+    <div id="geo-live-msg" style="margin-top:10px;font-size:0.84rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:6px">
+      <span>🛰️</span> <span>Acquiring live satellite coordinates…</span>
+    </div>
   </div>
 
   <div class="steps">
@@ -82,8 +109,8 @@
   <p class="muted small center" id="hint">Keep your camera facing you. Tap verify to authenticate with your phone's native Fingerprint or Face Biometrics. Password, PIN, and pattern login are strictly disabled.</p>
   <div id="result" class="result" hidden></div>
 
-  <details class="small muted"><summary>{{ office['name'] if office else 'No office' }} · radius {{ office['radius_m'] if office else '–' }} m</summary>
-    <p>Check-in is only accepted inside the office geofence, unless HR has approved an On-Duty (OD) request for today.</p></details>
+  <details class="small muted"><summary>{{ office['name'] if office else 'No office' }} · radius {{ office['radius_m'] if office and office['radius_m'] else 5 }} m (Rules: 5 meters inside accepted)</summary>
+    <p>Attendance check-in is strictly accepted only when physically inside the 5-meter office boundary with verified GPS accuracy (≤ 15m), unless HR has approved an On-Duty (OD) request for today.</p></details>
 
   <!-- Face Not Clear / Go to Brighter Place Pop-up Modal -->
   <div id="face-not-clear-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:99999;align-items:center;justify-content:center;padding:1.25rem;backdrop-filter:blur(10px)">

@@ -113,8 +113,8 @@ class Config:
 
     # ---- Attendance rules -----------------------------------------------
     WEEKLY_OFF = (6,)            # Monday=0 ... Sunday=6
-    MAX_GPS_ACCURACY_M = int(os.environ.get("MAX_GPS_ACCURACY_M", 350))     # reject fixes less accurate than this
-    GEOFENCE_TOLERANCE_M = int(os.environ.get("GEOFENCE_TOLERANCE_M", 50))     # extra metres allowed on top of office radius
+    MAX_GPS_ACCURACY_M = int(os.environ.get("MAX_GPS_ACCURACY_M", 15))      # reject fixes less accurate than 15m for 5m geofence
+    GEOFENCE_TOLERANCE_M = int(os.environ.get("GEOFENCE_TOLERANCE_M", 0))     # 0m tolerance - strictly inside 5m office radius
     CHALLENGE_TTL_S = 180        # liveness challenge validity
     MIN_PUNCH_GAP_MIN = 1        # minimum minutes between check-in and check-out
     MIN_MOTION_SCORE = 1.2       # server-side liveness: min avg frame difference (0-255)

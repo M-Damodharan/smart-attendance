@@ -115,7 +115,9 @@ def evaluate_geo(user, lat, lng, acc):
     if not office:
         return {"ok": False, "error": "No active department location point is assigned to you. Contact HR."}
     try:
-        lat, lng, acc = float(lat), float(lng), float(acc or 0)
+        lat = float(lat)
+        lng = float(lng)
+        acc = float(acc) if acc is not None else None
     except (TypeError, ValueError):
         return {"ok": False, "error": "Location not available. Enable GPS and try again."}
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
@@ -124,12 +126,20 @@ def evaluate_geo(user, lat, lng, acc):
     sys_settings = get_system_settings_cached(db)
     max_acc = float(sys_settings.get("max_gps_accuracy_m") or current_app.config["MAX_GPS_ACCURACY_M"])
 
-    if acc > max_acc:
-        return {"ok": False, "error": f"GPS accuracy too low (±{int(acc)} m). Move to an open area or ask HR to adjust GPS threshold in Settings."}
+    # Strict GPS accuracy verification: Reject missing, negative, or inaccurate readings
+    if acc is None or acc <= 0:
+        return {"ok": False, "error": "GPS accuracy reading is invalid. Please enable high-accuracy device GPS."}
 
-    # Strict 30-meter maximum policy: Location point 30 m only allowed
-    max_policy_radius = 30
-    office_radius = min(int(office["radius_m"] or 30), max_policy_radius)
+    if acc > max_acc:
+        return {
+            "ok": False,
+            "gps_accurate": False,
+            "accuracy": round(acc, 1),
+            "max_accuracy": round(max_acc, 1),
+            "error": f"GPS accuracy too low (±{acc:.1f} m). Attendance blocked: high accuracy GPS (within ±{int(max_acc)} m) is required to verify the 5-meter office radius. Move outdoors or near a window for satellite lock and try again."
+        }
+
+    office_radius = float(office["radius_m"] or 5)
     allowed = office_radius
     dist = haversine(lat, lng, office["lat"], office["lng"])
     inside = dist <= allowed
@@ -139,13 +149,17 @@ def evaluate_geo(user, lat, lng, acc):
     return {
         "ok": True,
         "inside": inside,
-        "distance": round(dist),
+        "distance": round(dist, 1),
         "radius": allowed,
+        "accuracy": round(acc, 1),
+        "max_accuracy": round(max_acc, 1),
+        "gps_accurate": True,
         "office": office["name"],
         "department": dept_val,
         "od": bool(od),
         "allowed": inside or bool(od),
         "od_location": od["location"] if od else None,
+        "rules": "5 meters inside accepted",
         "lat": lat,
         "lng": lng
     }
@@ -176,7 +190,8 @@ def challenge():
 @employee_required
 def geo_check():
     d = request.get_json(silent=True) or {}
-    res = evaluate_geo(g.user, d.get("lat"), d.get("lng"), d.get("accuracy"))
+    acc = d.get("accuracy") if d.get("accuracy") is not None else d.get("acc")
+    res = evaluate_geo(g.user, d.get("lat"), d.get("lng"), acc)
     return jsonify(res)
 
 
@@ -366,13 +381,16 @@ def punch():
             return _err("Please wait a minute before checking out.")
 
     # Geofence validation (server-side, never trusts client coordinates)
-    geo = evaluate_geo(user, d.get("lat"), d.get("lng"), d.get("accuracy"))
+    acc = d.get("accuracy") if d.get("accuracy") is not None else d.get("acc")
+    geo = evaluate_geo(user, d.get("lat"), d.get("lng"), acc)
     if not geo["ok"]:
+        audit("GPS_ACCURACY_FAIL", "attendance", user["id"], f"kind={kind} acc={acc} err={geo.get('error')}")
+        db.commit()
         return _err(geo["error"])
     if not geo["allowed"]:
         audit("GEOFENCE_BLOCK", "attendance", user["id"], f"kind={kind} dist={geo['distance']}m radius={geo['radius']}m dept={geo.get('department')}")
         db.commit()
-        return _err(f"You are {geo['distance']} m from {geo['office']} Location Point (allowed {geo['radius']} m only).")
+        return _err(f"Attendance blocked: You are {geo['distance']} m from {geo['office']} (strictly 5 meters inside accepted). You must be physically inside the permitted office area to check in.")
 
     # Decode snapshot selfie (captured for visual attendance audit)
     try:
