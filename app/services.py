@@ -722,9 +722,37 @@ def coords_from_text(text):
     return None
 
 
+def geocode_place_name(query: str):
+    """Resolves place name / address to (lat, lng) using Nominatim OpenStreetMap."""
+    query = (query or "").strip()
+    if not query or len(query) < 2:
+        return None
+    # Strip common place prefixes
+    clean = _re.sub(r"^(?:place|location|office|address)[:\s/]+", "", query, flags=_re.I).strip()
+    try:
+        import requests
+        headers = {"User-Agent": "SriBalajiGears-Attendance/1.0 (admin@sribalajigears.com)"}
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": clean, "format": "json", "limit": 1},
+            headers=headers,
+            timeout=5
+        )
+        if resp.ok:
+            data = resp.json()
+            if data and isinstance(data, list) and len(data) > 0:
+                lat = float(data[0]["lat"])
+                lng = float(data[0]["lon"])
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    return round(lat, 6), round(lng, 6)
+    except Exception:
+        pass
+    return None
+
+
 def coords_from_maps_link(link):
     """Accepts 'lat,lng' text, a full Google Maps URL, or a maps.app.goo.gl short link
-    (which is resolved by following the redirect). Returns (lat, lng) or None."""
+    (which is resolved by following the redirect), or a place name. Returns (lat, lng) or None."""
     link = (link or "").strip()
     if not link:
         return None
@@ -732,27 +760,33 @@ def coords_from_maps_link(link):
     if direct:
         return direct
 
-    # Try following redirects for short links (e.g. maps.app.goo.gl, goo.gl, bit.ly, etc.)
-    try:
-        import requests
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        resp = requests.get(link, headers=headers, allow_redirects=True, timeout=8)
-        resolved = coords_from_text(resp.url) or coords_from_text(resp.text)
-        if resolved:
-            return resolved
-    except Exception:
-        pass
+    # Try following redirects for URLs (e.g. maps.app.goo.gl, goo.gl, bit.ly, etc.)
+    if link.lower().startswith(("http://", "https://")):
+        try:
+            import requests
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            resp = requests.get(link, headers=headers, allow_redirects=True, timeout=8)
+            resolved = coords_from_text(resp.url) or coords_from_text(resp.text)
+            if resolved:
+                return resolved
+        except Exception:
+            pass
 
-    try:
-        req = Request(link, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-        with urlopen(req, timeout=8) as r:
-            final = r.geturl()
-            body = r.read(400000).decode("utf-8", "ignore")
-            return coords_from_text(final) or coords_from_text(body)
-    except Exception:
-        return None
+        try:
+            req = Request(link, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+            with urlopen(req, timeout=8) as r:
+                final = r.geturl()
+                body = r.read(400000).decode("utf-8", "ignore")
+                resolved = coords_from_text(final) or coords_from_text(body)
+                if resolved:
+                    return resolved
+        except Exception:
+            pass
+
+    # If coordinates not yet found, try geocoding place name
+    return geocode_place_name(link)
 
 
 def check_and_sync_missed_punches(db=None):

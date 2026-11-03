@@ -12,7 +12,7 @@ from .auth import hr_required
 from .db import get_db
 from .face_engine import register_face_for_employee, reset_face_for_employee
 from .maintenance import safe_clean_cache, get_cache_status
-from .services import (coords_from_maps_link, audit, build_register, check_and_sync_missed_punches, clear_shared_cache,
+from .services import (coords_from_maps_link, geocode_place_name, audit, build_register, check_and_sync_missed_punches, clear_shared_cache,
                        create_notification, d2s, daterange,
                        finalize_attendance, format_duration, get_all_shifts_cached, get_employee_category,
                        get_employee_shift_for_date, is_late, month_range, now, parse_dt,
@@ -936,13 +936,20 @@ def settings():
 
                 raw_lat = str(f.get("lat", "")).strip()
                 raw_lng = str(f.get("lng", "")).strip()
-                # Resilient coordinate parsing if user pasted combined coords or link
+                # Resilient coordinate parsing if user pasted combined coords, link, or place name
                 parsed = coords_from_maps_link(raw_lat) or coords_from_maps_link(f"{raw_lat},{raw_lng}")
+                if not parsed and raw_lat and not raw_lng:
+                    parsed = geocode_place_name(raw_lat)
+
                 if parsed:
                     lat_val, lng_val = parsed
                 else:
-                    lat_val = float(raw_lat)
-                    lng_val = float(raw_lng)
+                    try:
+                        lat_val = float(raw_lat)
+                        lng_val = float(raw_lng)
+                    except (ValueError, TypeError):
+                        flash(f"Could not parse coordinates from '{raw_lat}' / '{raw_lng}'. Please enter numeric coordinates or click '📍 Use My Location'.", "err")
+                        return redirect(url_for("hr.settings"))
 
                 if not (-90 <= lat_val <= 90 and -180 <= lng_val <= 180):
                     flash("Invalid coordinates. Latitude must be between -90 and 90, Longitude between -180 and 180.", "err")
@@ -959,10 +966,11 @@ def settings():
                 flash(f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict {radius} m radius).", "ok")
                 return redirect(url_for("hr.settings"))
             elif act == "office_link":
-                pt = coords_from_maps_link(f.get("link", ""))
+                raw_link = f.get("link", "").strip()
+                pt = coords_from_maps_link(raw_link) or geocode_place_name(raw_link)
                 if not pt:
-                    flash("Could not read coordinates from that input. Paste a Google Maps link, "
-                          "'lat,lng', DMS coordinates, or click '📍 Use Current GPS'.", "err")
+                    flash(f"Could not read coordinates from '{raw_link}'. Paste a Google Maps link, "
+                          "'lat,lng', DMS coordinates, place name, or click '📍 Use Current GPS'.", "err")
                     return redirect(url_for("hr.settings"))
                 target_id = str(f.get("id", "")).strip()
                 radius = max(1, int(f.get("radius_m") or 5))
@@ -976,7 +984,11 @@ def settings():
                     flash(f"All department office locations successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict {radius} m policy).", "ok")
                     return redirect(url_for("hr.settings"))
                 else:
-                    oid = int(target_id)
+                    try:
+                        oid = int(target_id)
+                    except (ValueError, TypeError):
+                        flash("Invalid office selected.", "err")
+                        return redirect(url_for("hr.settings"))
                     db.execute("UPDATE offices SET lat=?, lng=?, radius_m=? WHERE id=?", (pt[0], pt[1], radius, oid))
                     off_row = db.execute("SELECT name, department FROM offices WHERE id=?", (oid,)).fetchone()
                     off_name = (off_row["name"] if off_row else None) or f"Office #{oid}"
@@ -1065,7 +1077,7 @@ def settings():
                                      (f["code"].strip().upper(), f["name"].strip(), float(f["quota"]))).lastrowid
                 audit("LEAVE_TYPE_SAVE", "leave_type", tid, f"{f['name']} quota={f['quota']}")
             elif act == "system_settings":
-                max_acc = int(f.get("max_gps_accuracy_m", 15))
+                max_acc = max(10, int(f.get("max_gps_accuracy_m", 100)))
                 tol = int(f.get("geofence_tolerance_m", 0))
                 req_face = "1" if f.get("require_face_match") in ("1", "on", "true") else "0"
                 face_thresh = float(f.get("face_match_threshold") or 0.75)
@@ -1089,8 +1101,14 @@ def settings():
             db.commit()
             clear_shared_cache()
             flash("Saved successfully.", "ok")
-        except (KeyError, ValueError, sqlite3.IntegrityError):
-            flash("Please check the values you entered.", "err")
+        except Exception as e:
+            current_app.logger.error(f"Error saving HR settings: {e}", exc_info=True)
+            if hasattr(db, "rollback"):
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+            flash(f"Unable to save settings: {e}", "err")
         return redirect(url_for("hr.settings"))
     sys_settings = {r["key"]: r["value"] for r in db.execute("SELECT key, value FROM system_settings").fetchall()}
     categories = db.execute("SELECT * FROM employee_categories ORDER BY id").fetchall()

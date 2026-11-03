@@ -25,8 +25,8 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
             else:
                 db.execute("UPDATE offices SET radius_m=5, lat=12.762733, lng=77.802695 WHERE id=1")
             
-            # Ensure system settings max_gps_accuracy_m is 15
-            db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '15')")
+            # Ensure system settings max_gps_accuracy_m is 100
+            db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '100')")
             db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '0')")
 
             # Employee setup
@@ -72,17 +72,17 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
             self.assertEqual(off["radius_m"], 5)
             self.assertIn("Main", off["name"])
 
-    def test_02_inside_5m_with_good_accuracy_allowed(self):
-        """When distance <= 5m and accuracy <= 15m, check-in is permitted."""
+    def test_02_inside_5m_with_smartphone_accuracy_accepted(self):
+        """When distance <= 5m and smartphone accuracy is typical (e.g. 25m), attendance is accepted."""
         # Main Office coords: 12.762733, 77.802695
         # Coordinates ~2.5m away:
-        # 1 deg lat ~ 111,000m => 0.00002 deg lat ~ 2.22m
         lat = 12.762733 + 0.000020
         lng = 77.802695
         dist = haversine(lat, lng, 12.762733, 77.802695)
         self.assertLess(dist, 5.0)
 
-        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 6.5})
+        # Normal phone indoors gets ±25m accuracy: MUST BE ACCEPTED
+        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 25.0})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertTrue(data["ok"])
@@ -101,7 +101,7 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
         dist = haversine(lat, lng, 12.762733, 77.802695)
         self.assertGreater(dist, 5.0)
 
-        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 5.0})
+        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 15.0})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertTrue(data["ok"])
@@ -109,19 +109,17 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
         self.assertFalse(data["allowed"])
         self.assertGreater(data["distance"], 5.0)
 
-    def test_04_inaccurate_gps_reading_blocked(self):
-        """Attendance cannot be approved based on an inaccurate GPS reading (accuracy > 15m)."""
-        # Exactly at office coordinates, but GPS accuracy is ±35m (inaccurate)
+    def test_04_inaccurate_gps_reading_above_limit_blocked(self):
+        """Attendance cannot be approved if GPS accuracy exceeds maximum threshold (>100m)."""
         lat = 12.762733
         lng = 77.802695
 
-        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 35.0})
+        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 250.0})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertFalse(data["ok"])
         self.assertFalse(data.get("gps_accurate", False))
         self.assertIn("GPS accuracy too low", data["error"])
-        self.assertIn("5-meter office radius", data["error"])
 
     def test_05_invalid_or_negative_gps_accuracy_rejected(self):
         """Missing or zero/negative GPS accuracy is rejected."""
@@ -141,7 +139,7 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
             "kind": "in",
             "lat": lat,
             "lng": lng,
-            "accuracy": 8.0,
+            "accuracy": 18.0,
             "selfie": selfie,
             "webauthn_assertion": {
                 "id": "test_cred_id",
@@ -160,8 +158,8 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
         self.assertIn("Attendance blocked", data["error"])
         self.assertIn("5 meters inside accepted", data["error"])
 
-    def test_07_punch_endpoint_blocks_inaccurate_gps(self):
-        """The /api/punch endpoint blocks check-in if GPS reading is inaccurate (>15m)."""
+    def test_07_punch_endpoint_blocks_wildly_inaccurate_gps(self):
+        """The /api/punch endpoint blocks check-in if GPS reading is beyond tolerance (>100m)."""
         lat = 12.762733
         lng = 77.802695
         selfie = self._make_dummy_selfie()
@@ -170,7 +168,7 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
             "kind": "in",
             "lat": lat,
             "lng": lng,
-            "accuracy": 45.0,  # Inaccurate fix
+            "accuracy": 350.0,  # Highly inaccurate cell tower fix
             "selfie": selfie,
             "webauthn_assertion": {"id": "mock"}
         }

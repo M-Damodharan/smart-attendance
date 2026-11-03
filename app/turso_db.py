@@ -161,11 +161,21 @@ class TursoConnection:
 
         payload = {"requests": [{"type": "execute", "stmt": stmt}, {"type": "close"}]}
         session = _get_session()
-        try:
-            resp = session.post(self.url, data=json.dumps(payload), headers=self.headers, timeout=10)
-            data = resp.json()
-        except Exception as e:
-            raise RuntimeError(f"Turso Cloud request failed: {e}") from e
+        data = None
+        for attempt in range(3):
+            try:
+                resp = session.post(self.url, data=json.dumps(payload), headers=self.headers, timeout=10)
+                data = resp.json()
+                break
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, ConnectionResetError) as e:
+                global _SESSION_POOL
+                _SESSION_POOL = None
+                session = _get_session()
+                if attempt == 2:
+                    raise RuntimeError(f"Turso Cloud request failed after retries: {e}") from e
+                time.sleep(0.15 * (attempt + 1))
+            except Exception as e:
+                raise RuntimeError(f"Turso Cloud request failed: {e}") from e
 
         results = data.get("results", [])
         if not results:

@@ -463,7 +463,7 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
         c = self.app.test_client()
         with self.app.app_context():
             db = get_db()
-            db.execute("UPDATE employees SET active=1, block_reason=NULL WHERE emp_code='E0012'")
+            db.execute("UPDATE employees SET active=1, block_reason=NULL, department='Staff', office_id=1 WHERE emp_code='E0012'")
             db.execute("DELETE FROM attendance WHERE emp_id=(SELECT id FROM employees WHERE emp_code='E0012')")
             # Ensure office has strict 30m radius
             db.execute("UPDATE offices SET lat=12.971600, lng=77.594600, radius_m=30 WHERE department='Staff' OR id=1")
@@ -499,7 +499,7 @@ class TestAndroidBiometricAndTwoImage(unittest.TestCase):
         self.assertEqual(res_fail.status_code, 400)
         fail_data = res_fail.get_json()
         self.assertFalse(fail_data["ok"])
-        self.assertIn("allowed 30 m only", fail_data["error"])
+        self.assertIn("Attendance blocked", fail_data["error"])
 
         # 3. Coordinate within 30m (12.971750, 77.594600 is ~17 meters north) is allowed
         geo_in = c.post("/api/geo-check", json={"lat": 12.971750, "lng": 77.594600, "accuracy": 10}).get_json()

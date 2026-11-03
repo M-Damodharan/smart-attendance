@@ -4,11 +4,11 @@
 <section class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
     <div>
-      <h3 style="margin:0;">4 Department Marked Locations &amp; Geofence (Strict 30 m Policy)</h3>
-      <p class="muted small" style="margin:2px 0 0;">Each department has its own separated GPS location point. Attendance punching is strictly restricted to within <b>30 meters</b> of the employee's assigned department location point.</p>
+      <h3 style="margin:0;">4 Department Marked Locations &amp; Geofence (Strict 5 m Policy)</h3>
+      <p class="muted small" style="margin:2px 0 0;">Each department has its own separated GPS location point. Attendance punching is strictly restricted to within <b>5 meters</b> of the employee's assigned department location point (5 Meters Inside Accepted).</p>
     </div>
     <span class="badge" style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:6px 12px;border-radius:8px;">
-      📍 Strict 30m Max Radius Policy
+      📍 Strict 5m Max Radius Policy
     </span>
   </div>
 
@@ -16,6 +16,7 @@
   <form method="post" id="quick-location-form" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:1rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="action" value="office_link">
+    <input type="hidden" name="radius_m" value="5">
     <div style="flex:3 1 260px;">
       <input id="quick-location-input" name="link" placeholder="Paste Google Maps link, 'lat,lng', DMS or GPS coords" required style="width:100%;box-sizing:border-box;">
     </div>
@@ -119,8 +120,8 @@
     <input type="hidden" name="action" value="system_settings">
     <div style="flex:1 1 180px">
       <label>Max GPS Inaccuracy (m)
-        <input type="number" name="max_gps_accuracy_m" min="5" max="500" step="1" value="{{ sys_settings.get('max_gps_accuracy_m', '15') }}" required>
-        <span class="muted small" style="display:block;margin-top:2px;font-size:0.72rem">≤ 15m required for 5m office geofence</span>
+        <input type="number" name="max_gps_accuracy_m" min="10" max="500" step="1" value="{{ sys_settings.get('max_gps_accuracy_m', '100') }}" required>
+        <span class="muted small" style="display:block;margin-top:2px;font-size:0.72rem">≤ 100m device GPS tolerance (5m inside accepted)</span>
       </label>
     </div>
     <div style="flex:1 1 180px">

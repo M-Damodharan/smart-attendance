@@ -112,6 +112,62 @@ class LocationSettingTestCase(unittest.TestCase):
             self.assertAlmostEqual(r["lat"], 12.750000, places=4)
             self.assertAlmostEqual(r["lng"], 77.810000, places=4)
 
+    def test_hr_set_location_with_place_name_no_500(self):
+        """Setting location using a place name resolves or safely handles without 500 error."""
+        self._login_hr()
+        res = self.client.post(
+            "/hr/settings",
+            data={
+                "action": "office_link",
+                "link": "Hosur",
+                "id": "1",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(res.status_code, 200)
+        html = res.get_data(as_text=True)
+        self.assertNotIn("Internal Server Error", html)
+
+    def test_hr_set_location_with_invalid_input_never_500s(self):
+        """Submitting unparseable garbage never raises a 500 Internal Server Error."""
+        self._login_hr()
+        res = self.client.post(
+            "/hr/settings",
+            data={
+                "action": "office_link",
+                "link": "completely_invalid_nonexistent_place_xyz999",
+                "id": "1",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(res.status_code, 200)
+        html = res.get_data(as_text=True)
+        self.assertNotIn("Internal Server Error", html)
+        self.assertIn("Could not read coordinates", html)
+
+    def test_hr_save_office_card_with_invalid_coords_never_500s(self):
+        """Saving an office card with invalid non-numeric coords flashes error and never 500s."""
+        self._login_hr()
+        res = self.client.post(
+            "/hr/settings",
+            data={
+                "action": "office",
+                "id": "1",
+                "name": "Main Office",
+                "department": "Staff",
+                "lat": "not_a_number",
+                "lng": "also_not_a_number",
+                "radius_m": "5",
+                "active": "1",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(res.status_code, 200)
+        html = res.get_data(as_text=True)
+        self.assertNotIn("Internal Server Error", html)
+        self.assertIn("Could not parse coordinates", html)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -124,26 +124,35 @@ def evaluate_geo(user, lat, lng, acc):
         return {"ok": False, "error": "Invalid GPS coordinates."}
     from .services import get_system_settings_cached
     sys_settings = get_system_settings_cached(db)
-    max_acc = float(sys_settings.get("max_gps_accuracy_m") or current_app.config["MAX_GPS_ACCURACY_M"])
+    raw_max_acc = sys_settings.get("max_gps_accuracy_m") or current_app.config.get("MAX_GPS_ACCURACY_M", 100)
+    try:
+        max_acc = max(50.0, float(raw_max_acc))
+    except (ValueError, TypeError):
+        max_acc = 100.0
 
-    # Strict GPS accuracy verification: Reject missing, negative, or inaccurate readings
+    # Strict GPS accuracy verification: Reject missing, negative, or invalid readings
     if acc is None or acc <= 0:
         return {"ok": False, "error": "GPS accuracy reading is invalid. Please enable high-accuracy device GPS."}
-
-    if acc > max_acc:
-        return {
-            "ok": False,
-            "gps_accurate": False,
-            "accuracy": round(acc, 1),
-            "max_accuracy": round(max_acc, 1),
-            "error": f"GPS accuracy too low (±{acc:.1f} m). Attendance blocked: high accuracy GPS (within ±{int(max_acc)} m) is required to verify the 5-meter office radius. Move outdoors or near a window for satellite lock and try again."
-        }
 
     office_radius = float(office["radius_m"] or 5)
     allowed = office_radius
     dist = haversine(lat, lng, office["lat"], office["lng"])
     inside = dist <= allowed
     od = approved_od_for(user["id"], today())
+
+    # Reject coarse cell-tower or spoofed GPS readings beyond device tolerance
+    if acc > max_acc:
+        return {
+            "ok": False,
+            "inside": inside,
+            "distance": round(dist, 1),
+            "radius": allowed,
+            "gps_accurate": False,
+            "accuracy": round(acc, 1),
+            "max_accuracy": round(max_acc, 1),
+            "error": f"GPS accuracy too low (±{acc:.1f} m). High accuracy GPS (within ±{int(max_acc)} m) is required to verify the {int(allowed)}m office radius. Move outdoors or near a window for satellite lock and try again."
+        }
+
     office_keys = office.keys() if hasattr(office, "keys") else []
     dept_val = office["department"] if "department" in office_keys and office["department"] else office["name"]
     return {

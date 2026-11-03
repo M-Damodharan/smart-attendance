@@ -91,8 +91,8 @@
 
     if (accVal) {
       if (acc !== null && acc !== undefined && !isNaN(acc)) {
-        accVal.textContent = '±' + acc.toFixed(1) + ' m';
-        accVal.style.color = acc <= 15 ? '#10b981' : '#ef4444';
+        accVal.textContent = '±' + Math.round(acc) + ' m';
+        accVal.style.color = acc <= 100 ? '#10b981' : '#f59e0b';
       } else {
         accVal.textContent = 'Acquiring…';
         accVal.style.color = 'var(--text-main)';
@@ -100,18 +100,18 @@
     }
     if (accSub) {
       if (acc !== null && acc !== undefined && !isNaN(acc)) {
-        if (acc <= 15) {
-          accSub.innerHTML = '<span style="color:#10b981;font-weight:700">✓ GPS Accuracy Verified</span>';
+        if (acc <= 100) {
+          accSub.innerHTML = '<span style="color:#10b981;font-weight:700">✓ GPS Signal Verified</span>';
         } else {
-          accSub.innerHTML = '<span style="color:#ef4444;font-weight:700">⚠️ Inaccurate (Must be ≤15m)</span>';
+          accSub.innerHTML = '<span style="color:#f59e0b;font-weight:700">⚠️ Weak Signal (±' + Math.round(acc) + 'm)</span>';
         }
       } else {
-        accSub.textContent = 'High Accuracy: ≤ 15 m';
+        accSub.textContent = 'Device GPS';
       }
     }
 
     if (ind) {
-      ind.style.background = isInside ? '#10b981' : (isError || (acc && acc > 15) ? '#ef4444' : '#f59e0b');
+      ind.style.background = isInside ? '#10b981' : (isError ? '#ef4444' : '#f59e0b');
     }
     if (pill) {
       if (isInside) {
@@ -120,16 +120,16 @@
         pill.style.color = '#059669';
         pill.style.borderColor = 'rgba(16,185,129,0.3)';
       } else {
-        pill.textContent = '✗ Attendance Blocked (Outside)';
+        pill.textContent = '✗ Attendance Blocked (Outside 5m)';
         pill.style.background = 'rgba(239,68,68,0.15)';
         pill.style.color = '#dc2626';
         pill.style.borderColor = 'rgba(239,68,68,0.3)';
       }
     }
     if (msgEl && msg) {
-      const icon = isInside ? '✅' : (isError || (acc && acc > 15) ? '⚠️' : '📍');
+      const icon = isInside ? '✅' : (isError ? '⚠️' : '📍');
       msgEl.innerHTML = `<span>${icon}</span> <span>${msg}</span>`;
-      msgEl.style.color = isInside ? '#10b981' : (isError || (acc && acc > 15) ? '#ef4444' : 'var(--text-secondary)');
+      msgEl.style.color = isInside ? '#10b981' : (isError ? '#ef4444' : 'var(--text-secondary)');
     }
   }
 
@@ -144,19 +144,7 @@
       clientDist = calcDistanceM(lat, lng, officeLat, officeLng);
     }
 
-    // 2. Strict accuracy verification
-    if (accuracy > 15) {
-      const accErr = `GPS accuracy too low (±${accuracy.toFixed(1)} m). Attendance blocked: high accuracy GPS (within ±15m) is required to verify the 5-meter office radius. Move outdoors or near a window for satellite lock.`;
-      setStep('st-gps', 'bad', accErr, 'gps-text');
-      updateGeoCard(clientDist, accuracy, false, false, accErr, true);
-      const retryBtn = $('gps-retry-btn');
-      if (retryBtn) retryBtn.style.display = 'inline-flex';
-      geo = { ok: false, allowed: false, error: accErr, lat, lng, accuracy };
-      refresh();
-      return;
-    }
-
-    // 3. Authoritative server-side evaluation
+    // 2. Authoritative server-side evaluation (5 meters inside accepted)
     try {
       isCheckingGeo = true;
       const res = await postJSON('/api/geo-check', { lat, lng, accuracy });
@@ -171,15 +159,15 @@
         updateGeoCard(clientDist, accuracy, false, false, geo.error, true);
         if (retryBtn) retryBtn.style.display = 'inline-flex';
       } else if (geo.inside) {
-        setStep('st-gps', 'ok', `Inside ${geo.office} · ${geo.distance} m (Accuracy: ±${geo.accuracy} m - Verified)`, 'gps-text');
-        updateGeoCard(geo.distance, accuracy, true, true, `Inside permitted area (${geo.distance} m from ${geo.office}). Check-in accepted.`, false);
+        setStep('st-gps', 'ok', `${geo.office || 'Office'} · 5 meters inside accepted (${geo.distance}m away, ±${Math.round(accuracy)}m)`, 'gps-text');
+        updateGeoCard(geo.distance, accuracy, true, true, `✓ Inside 5m permitted area (${geo.distance} m from ${geo.office}). Check-in accepted.`, false);
         if (retryBtn) retryBtn.style.display = 'none';
       } else if (geo.od) {
         setStep('st-gps', 'ok', `On-duty approved (${geo.od_location || 'field'}) · ${geo.distance} m from office`, 'gps-text');
         updateGeoCard(geo.distance, accuracy, true, true, `On-duty approved (${geo.od_location || 'field'}). Check-in allowed.`, false);
         if (retryBtn) retryBtn.style.display = 'none';
       } else {
-        const outMsg = `Outside geofence: ${geo.distance} m from ${geo.office} (allowed: 5 m only — 5 meters inside accepted). Attendance is strictly blocked until you are inside the permitted area.`;
+        const outMsg = `Outside geofence: ${geo.distance} m from ${geo.office} (allowed: 5 m only — 5 meters inside accepted). Physical presence within 5 meters is strictly required.`;
         setStep('st-gps', 'bad', outMsg, 'gps-text');
         updateGeoCard(geo.distance, accuracy, true, false, outMsg, true);
         if (retryBtn) retryBtn.style.display = 'inline-flex';
@@ -195,7 +183,7 @@
   function locate() {
     const retryBtn = $('gps-retry-btn');
     if (retryBtn) retryBtn.style.display = 'none';
-    setStep('st-gps', '', 'Acquiring high-accuracy GPS coordinates…', 'gps-text');
+    setStep('st-gps', '', 'Acquiring GPS location…', 'gps-text');
     if (!navigator.geolocation) {
       if (retryBtn) retryBtn.style.display = 'inline-flex';
       return setStep('st-gps', 'bad', 'GPS not supported on this device', 'gps-text');
@@ -207,40 +195,67 @@
       watchId = null;
     }
 
-    let initialFixReceived = false;
-    const handleSuccess = pos => {
+    let gotFix = false;
+
+    function handlePos(pos) {
+      gotFix = true;
       const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-      initialFixReceived = true;
       processPosition(lat, lng, accuracy);
-    };
+    }
 
-    const handleError = err => {
-      if (!initialFixReceived) {
-        const msg = err && err.code === 1 ? 'Location permission denied — enable GPS in device settings' : 'Could not acquire GPS satellite lock. Move outdoors and tap Retry GPS.';
-        setStep('st-gps', 'bad', msg, 'gps-text');
-        updateGeoCard(null, null, false, false, msg, true);
-        if (retryBtn) retryBtn.style.display = 'inline-flex';
-      }
-    };
+    // Resilient 3-tier GPS acquisition:
+    // Tier 1: High accuracy satellite GPS (6s timeout, 30s cache)
+    navigator.geolocation.getCurrentPosition(
+      handlePos,
+      err => {
+        // Tier 2: Low-accuracy device Wi-Fi/network geolocation fallback (5s timeout, 120s cache)
+        if (!gotFix) {
+          navigator.geolocation.getCurrentPosition(
+            handlePos,
+            err2 => {
+              // Tier 3: Backend IP Geolocation Fallback
+              if (!gotFix) {
+                fetch('/api/geo/my-location', { headers: { 'Accept': 'application/json' } })
+                  .then(r => r.ok ? r.json() : null)
+                  .then(d => {
+                    if (d && d.ok && d.lat && d.lng && !gotFix) {
+                      gotFix = true;
+                      processPosition(d.lat, d.lng, d.accuracy || 150);
+                    } else if (!gotFix) {
+                      const msg = (err2 && err2.code === 1) || (err && err.code === 1)
+                        ? 'Location permission denied — enable GPS in device settings'
+                        : 'Could not acquire GPS fix. Please ensure location is enabled and tap Retry GPS.';
+                      setStep('st-gps', 'bad', msg, 'gps-text');
+                      updateGeoCard(null, null, false, false, msg, true);
+                      if (retryBtn) retryBtn.style.display = 'inline-flex';
+                    }
+                  })
+                  .catch(() => {
+                    if (!gotFix) {
+                      const msg = 'Could not acquire GPS fix. Please ensure location is enabled and tap Retry GPS.';
+                      setStep('st-gps', 'bad', msg, 'gps-text');
+                      updateGeoCard(null, null, false, false, msg, true);
+                      if (retryBtn) retryBtn.style.display = 'inline-flex';
+                    }
+                  });
+              }
+            },
+            { enableHighAccuracy: false, timeout: 5000, maximumAge: 120000 }
+          );
+        }
+      },
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
+    );
 
-    // 1. One-time fast initial fix
-    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
-      enableHighAccuracy: true,
-      timeout: 8000,
-      maximumAge: 0
-    });
-
-    // 2. Start continuous live position tracking
+    // Continuous live tracking
     try {
       watchId = navigator.geolocation.watchPosition(
         pos => {
-          if (!isCheckingGeo) {
-            const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-            processPosition(lat, lng, accuracy);
-          }
+          const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+          processPosition(lat, lng, accuracy);
         },
         err => console.warn('watchPosition update error:', err),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
       );
     } catch (e) {
       console.warn('Could not start watchPosition:', e);

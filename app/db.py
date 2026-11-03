@@ -708,6 +708,9 @@ def init_db(app):
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('face_match_threshold', '0.58')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_buddy_punch_block_threshold', '0.60')")
     con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('ai_auto_block_enabled', '1')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '100')")
+    con.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '0')")
+    con.execute("UPDATE system_settings SET value='100' WHERE key='max_gps_accuracy_m' AND CAST(value AS INTEGER) < 50")
     con.execute("UPDATE system_settings SET value='0.58' WHERE key='face_match_threshold' AND (value='0.75' OR value='0.70')")
     con.execute("UPDATE system_settings SET value='0.60' WHERE key='ai_buddy_punch_block_threshold'")
 
