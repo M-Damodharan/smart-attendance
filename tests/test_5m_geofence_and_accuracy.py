@@ -41,8 +41,12 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
                 self.emp_code = emp["emp_code"]
                 db.execute("UPDATE employees SET office_id=1, category_id=1, department='Staff', must_change_pw=0, active=1 WHERE id=?", (self.emp_id,))
             
-            # Clear today's attendance for clean test
+            # Clear today's attendance and child records for clean test
+            db.execute("PRAGMA foreign_keys = OFF")
+            db.execute("DELETE FROM late_coming_requests WHERE emp_id=?", (self.emp_id,))
+            db.execute("DELETE FROM comments WHERE entity_type='attendance' AND entity_id IN (SELECT id FROM attendance WHERE emp_id=?)", (self.emp_id,))
             db.execute("DELETE FROM attendance WHERE emp_id=? AND date=date('now')", (self.emp_id,))
+            db.execute("PRAGMA foreign_keys = ON")
             db.commit()
 
         self._login()
