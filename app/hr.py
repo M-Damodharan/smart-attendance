@@ -731,9 +731,11 @@ def missed_punches():
     )
 
 
-@bp.route("/missed-punches/resolve", methods=["POST"])
+@bp.route("/missed-punches/resolve", methods=["GET", "POST"])
 @hr_required
 def missed_punch_resolve():
+    if request.method == "GET":
+        return redirect(url_for("hr.missed_punches"))
     db = get_db()
     f = request.form
     try:
@@ -1831,9 +1833,11 @@ def sunday_working():
     )
 
 
-@bp.route("/sunday-working/assign", methods=["POST"])
+@bp.route("/sunday-working/assign", methods=["GET", "POST"])
 @hr_required
 def sunday_working_assign():
+    if request.method == "GET":
+        return redirect(url_for("hr.sunday_working"))
     db = get_db()
     emp_ids = request.form.getlist("emp_ids")
     sunday_date = request.form.get("sunday_date", "").strip()
@@ -1875,9 +1879,11 @@ def sunday_working_assign():
     return redirect(url_for("hr.sunday_working", date=sunday_date))
 
 
-@bp.route("/sunday-working/record-punch", methods=["POST"])
+@bp.route("/sunday-working/record-punch", methods=["GET", "POST"])
 @hr_required
 def sunday_working_record_punch():
+    if request.method == "GET":
+        return redirect(url_for("hr.sunday_working"))
     db = get_db()
     sw_id = request.form.get("sw_id")
     check_in = request.form.get("check_in", "").strip() or None
@@ -1902,9 +1908,11 @@ def sunday_working_record_punch():
     return redirect(url_for("hr.sunday_working", date=sw["sunday_date"]))
 
 
-@bp.route("/sunday-working/approve/<int:sw_id>", methods=["POST"])
+@bp.route("/sunday-working/approve/<int:sw_id>", methods=["GET", "POST"])
 @hr_required
 def sunday_working_approve(sw_id):
+    if request.method == "GET":
+        return redirect(url_for("hr.sunday_working"))
     db = get_db()
     action = request.form.get("action", "Approved").strip()
     hr_remarks = request.form.get("hr_remarks", "").strip()
@@ -2054,11 +2062,13 @@ def late_coming():
     )
 
 
-@bp.route("/late-coming/decide/<int:req_id>", methods=["POST"])
+@bp.route("/late-coming/decide/<int:req_id>", methods=["GET", "POST"])
 @hr_required
 def late_coming_decide(req_id):
+    if request.method == "GET":
+        return redirect(url_for("hr.late_coming"))
     db = get_db()
-    action = request.form.get("status", "Approved").strip()
+    action = (request.form.get("status") or request.form.get("action") or "Approved").strip()
     hr_remarks = request.form.get("hr_remarks", "").strip()
 
     req = db.execute("SELECT * FROM late_coming_requests WHERE id=?", (req_id,)).fetchone()
@@ -2219,9 +2229,11 @@ def payroll_setup():
     return render_template("hr/payroll_setup.html", profiles=profiles)
 
 
-@bp.route("/payroll/calculate", methods=["POST"])
+@bp.route("/payroll/calculate", methods=["GET", "POST"])
 @hr_required
 def payroll_calculate():
+    if request.method == "GET":
+        return redirect(url_for("hr.payroll"))
     import calendar
     db = get_db()
     month_param = request.form.get("month", "").strip()
@@ -2384,9 +2396,11 @@ def payroll_calculate():
     return redirect(url_for("hr.payroll", month=month_param))
 
 
-@bp.route("/payroll/approve/<int:payroll_id>", methods=["POST"])
+@bp.route("/payroll/approve/<int:payroll_id>", methods=["GET", "POST"])
 @hr_required
 def payroll_approve(payroll_id):
+    if request.method == "GET":
+        return redirect(url_for("hr.payroll"))
     db = get_db()
     action = request.form.get("action", "Approved").strip()
     remarks = request.form.get("remarks", "").strip()

@@ -117,6 +117,7 @@
               ✏️ Resolve OUT
             </button>
             <form method="post" action="{{ url_for('hr.missed_punch_resolve') }}" onsubmit="return confirm('Approve this record as a confirmed Missed Punch? Zero work hours will be recorded.');" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="att_id" value="{{ r['id'] }}">
               <input type="hidden" name="action" value="approve_mp">
               <input type="hidden" name="reason" value="HR Verified: Missed OUT punch after 12h shift cutoff">
@@ -203,6 +204,7 @@
       <button type="button" class="btn sm" onclick="closeResolveModal()" style="padding:2px 8px">&times;</button>
     </div>
     <form method="post" action="{{ url_for('hr.missed_punch_resolve') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="att_id" id="modal-att-id" value="">
       <input type="hidden" name="action" value="correct_out">
 
