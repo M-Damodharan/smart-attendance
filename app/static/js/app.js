@@ -47,7 +47,9 @@ if (document.readyState === 'loading') {
 }
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    try { reg.update(); } catch(e){}
+  }).catch(() => {});
 }
 
 // ==========================================

@@ -189,7 +189,7 @@
 {% endblock %}
 {% block scripts %}
 {% if mode != 'done' %}
-<script src="{{ url_for('static', filename='js/webauthn.js') }}"></script>
-<script src="{{ url_for('static', filename='js/punch.js') }}"></script>
+<script src="{{ url_for('static', filename='js/webauthn.js') }}?v={{ asset_v }}"></script>
+<script src="{{ url_for('static', filename='js/punch.js') }}?v={{ asset_v }}"></script>
 {% endif %}
 {% endblock %}

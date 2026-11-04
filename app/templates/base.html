@@ -24,7 +24,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_v }}">
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
 {% if g.user and request.endpoint != 'auth.login' and not request.path.startswith('/login') %}
@@ -390,7 +390,7 @@
 <div id="notif-toast-container" class="notif-toast-container" aria-live="polite" aria-atomic="true"></div>
 {% endif %}
 
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

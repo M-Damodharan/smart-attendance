@@ -87,10 +87,18 @@ def create_app(test_config=None):
         except Exception:
             return "—"
 
+    @app.context_processor
+    def inject_asset_version():
+        return dict(asset_v="20261104_1100")
+
     @app.route("/sw.js")
     def service_worker():
-        from flask import send_from_directory
-        return send_from_directory(app.static_folder + "/js", "sw.js", mimetype="application/javascript")
+        from flask import send_from_directory, make_response
+        resp = make_response(send_from_directory(app.static_folder + "/js", "sw.js", mimetype="application/javascript"))
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
 
     @app.route("/download/apk")
     def download_apk():
@@ -109,7 +117,9 @@ def create_app(test_config=None):
         resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Permissions-Policy"] = "camera=(self), geolocation=(self)"
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        if request.path.startswith("/static/"):
+        if request.path.startswith("/static/js/") or request.path.startswith("/static/css/"):
+            resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        elif request.path.startswith("/static/"):
             resp.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
 
         # Multi-user concurrency optimization: Gzip compression for HTML, JSON, and JS

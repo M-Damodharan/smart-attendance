@@ -1,8 +1,8 @@
 // SBG Smart Attendance High-Performance Service Worker
 // Automatically caches static styles, scripts, and shell assets for sub-millisecond page loads.
-// Dynamic attendance, biometric scans, and live sync operations are never stale and always hit the cloud.
+// Core application logic (JS, CSS) uses network-first to ensure live bug fixes take effect immediately.
 
-const CACHE_NAME = 'sbg-static-v5';
+const CACHE_NAME = 'sbg-static-v8';
 const PRECACHE_ASSETS = [
   '/static/css/style.css',
   '/static/js/app.js',
@@ -29,24 +29,36 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // 1. Static asset cache-first with background revalidation
-  if (url.origin === location.origin && url.pathname.startsWith('/static/')) {
-    event.respondWith(
-      caches.match(req).then(cached => {
-        const fetchPromise = fetch(req).then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
-          }
-          return networkResponse;
-        }).catch(() => null);
+  // 1. Dynamic attendance, biometric scans, and live sync operations are never cached
+  if (url.pathname.startsWith('/api/') || req.method !== 'GET') {
+    return;
+  }
 
-        return cached || fetchPromise;
-      })
+  // 2. Core JS/CSS logic files: Network-first to always run the latest bug fixes, fallback to cache offline
+  if (url.origin === location.origin && (url.pathname.includes('/js/') || url.pathname.includes('/css/'))) {
+    event.respondWith(
+      fetch(req).then(networkResponse => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
+        }
+        return networkResponse;
+      }).catch(() => caches.match(req))
     );
     return;
   }
 
-  // 2. All mutation, biometric punches, APIs, and HTML documents use direct network
-  return;
+  // 3. Cache-first for images, fonts, and icons
+  if (url.origin === location.origin && url.pathname.startsWith('/static/')) {
+    event.respondWith(
+      caches.match(req).then(cached => cached || fetch(req).then(networkResponse => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
+        }
+        return networkResponse;
+      }).catch(() => null))
+    );
+    return;
+  }
 });
