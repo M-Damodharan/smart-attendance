@@ -435,8 +435,22 @@ async function submitComment(e, entityType, entityId, inputId, containerId, stat
 // =========================================================================
 // Real-Time Notifications & Pop Alert Engine
 // =========================================================================
-let seenNotifIds = new Set(JSON.parse(sessionStorage.getItem('seen_notifs') || '[]'));
+let seenNotifIds = new Set();
+try {
+  const stored = JSON.parse(localStorage.getItem('sbg_seen_notif_ids') || '[]');
+  if (Array.isArray(stored)) {
+    stored.forEach(id => seenNotifIds.add(id));
+  }
+} catch (e) {}
+let hasInitializedNotifs = false;
 let isNotifMenuOpen = false;
+
+function saveSeenNotifIds() {
+  try {
+    const arr = Array.from(seenNotifIds).slice(-300);
+    localStorage.setItem('sbg_seen_notif_ids', JSON.stringify(arr));
+  } catch (e) {}
+}
 
 function playNotificationSound() {
   try {
@@ -492,23 +506,28 @@ function showNotificationPopToast(notif) {
       <div class="notif-toast-msg">${escapeHTML(notif.message)}</div>
       ${notif.link_url ? `<a href="${notif.link_url}" onclick="markNotificationRead(${notif.id})" class="notif-toast-action">View Details &rarr;</a>` : ''}
     </div>
-    <button type="button" class="notif-toast-close" onclick="dismissToast(${notif.id})" title="Dismiss">&times;</button>
+    <button type="button" class="notif-toast-close" onclick="dismissToast(${notif.id}, true)" title="Dismiss & Mark Read">&times;</button>
   `;
 
   container.appendChild(toast);
 
   setTimeout(() => {
-    dismissToast(notif.id);
+    dismissToast(notif.id, true);
   }, 9000);
 }
 
-function dismissToast(nid) {
+function dismissToast(nid, markRead = true) {
   const toast = document.getElementById(`notif-toast-${nid}`);
   if (toast && !toast.classList.contains('dismissing')) {
     toast.classList.add('dismissing');
     setTimeout(() => {
       if (toast.parentNode) toast.parentNode.removeChild(toast);
     }, 300);
+  }
+  if (markRead && nid) {
+    seenNotifIds.add(nid);
+    saveSeenNotifIds();
+    markNotificationRead(nid);
   }
 }
 
@@ -554,13 +573,23 @@ async function fetchNotifications(updateList = false) {
     }
 
     if (res.notifications && res.notifications.length) {
-      res.notifications.forEach(n => {
-        if (n.status === 'unread' && !seenNotifIds.has(n.id)) {
-          seenNotifIds.add(n.id);
-          sessionStorage.setItem('seen_notifs', JSON.stringify(Array.from(seenNotifIds)));
-          showNotificationPopToast(n);
-        }
-      });
+      if (!hasInitializedNotifs) {
+        // Initial page load: Record all existing notifications as already seen so old past messages NEVER pop up as toasts
+        hasInitializedNotifs = true;
+        res.notifications.forEach(n => seenNotifIds.add(n.id));
+        saveSeenNotifIds();
+      } else {
+        // Real-time polling while actively using page: Only newly arriving unread notifications pop up as toasts
+        res.notifications.forEach(n => {
+          if (n.status === 'unread' && !seenNotifIds.has(n.id)) {
+            seenNotifIds.add(n.id);
+            saveSeenNotifIds();
+            showNotificationPopToast(n);
+          }
+        });
+      }
+    } else {
+      hasInitializedNotifs = true;
     }
 
     if (updateList || isNotifMenuOpen) {
@@ -629,6 +658,16 @@ async function markAllNotificationsRead(e) {
     e.preventDefault();
     e.stopPropagation();
   }
+  // Immediately dismiss any active pop toasts
+  document.querySelectorAll('.notif-toast').forEach(t => {
+    t.classList.add('dismissing');
+    setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+  });
+  const badge = document.getElementById('notif-badge');
+  if (badge) badge.style.display = 'none';
+  const pill = document.getElementById('notif-unread-pill');
+  if (pill) pill.style.display = 'none';
+
   try {
     await postJSON('/api/notifications/read-all');
     fetchNotifications(true);

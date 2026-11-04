@@ -948,11 +948,17 @@ def settings():
                         lat_val = float(raw_lat)
                         lng_val = float(raw_lng)
                     except (ValueError, TypeError):
-                        flash(f"Could not parse coordinates from '{raw_lat}' / '{raw_lng}'. Please enter numeric coordinates or click '📍 Use My Location'.", "err")
+                        err_msg = f"Could not parse coordinates from '{raw_lat}' / '{raw_lng}'. Please enter numeric coordinates or click '📍 Use My Location'."
+                        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
+                            return jsonify(ok=False, error=err_msg), 400
+                        flash(err_msg, "err")
                         return redirect(url_for("hr.settings"))
 
                 if not (-90 <= lat_val <= 90 and -180 <= lng_val <= 180):
-                    flash("Invalid coordinates. Latitude must be between -90 and 90, Longitude between -180 and 180.", "err")
+                    err_msg = "Invalid coordinates. Latitude must be between -90 and 90, Longitude between -180 and 180."
+                    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
+                        return jsonify(ok=False, error=err_msg), 400
+                    flash(err_msg, "err")
                     return redirect(url_for("hr.settings"))
 
                 vals = (name, dept, lat_val, lng_val, radius, 1 if f.get("active") else 0)
@@ -963,14 +969,19 @@ def settings():
                 audit("OFFICE_SAVE", "office", oid, f"{vals[0]} dept={dept} {vals[2]:.6f},{vals[3]:.6f} r={vals[4]}m")
                 db.commit()
                 clear_shared_cache()
-                flash(f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict {radius} m radius).", "ok")
+                succ_msg = f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict {radius} m radius)."
+                if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
+                    return jsonify(ok=True, message=succ_msg, lat=lat_val, lng=lng_val, radius=radius, id=oid, name=name)
+                flash(succ_msg, "ok")
                 return redirect(url_for("hr.settings"))
             elif act == "office_link":
                 raw_link = f.get("link", "").strip()
                 pt = coords_from_maps_link(raw_link)
                 if not pt:
-                    flash(f"Could not read coordinates from '{raw_link}'. Paste a Google Maps link, "
-                          "'lat,lng', DMS coordinates, place name, or click '📍 Use Current GPS'.", "err")
+                    err_msg = f"Could not read coordinates from '{raw_link}'. Paste a Google Maps link, 'lat,lng', DMS coordinates, place name, or click '📍 Use Current GPS'."
+                    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
+                        return jsonify(ok=False, error=err_msg), 400
+                    flash(err_msg, "err")
                     return redirect(url_for("hr.settings"))
                 target_id = str(f.get("id", "")).strip()
                 radius = max(1, int(f.get("radius_m") or 5))
@@ -981,13 +992,19 @@ def settings():
                     audit("OFFICE_LOCATION_ALL_SET", "offices", 0, f"{pt[0]:.6f},{pt[1]:.6f} r={radius}m")
                     db.commit()
                     clear_shared_cache()
-                    flash(f"All department office locations successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict {radius} m policy).", "ok")
+                    succ_msg = f"All department office locations successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict {radius} m policy)."
+                    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
+                        return jsonify(ok=True, message=succ_msg, lat=pt[0], lng=pt[1], radius=radius, target_id="all")
+                    flash(succ_msg, "ok")
                     return redirect(url_for("hr.settings"))
                 else:
                     try:
                         oid = int(target_id)
                     except (ValueError, TypeError):
-                        flash("Invalid office selected.", "err")
+                        err_msg = "Invalid office selected."
+                        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
+                            return jsonify(ok=False, error=err_msg), 400
+                        flash(err_msg, "err")
                         return redirect(url_for("hr.settings"))
                     db.execute("UPDATE offices SET lat=?, lng=?, radius_m=? WHERE id=?", (pt[0], pt[1], radius, oid))
                     off_row = db.execute("SELECT name, department FROM offices WHERE id=?", (oid,)).fetchone()
@@ -995,7 +1012,10 @@ def settings():
                     audit("OFFICE_LOCATION_FROM_LINK", "office", oid, f"{pt[0]:.6f},{pt[1]:.6f} r={radius}m")
                     db.commit()
                     clear_shared_cache()
-                    flash(f"Location for '{off_name}' successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict {radius} m policy).", "ok")
+                    succ_msg = f"Location for '{off_name}' successfully set to {pt[0]:.6f}, {pt[1]:.6f} (Strict {radius} m policy)."
+                    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
+                        return jsonify(ok=True, message=succ_msg, lat=pt[0], lng=pt[1], radius=radius, target_id=oid)
+                    flash(succ_msg, "ok")
                     return redirect(url_for("hr.settings"))
             elif act == "shift":
                 sid = f.get("id", type=int)

@@ -13,7 +13,7 @@
   </div>
 
   <!-- Quick GPS link & coordinates setter -->
-  <form method="post" id="quick-location-form" onsubmit="onSetLocationSubmit(this)" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:1rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+  <form method="post" id="quick-location-form" onsubmit="onSetLocationSubmit(event, this)" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:0.75rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="action" value="office_link">
     <input type="hidden" name="radius_m" value="5">
@@ -35,11 +35,12 @@
       </button>
     </div>
   </form>
+  <div id="quick-location-feedback" style="display:none;width:100%;padding:10px 14px;border-radius:8px;margin-bottom:1rem;font-weight:600;font-size:0.9rem;transition:all 0.3s ease;"></div>
 
   <!-- 4 Department-Separated Location Cards Grid -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;margin-bottom:1rem;">
     {% for o in offices %}
-    <form method="post" onsubmit="onOfficeSaveSubmit(this)" style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+    <form method="post" onsubmit="onOfficeSaveSubmit(event, this)" style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="office">
       <input type="hidden" name="id" value="{{ o['id'] }}">
@@ -711,21 +712,144 @@ function useMyLocation(){
   if(topBtn) useQuickGps(topBtn);
 }
 
-function onSetLocationSubmit(form){
+async function onSetLocationSubmit(e, form){
+  if(e) e.preventDefault();
   const btn = form.querySelector('#quick-set-btn');
+  const origHtml = btn ? btn.innerHTML : '📍 Set Location';
   if(btn){
     btn.innerHTML = '<span class="spinner-sm" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span> 📍 Setting Location…';
-    btn.style.opacity = '0.85';
-    btn.style.pointerEvents = 'none';
+    btn.disabled = true;
+  }
+  const feedbackEl = document.getElementById('quick-location-feedback');
+
+  try {
+    const formData = new FormData(form);
+    const res = await fetch(form.action || window.location.href, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      }
+    });
+    const data = await res.json();
+    if(data.ok){
+      if(feedbackEl){
+        feedbackEl.style.display = 'block';
+        feedbackEl.style.background = 'rgba(16,185,129,0.15)';
+        feedbackEl.style.border = '1px solid #10b981';
+        feedbackEl.style.color = '#065f46';
+        feedbackEl.innerHTML = `✓ <strong>Confirmed:</strong> ${data.message}`;
+      }
+      if(btn){
+        btn.innerHTML = '✓ Location Active!';
+        btn.style.background = '#059669';
+        btn.disabled = false;
+        setTimeout(() => {
+          btn.innerHTML = origHtml;
+          btn.style.background = '';
+        }, 5000);
+      }
+      // Instantly update department cards on the page without reload
+      if(data.lat && data.lng){
+        const lat = parseFloat(data.lat).toFixed(6);
+        const lng = parseFloat(data.lng).toFixed(6);
+        const targetId = data.target_id;
+        document.querySelectorAll('form[onsubmit*="onOfficeSaveSubmit"]').forEach(cf => {
+          const idInp = cf.querySelector('input[name=id]');
+          if(targetId === 'all' || (idInp && idInp.value == targetId)){
+            const latInp = cf.querySelector('input[name=lat]');
+            const lngInp = cf.querySelector('input[name=lng]');
+            if(latInp) latInp.value = lat;
+            if(lngInp) lngInp.value = lng;
+          }
+        });
+      }
+      if(typeof showNotificationPopToast === 'function'){
+        showNotificationPopToast({
+          id: Date.now(),
+          title: '📍 Office Location Saved',
+          message: data.message,
+          kind: 'info'
+        });
+      }
+    } else {
+      if(feedbackEl){
+        feedbackEl.style.display = 'block';
+        feedbackEl.style.background = 'rgba(239,68,68,0.15)';
+        feedbackEl.style.border = '1px solid #ef4444';
+        feedbackEl.style.color = '#b91c1c';
+        feedbackEl.textContent = '⚠️ ' + (data.error || 'Failed to set location. Please check coordinates.');
+      }
+      if(btn){
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+      }
+    }
+  } catch(err){
+    form.submit();
   }
 }
 
-function onOfficeSaveSubmit(form){
+async function onOfficeSaveSubmit(e, form){
+  if(e) e.preventDefault();
   const btn = form.querySelector('button[type=submit]');
+  const origHtml = btn ? btn.innerHTML : '📍 Save &amp; Set Location';
   if(btn){
     btn.innerHTML = '<span class="spinner-sm" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span> 💾 Saving…';
-    btn.style.opacity = '0.85';
-    btn.style.pointerEvents = 'none';
+    btn.disabled = true;
+  }
+  let feedbackEl = form.querySelector('.loc-feedback');
+  if(!feedbackEl){
+    feedbackEl = document.createElement('div');
+    feedbackEl.className = 'loc-feedback small';
+    feedbackEl.style.cssText = 'margin-top:6px;font-weight:600;text-align:center;transition:all 0.3s ease;';
+    form.appendChild(feedbackEl);
+  }
+
+  try {
+    const formData = new FormData(form);
+    const res = await fetch(form.action || window.location.href, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      }
+    });
+    const data = await res.json();
+    if(data.ok){
+      feedbackEl.style.display = 'block';
+      feedbackEl.style.color = '#10b981';
+      feedbackEl.textContent = `✓ Saved: ${data.lat.toFixed(6)}, ${data.lng.toFixed(6)} (Strict ${data.radius}m Radius Active)`;
+      if(btn){
+        btn.innerHTML = '✓ Saved Successfully!';
+        btn.style.background = '#059669';
+        btn.disabled = false;
+        setTimeout(() => {
+          btn.innerHTML = origHtml;
+          btn.style.background = '';
+        }, 4000);
+      }
+      if(typeof showNotificationPopToast === 'function'){
+        showNotificationPopToast({
+          id: Date.now(),
+          title: '📍 Department Location Saved',
+          message: data.message,
+          kind: 'info'
+        });
+      }
+    } else {
+      feedbackEl.style.display = 'block';
+      feedbackEl.style.color = '#ef4444';
+      feedbackEl.textContent = '⚠️ ' + (data.error || 'Failed to save location.');
+      if(btn){
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+      }
+    }
+  } catch(err){
+    form.submit();
   }
 }
 </script>{% endblock %}

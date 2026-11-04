@@ -851,16 +851,26 @@ def get_notifications():
     role = g.user["role"]
     uid = g.user["id"]
 
-    unread_count = db.execute(
-        "SELECT COUNT(*) FROM notifications WHERE status='unread' AND (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all')))",
-        (uid, role)
-    ).fetchone()[0]
-
-    rows = db.execute(
-        "SELECT * FROM notifications WHERE (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all'))) "
-        "ORDER BY id DESC LIMIT 25",
-        (uid, role)
-    ).fetchall()
+    if role == "hr":
+        unread_count = db.execute(
+            "SELECT COUNT(*) FROM notifications WHERE status='unread' AND (user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all'))",
+            (uid,)
+        ).fetchone()[0]
+        rows = db.execute(
+            "SELECT * FROM notifications WHERE (user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all')) "
+            "ORDER BY id DESC LIMIT 25",
+            (uid,)
+        ).fetchall()
+    else:
+        unread_count = db.execute(
+            "SELECT COUNT(*) FROM notifications WHERE status='unread' AND (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all')))",
+            (uid,)
+        ).fetchone()[0]
+        rows = db.execute(
+            "SELECT * FROM notifications WHERE (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all'))) "
+            "ORDER BY id DESC LIMIT 25",
+            (uid,)
+        ).fetchall()
 
     return jsonify(
         ok=True,
@@ -875,10 +885,16 @@ def mark_notification_read(nid):
     db = get_db()
     role = g.user["role"]
     uid = g.user["id"]
-    db.execute(
-        "UPDATE notifications SET status='read' WHERE id=? AND (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all')))",
-        (nid, uid, role)
-    )
+    if role == "hr":
+        db.execute(
+            "UPDATE notifications SET status='read' WHERE id=? AND (user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all'))",
+            (nid, uid)
+        )
+    else:
+        db.execute(
+            "UPDATE notifications SET status='read' WHERE id=? AND (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all')))",
+            (nid, uid)
+        )
     db.commit()
     return jsonify(ok=True)
 
@@ -889,10 +905,16 @@ def mark_all_notifications_read():
     db = get_db()
     role = g.user["role"]
     uid = g.user["id"]
-    db.execute(
-        "UPDATE notifications SET status='read' WHERE status='unread' AND (user_id=? OR (user_id IS NULL AND target_role IN (?, 'all')))",
-        (uid, role)
-    )
+    if role == "hr":
+        db.execute(
+            "UPDATE notifications SET status='read' WHERE status='unread' AND (user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all'))",
+            (uid,)
+        )
+    else:
+        db.execute(
+            "UPDATE notifications SET status='read' WHERE status='unread' AND (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all')))",
+            (uid,)
+        )
     db.commit()
     return jsonify(ok=True)
 
