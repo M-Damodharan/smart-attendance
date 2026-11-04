@@ -967,7 +967,7 @@ def settings():
                 return redirect(url_for("hr.settings"))
             elif act == "office_link":
                 raw_link = f.get("link", "").strip()
-                pt = coords_from_maps_link(raw_link) or geocode_place_name(raw_link)
+                pt = coords_from_maps_link(raw_link)
                 if not pt:
                     flash(f"Could not read coordinates from '{raw_link}'. Paste a Google Maps link, "
                           "'lat,lng', DMS coordinates, place name, or click '📍 Use Current GPS'.", "err")

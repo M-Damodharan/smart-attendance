@@ -18,7 +18,7 @@ def update_sqlite(db_path):
     # Update Main Office radius to 5m
     cur.execute("UPDATE offices SET radius_m = 5 WHERE name LIKE '%Main Office%' OR id = 1")
     # Update system_settings
-    cur.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '15')")
+    cur.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '100')")
     cur.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '0')")
     con.commit()
     rows = cur.execute("SELECT id, name, radius_m FROM offices").fetchall()
@@ -36,7 +36,7 @@ def update_turso():
         from app.turso_db import connect_turso
         conn = connect_turso(Config.TURSO_DATABASE_URL, Config.TURSO_AUTH_TOKEN)
         conn.execute("UPDATE offices SET radius_m = 5 WHERE name LIKE '%Main Office%' OR id = 1")
-        conn.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '15')")
+        conn.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '100')")
         conn.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('geofence_tolerance_m', '0')")
         conn.commit()
         rows = conn.execute("SELECT id, name, radius_m FROM offices").fetchall()

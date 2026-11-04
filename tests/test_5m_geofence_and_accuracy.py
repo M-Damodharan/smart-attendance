@@ -182,5 +182,20 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertIn("GPS accuracy too low", data["error"])
 
+    def test_08_exact_whatsapp_screenshot_scenario_accepted(self):
+        """User screenshot test: 0.1m distance from office with ±23.1m smartphone accuracy MUST be accepted."""
+        lat = 12.762733
+        lng = 77.802695
+        # Distance is 0.0m (or ~0.1m) and accuracy is 23.1m
+        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 23.1})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data["ok"])
+        self.assertTrue(data["inside"])
+        self.assertTrue(data["allowed"])
+        self.assertTrue(data["gps_accurate"])
+        self.assertLessEqual(data["distance"], 5.0)
+        self.assertEqual(data["rules"], "5 meters inside accepted")
+
 if __name__ == "__main__":
     unittest.main()

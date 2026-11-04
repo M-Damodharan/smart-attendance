@@ -13,7 +13,7 @@
   </div>
 
   <!-- Quick GPS link & coordinates setter -->
-  <form method="post" id="quick-location-form" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:1rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+  <form method="post" id="quick-location-form" onsubmit="onSetLocationSubmit(this)" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:1rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="action" value="office_link">
     <input type="hidden" name="radius_m" value="5">
@@ -39,7 +39,7 @@
   <!-- 4 Department-Separated Location Cards Grid -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;margin-bottom:1rem;">
     {% for o in offices %}
-    <form method="post" style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+    <form method="post" onsubmit="onOfficeSaveSubmit(this)" style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="office">
       <input type="hidden" name="id" value="{{ o['id'] }}">
@@ -709,5 +709,23 @@ function fillLocationFor(btn){
 function useMyLocation(){
   const topBtn = document.getElementById('quick-gps-btn');
   if(topBtn) useQuickGps(topBtn);
+}
+
+function onSetLocationSubmit(form){
+  const btn = form.querySelector('#quick-set-btn');
+  if(btn){
+    btn.innerHTML = '<span class="spinner-sm" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span> 📍 Setting Location…';
+    btn.style.opacity = '0.85';
+    btn.style.pointerEvents = 'none';
+  }
+}
+
+function onOfficeSaveSubmit(form){
+  const btn = form.querySelector('button[type=submit]');
+  if(btn){
+    btn.innerHTML = '<span class="spinner-sm" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span> 💾 Saving…';
+    btn.style.opacity = '0.85';
+    btn.style.pointerEvents = 'none';
+  }
 }
 </script>{% endblock %}

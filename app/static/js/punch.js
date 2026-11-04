@@ -446,8 +446,9 @@
       refresh();
       return;
     }
-    if (geo.accuracy && geo.accuracy > 15) {
-      const errMsg = `Attendance blocked: GPS accuracy too low (±${geo.accuracy.toFixed(1)} m). High GPS accuracy (within ±15m) is required to verify the 5-meter office boundary.`;
+    // Verify server-side GPS accuracy status (tolerance: <= 100m; 5 meters inside accepted)
+    if (geo && geo.gps_accurate === false) {
+      const errMsg = geo.error || `Attendance blocked: GPS accuracy is too low (±${Math.round(geo.accuracy)}m). Move outdoors or near a window for satellite lock and try again.`;
       result.className = 'result bad';
       result.textContent = errMsg;
       result.hidden = false;
@@ -641,7 +642,10 @@
         return;
       }
       result.textContent = e.message;
-      locate(); // refresh GPS for retry
+      // Only refresh GPS if GPS fix was missing/invalid or error is GPS-related, preventing stuck 'Acquiring GPS' loading
+      if (!geo || !geo.ok || (e.message && e.message.toLowerCase().includes('gps'))) {
+        locate();
+      }
     }
 
     busy = false;
