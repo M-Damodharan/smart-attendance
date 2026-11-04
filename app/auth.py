@@ -201,7 +201,25 @@ def login(login_type=None):
         code = raw_code.upper()
         pw = request.form.get("password", "")
         ip = request.remote_addr
+        key = f"{code}|{ip}"
         db = get_db()
+
+        # 1. Early Brute-Force Lockout Defense: Immediately reject locked accounts/IPs before processing credentials
+        lock_row = db.execute("SELECT count, first_ts FROM login_attempts WHERE key=?", (key,)).fetchone()
+        if lock_row and not current_app.config.get("TESTING"):
+            lock_cnt, lock_first = lock_row["count"], lock_row["first_ts"]
+            lock_duration = current_app.config.get("LOGIN_LOCK_SECONDS", 300)
+            if time.time() - lock_first <= lock_duration:
+                if lock_cnt >= current_app.config.get("MAX_LOGIN_ATTEMPTS", 5):
+                    audit("LOGIN_LOCKED_EARLY", "employee", None, f"Immediate block for locked key {code} from IP {ip}")
+                    flash("Too many failed attempts. Try again in a few minutes.", "err")
+                    return render_template("login.html", active_type=login_type_post or "employee"), 429
+            else:
+                try:
+                    db.execute("DELETE FROM login_attempts WHERE key=?", (key,))
+                    db.commit()
+                except Exception:
+                    pass
 
         # Strict match by employee code or registered email, including category info
         u = db.execute(
@@ -211,19 +229,15 @@ def login(login_type=None):
             (code, code)
         ).fetchone()
 
-        # Production-grade password verification: strict salted hash verification (no hard-coded bypasses in production)
+        # Production-grade password verification: strict salted hash verification (zero backdoor bypasses in production)
         is_pw_valid = False
         if u and pw:
             try:
                 if check_password_hash(u["password_hash"], pw) or check_password_hash(u["password_hash"], pw.strip()):
                     is_pw_valid = True
-                elif u["emp_code"] == "HR001" and pw in ("damo12345", "123456789"):
-                    is_pw_valid = True
-                elif u["emp_code"] in ("SBG001", "EMP001", "E0012", "CL001", "S197") and pw in ("damo12345", "123456789"):
-                    is_pw_valid = True
                 elif current_app.config.get("TESTING") and (
                     (u["emp_code"] == "HR001" and pw in ("damo12345", "123456789", "admin123")) or
-                    (u["emp_code"] in ("E0012", "EMP001", "CL001", "S197") and pw in ("123456789", "emp123", "damo12345"))
+                    (u["emp_code"] in ("SBG001", "E0012", "EMP001", "CL001", "S197") and pw in ("123456789", "emp123", "damo12345"))
                 ):
                     is_pw_valid = True
             except Exception:
@@ -242,8 +256,6 @@ def login(login_type=None):
                         return render_template("login.html", active_type=login_type_post or "employee"), 403
                 except Exception:
                     pass
-
-        key = f"{code}|{ip}"
         if u and is_pw_valid:
             cat_code = (u["category_code"] or "").upper()
             cat_name = (u["category_name"] or "").upper()
@@ -512,7 +524,9 @@ def switch_account():
     is_hr_origin = bool(orig_hr_id or g.user.get("role") == "hr")
     auth_accounts = session.get("authorized_accounts", [])
 
-    if not is_hr_origin and target["id"] != g.user["id"] and target["id"] not in auth_accounts:
+    if not is_hr_origin and (target["role"] == "hr" or (target["id"] != g.user["id"] and target["id"] not in auth_accounts)):
+        from .security_shield import log_security_event
+        log_security_event("PRIVILEGE_ESCALATION_ATTEMPT", f"User {g.user['emp_code']} attempted to switch to {target['emp_code']} ({target['role']})", source="AUTH_SWITCH")
         abort(403)
 
     if not orig_hr_id and g.user["role"] == "hr":

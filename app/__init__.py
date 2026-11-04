@@ -105,8 +105,10 @@ def create_app(test_config=None):
     def headers(resp):
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["X-XSS-Protection"] = "1; mode=block"
         resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Permissions-Policy"] = "camera=(self), geolocation=(self)"
+        resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         if request.path.startswith("/static/"):
             resp.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
 

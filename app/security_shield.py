@@ -26,6 +26,11 @@ PROMPT_INJECTION_PATTERNS = [
     r"\b(dump|leak|steal|extract|hack)\s+(the\s+)?(database|users|employees|attendance|audit_log|sqlite|data)\b",
     r"\bexport\s+all\s+(passwords?|credentials|hashes|tokens)\b",
     r"\bprint\s+system\s+(prompt|config|environment|variables)\b",
+    r"\b(drop|truncate|delete)\s+(all\s+)?(tables?|records?|database|employees|attendance)\b",
+    r"\b(show|display|reveal|leak|print)\s+(all\s+)?(api\s+keys?|secret\s+keys?|tokens?|auth\s+tokens?|credentials?)\b",
+    r"\b(system\s+instructions|system\s+prompt|developer\s+instructions)\b",
+    r"\b(disregard|override)\s+(all\s+)?(rules?|instructions?|safeguards?|security)\b",
+    r"\b(extract|dump|download)\s+(all\s+)?(biometrics?|faces?|templates?|face_templates?)\b",
 ]
 
 # 2. SQL Injection Signatures
