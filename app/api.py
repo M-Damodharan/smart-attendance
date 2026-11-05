@@ -147,12 +147,14 @@ def evaluate_geo(user, lat, lng, acc):
     inside = dist <= allowed
     od = approved_od_for(user["id"], today())
 
-    # Multi-Office Campus Permitted Area: If outside primary assigned office, check all active company offices
-    if not inside and not od:
-        all_offices = [o for o in get_all_offices_cached(db) if o.get("active") and o.get("lat") and o.get("lng")]
+    # Multi-Office Campus Permitted Area: Check all active company offices
+    all_offices = [o for o in get_all_offices_cached(db) if o.get("active") and o.get("lat") and o.get("lng")]
+    if not inside and not od and all_offices:
+        closest_off = office
+        closest_dist = dist
+        closest_allowed = allowed
+
         for off in all_offices:
-            if off.get("id") == office.get("id"):
-                continue
             cand_allowed = float(off.get("radius_m") or 5) + geofence_tol
             cand_dist = haversine(lat, lng, float(off["lat"]), float(off["lng"]))
             if cand_dist <= cand_allowed:
@@ -163,6 +165,17 @@ def evaluate_geo(user, lat, lng, acc):
                 dist = cand_dist
                 inside = True
                 break
+            if cand_dist < closest_dist:
+                closest_dist = cand_dist
+                closest_off = off
+                closest_allowed = cand_allowed
+
+        if not inside and not od:
+            # Employee is outside: anchor evaluation to the closest company office on campus
+            office = closest_off
+            office_radius = float(closest_off.get("radius_m") or 5)
+            dist = closest_dist
+            allowed = closest_allowed
 
     # Reject coarse cell-tower or spoofed GPS readings beyond device tolerance
     if acc > max_acc:
