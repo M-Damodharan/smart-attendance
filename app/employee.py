@@ -130,7 +130,9 @@ def punch():
             yesterday_rec = None
 
     from .api import get_department_office
+    from .services import get_all_offices_cached
     office = get_department_office(db, u)
+    all_offices = [dict(o) for o in get_all_offices_cached(db) if o.get("active")]
     if yesterday_rec:
         rec = yesterday_rec
         mode = "out"
@@ -147,7 +149,7 @@ def punch():
     perm_today = db.execute("SELECT * FROM permission_requests WHERE emp_id=? AND perm_date=? AND status='Approved'",
                             (u["id"], d2s(t))).fetchone()
     effective_shift = _shift(u, t, rec["shift_id"] if (rec and "shift_id" in rec.keys() and rec["shift_id"]) else None)
-    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, shift=effective_shift, category=category, perm_today=perm_today)
+    return render_template("emp/punch.html", rec=rec, mode=mode, office=office, all_offices=all_offices, shift=effective_shift, category=category, perm_today=perm_today)
 
 
 @bp.route("/history")

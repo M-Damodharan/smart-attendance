@@ -100,6 +100,10 @@
         </div>
       </div>
 
+      <label class="check" style="margin:2px 0 0;font-size:0.8rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" name="apply_to_all" value="1" checked> 🏢 Sync to ALL company departments (Campus Sync)
+      </label>
+
       <div style="display:flex;gap:8px;margin-top:4px;">
         <button type="button" class="btn sm" style="flex:1;" onclick="fillLocationFor(this)">
           📍 Use My Location
@@ -822,6 +826,14 @@ async function onOfficeSaveSubmit(e, form){
       feedbackEl.style.display = 'block';
       feedbackEl.style.color = '#10b981';
       feedbackEl.textContent = `✓ Saved: ${data.lat.toFixed(6)}, ${data.lng.toFixed(6)} (Strict ${data.radius}m Radius Active)`;
+      if(data.apply_to_all || formData.get('apply_to_all') === '1'){
+        document.querySelectorAll('form[onsubmit*="onOfficeSaveSubmit"]').forEach(cf => {
+          const latInp = cf.querySelector('input[name=lat]');
+          const lngInp = cf.querySelector('input[name=lng]');
+          if(latInp) latInp.value = data.lat.toFixed(6);
+          if(lngInp) lngInp.value = data.lng.toFixed(6);
+        });
+      }
       if(btn){
         btn.innerHTML = '✓ Saved Successfully!';
         btn.style.background = '#059669';

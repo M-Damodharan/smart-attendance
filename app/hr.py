@@ -966,12 +966,21 @@ def settings():
                     db.execute("UPDATE offices SET name=?, department=?, lat=?, lng=?, radius_m=?, active=? WHERE id=?", (*vals, oid))
                 else:
                     oid = db.execute("INSERT INTO offices (name, department, lat, lng, radius_m, active) VALUES (?,?,?,?,?,?)", vals).lastrowid
-                audit("OFFICE_SAVE", "office", oid, f"{vals[0]} dept={dept} {vals[2]:.6f},{vals[3]:.6f} r={vals[4]}m")
+
+                apply_all = str(f.get("apply_to_all", "")).strip() in ("1", "true", "on")
+                if apply_all:
+                    db.execute("UPDATE offices SET lat=?, lng=?, radius_m=? WHERE active=1", (lat_val, lng_val, radius))
+                    audit("OFFICE_LOCATION_ALL_SET", "offices", 0, f"Campus Sync from {vals[0]}: {lat_val:.6f},{lng_val:.6f} r={radius}m")
+                else:
+                    audit("OFFICE_SAVE", "office", oid, f"{vals[0]} dept={dept} {vals[2]:.6f},{vals[3]:.6f} r={vals[4]}m")
                 db.commit()
                 clear_shared_cache()
-                succ_msg = f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict {radius} m radius)."
+                if apply_all:
+                    succ_msg = f"All active department locations synchronized to {lat_val:.6f}, {lng_val:.6f} (Strict {radius} m radius)."
+                else:
+                    succ_msg = f"Location for '{name}' successfully saved to {lat_val:.6f}, {lng_val:.6f} (Strict {radius} m radius)."
                 if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", ""):
-                    return jsonify(ok=True, message=succ_msg, lat=lat_val, lng=lng_val, radius=radius, id=oid, name=name)
+                    return jsonify(ok=True, message=succ_msg, lat=lat_val, lng=lng_val, radius=radius, id=oid, name=name, apply_to_all=apply_all)
                 flash(succ_msg, "ok")
                 return redirect(url_for("hr.settings"))
             elif act == "office_link":

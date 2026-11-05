@@ -2,7 +2,7 @@
 // Automatically caches static styles, scripts, and shell assets for sub-millisecond page loads.
 // Core application logic (JS, CSS) uses network-first to ensure live bug fixes take effect immediately.
 
-const CACHE_NAME = 'sbg-static-v9';
+const CACHE_NAME = 'sbg-static-v10';
 const PRECACHE_ASSETS = [
   '/static/css/style.css',
   '/static/js/app.js',

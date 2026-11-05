@@ -8,7 +8,7 @@
   <a class="btn" href="{{ url_for('emp.dashboard') }}">Back home</a>
 </section>
 {% else %}
-<section class="card punch" id="punch" data-mode="{{ mode }}" data-office-lat="{{ office['lat'] if office else '' }}" data-office-lng="{{ office['lng'] if office else '' }}" data-office-radius="{{ office['radius_m'] if office and office['radius_m'] else 5 }}" data-office-name="{{ office['name'] if office else 'Main Office' }}">
+<section class="card punch" id="punch" data-mode="{{ mode }}" data-office-lat="{{ office['lat'] if office else '' }}" data-office-lng="{{ office['lng'] if office else '' }}" data-office-radius="{{ office['radius_m'] if office and office['radius_m'] else 5 }}" data-office-name="{{ office['name'] if office else 'Main Office' }}" data-all-offices='{{ all_offices|tojson if all_offices else "[]" }}'>
   <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
   <h2>{{ 'Check out' if mode=='out' else 'Check in' }}</h2>
 

@@ -45,7 +45,11 @@
   const officeLat = parseFloat(root.dataset.officeLat) || null;
   const officeLng = parseFloat(root.dataset.officeLng) || null;
   const targetRadius = parseFloat(root.dataset.officeRadius) || 5.0;
-  const targetOfficeName = root.dataset.officeName || 'Main Office';
+  let targetOfficeName = root.dataset.officeName || 'Main Office';
+  let allOfficesList = [];
+  try {
+    allOfficesList = root.dataset.allOffices ? JSON.parse(root.dataset.allOffices) : [];
+  } catch (e) {}
 
   function calcDistanceM(lat1, lon1, lat2, lon2) {
     if (lat1 === null || lon1 === null || lat2 === null || lon2 === null || isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return null;
@@ -140,11 +144,22 @@
   async function processPosition(lat, lng, accuracy) {
     // 1. Instant client-side distance computation to provide real-time live distance
     let clientDist = null;
-    if (officeLat !== null && officeLng !== null) {
+    let closestOfficeName = targetOfficeName;
+    if (allOfficesList && allOfficesList.length > 0) {
+      for (const off of allOfficesList) {
+        if (off.lat && off.lng) {
+          const d = calcDistanceM(lat, lng, parseFloat(off.lat), parseFloat(off.lng));
+          if (clientDist === null || d < clientDist) {
+            clientDist = d;
+            closestOfficeName = off.name || targetOfficeName;
+          }
+        }
+      }
+    } else if (officeLat !== null && officeLng !== null) {
       clientDist = calcDistanceM(lat, lng, officeLat, officeLng);
     }
 
-    // 2. Authoritative server-side evaluation (5 meters inside accepted)
+    // 2. Authoritative server-side evaluation
     try {
       isCheckingGeo = true;
       const res = await postJSON('/api/geo-check', { lat, lng, accuracy });
@@ -159,15 +174,17 @@
         updateGeoCard(clientDist, accuracy, false, false, geo.error, true);
         if (retryBtn) retryBtn.style.display = 'inline-flex';
       } else if (geo.inside) {
-        setStep('st-gps', 'ok', `${geo.office || 'Office'} · 5 meters inside accepted (${geo.distance}m away, ±${Math.round(accuracy)}m)`, 'gps-text');
-        updateGeoCard(geo.distance, accuracy, true, true, `✓ Inside 5m permitted area (${geo.distance} m from ${geo.office}). Check-in accepted.`, false);
+        const offName = geo.office || closestOfficeName || 'Office';
+        setStep('st-gps', 'ok', `${offName} · ${geo.distance}m away (±${Math.round(accuracy)}m)`, 'gps-text');
+        updateGeoCard(geo.distance, accuracy, true, true, `✓ Inside permitted area (${geo.distance} m from ${offName}). Check-in accepted.`, false);
         if (retryBtn) retryBtn.style.display = 'none';
       } else if (geo.od) {
         setStep('st-gps', 'ok', `On-duty approved (${geo.od_location || 'field'}) · ${geo.distance} m from office`, 'gps-text');
         updateGeoCard(geo.distance, accuracy, true, true, `On-duty approved (${geo.od_location || 'field'}). Check-in allowed.`, false);
         if (retryBtn) retryBtn.style.display = 'none';
       } else {
-        const outMsg = `Outside geofence: ${geo.distance} m from ${geo.office} (allowed: 5 m only — 5 meters inside accepted). Physical presence within 5 meters is strictly required.`;
+        const offName = geo.office || closestOfficeName || targetOfficeName;
+        const outMsg = `Outside geofence: ${geo.distance} m from ${offName} (allowed: ${geo.radius || 5} m). Physical presence within permitted office area is strictly required.`;
         setStep('st-gps', 'bad', outMsg, 'gps-text');
         updateGeoCard(geo.distance, accuracy, true, false, outMsg, true);
         if (retryBtn) retryBtn.style.display = 'inline-flex';

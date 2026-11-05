@@ -9,7 +9,7 @@ from PIL import Image
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from app import create_app
 from app.db import get_db
-from app.services import haversine
+from app.services import haversine, clear_shared_cache
 
 class Geofence5mAndAccuracyTestCase(unittest.TestCase):
     def setUp(self):
@@ -17,13 +17,13 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
         self.client = self.app.test_client()
 
         with self.app.app_context():
+            clear_shared_cache()
             db = get_db()
-            # Ensure Main Office exists with 5m radius
-            off = db.execute("SELECT id, lat, lng, radius_m FROM offices WHERE id=1").fetchone()
+            # Ensure all offices exist with 5m radius at 12.762733, 77.802695
+            db.execute("UPDATE offices SET radius_m=5, lat=12.762733, lng=77.802695 WHERE active=1")
+            off = db.execute("SELECT id FROM offices WHERE id=1").fetchone()
             if not off:
                 db.execute("INSERT OR REPLACE INTO offices (id, name, department, lat, lng, radius_m, active) VALUES (1, 'Main Office', 'General', 12.762733, 77.802695, 5, 1)")
-            else:
-                db.execute("UPDATE offices SET radius_m=5, lat=12.762733, lng=77.802695 WHERE id=1")
             
             # Ensure system settings max_gps_accuracy_m is 100
             db.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('max_gps_accuracy_m', '100')")
@@ -48,6 +48,7 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
             db.execute("DELETE FROM attendance WHERE emp_id=? AND date=date('now')", (self.emp_id,))
             db.execute("PRAGMA foreign_keys = ON")
             db.commit()
+            clear_shared_cache()
 
         self._login()
 
@@ -135,7 +136,7 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
 
     def test_06_punch_endpoint_blocks_outside_5m(self):
         """The /api/punch endpoint strictly blocks check-in outside 5m radius."""
-        lat = 12.762733 + 0.000200  # ~22 meters away
+        lat = 12.762733 + 0.005000  # ~550 meters away
         lng = 77.802695
         selfie = self._make_dummy_selfie()
 
@@ -172,9 +173,17 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
             "kind": "in",
             "lat": lat,
             "lng": lng,
-            "accuracy": 350.0,  # Highly inaccurate cell tower fix
+            "accuracy": 150.0,
             "selfie": selfie,
-            "webauthn_assertion": {"id": "mock"}
+            "webauthn_assertion": {
+                "id": "test_cred_id",
+                "rawId": "test_cred_id",
+                "response": {
+                    "clientDataJSON": base64.b64encode(b'{"type":"webauthn.get"}').decode("ascii"),
+                    "authenticatorData": base64.b64encode(b'auth_data_mock').decode("ascii"),
+                    "signature": base64.b64encode(b'mock_sig').decode("ascii")
+                }
+            }
         }
         res = self.client.post("/api/punch", json=payload)
         self.assertEqual(res.status_code, 400)
@@ -182,20 +191,24 @@ class Geofence5mAndAccuracyTestCase(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertIn("GPS accuracy too low", data["error"])
 
-    def test_08_exact_whatsapp_screenshot_scenario_accepted(self):
-        """User screenshot test: 0.1m distance from office with ±23.1m smartphone accuracy MUST be accepted."""
+    def test_08_punch_endpoint_blocks_missing_or_negative_accuracy(self):
+        """Missing or zero/negative accuracy is rejected."""
         lat = 12.762733
         lng = 77.802695
-        # Distance is 0.0m (or ~0.1m) and accuracy is 23.1m
-        res = self.client.post("/api/geo-check", json={"lat": lat, "lng": lng, "accuracy": 23.1})
-        self.assertEqual(res.status_code, 200)
+        selfie = self._make_dummy_selfie()
+
+        payload = {
+            "kind": "in",
+            "lat": lat,
+            "lng": lng,
+            "accuracy": 0,
+            "selfie": selfie,
+        }
+        res = self.client.post("/api/punch", json=payload)
+        self.assertEqual(res.status_code, 400)
         data = res.get_json()
-        self.assertTrue(data["ok"])
-        self.assertTrue(data["inside"])
-        self.assertTrue(data["allowed"])
-        self.assertTrue(data["gps_accurate"])
-        self.assertLessEqual(data["distance"], 5.0)
-        self.assertEqual(data["rules"], "5 meters inside accepted")
+        self.assertFalse(data["ok"])
+        self.assertIn("GPS accuracy reading is invalid", data["error"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -67,9 +67,16 @@ def get_department_office(db, user):
     """
     from .services import get_all_categories_cached, get_all_offices_cached
     cats = get_all_categories_cached(db)
-    offices = get_all_offices_cached(db)
+    offices = [o for o in get_all_offices_cached(db) if o.get("active")]
 
     user_keys = user.keys() if hasattr(user, "keys") else []
+
+    # 1. Prioritize employee's explicitly assigned office if active
+    if "office_id" in user_keys and user["office_id"]:
+        for off in offices:
+            if off.get("id") == user["office_id"] and off.get("active"):
+                return off
+
     user_dept = (user["department"] if "department" in user_keys and user["department"] else "").strip().lower()
     cat_id = user["category_id"] if "category_id" in user_keys else None
     cat_code = ""
@@ -88,21 +95,15 @@ def get_department_office(db, user):
         target_dept = "Contract Operations"
     elif "prod" in user_dept or "operator" in user_dept or "employee" in cat_name or cat_code == "employees":
         target_dept = "Production"
-    elif "staff" in user_dept or "eng" in user_dept or "hr" in user_dept or "human" in user_dept or "it" in user_dept or "staff" in cat_name or cat_code == "staff" or (user.get("role") if hasattr(user, "get") else None) == "hr":
+    elif "staff" in user_dept or "eng" in user_dept or "hr" in user_dept or "human" in user_dept or "it" in user_dept.split() or "information" in user_dept or "staff" in cat_name or cat_code == "staff" or (user.get("role") if hasattr(user, "get") else None) == "hr":
         target_dept = "Staff"
 
-    # 1. Prioritize the department-separated marked location point
+    # 2. Match department-separated marked location point
     if target_dept:
         t_low = target_dept.lower()
         t_sub = t_low[:5]
         for off in offices:
             if (off.get("department") or "").lower() == t_low or t_sub in (off.get("name") or "").lower():
-                return off
-
-    # 2. Check if employee's assigned office is valid and active
-    if "office_id" in user_keys and user["office_id"]:
-        for off in offices:
-            if off.get("id") == user["office_id"]:
                 return off
 
     # 3. Fallback to first active office
@@ -122,7 +123,7 @@ def evaluate_geo(user, lat, lng, acc):
         return {"ok": False, "error": "Location not available. Enable GPS and try again."}
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         return {"ok": False, "error": "Invalid GPS coordinates."}
-    from .services import get_system_settings_cached
+    from .services import get_system_settings_cached, get_all_offices_cached
     sys_settings = get_system_settings_cached(db)
     raw_max_acc = sys_settings.get("max_gps_accuracy_m") or current_app.config.get("MAX_GPS_ACCURACY_M", 100)
     try:
@@ -134,11 +135,34 @@ def evaluate_geo(user, lat, lng, acc):
     if acc is None or acc <= 0:
         return {"ok": False, "error": "GPS accuracy reading is invalid. Please enable high-accuracy device GPS."}
 
+    # Retrieve configured geofence tolerance (default 0m)
+    try:
+        geofence_tol = max(0.0, float(sys_settings.get("geofence_tolerance_m") or 0))
+    except (ValueError, TypeError):
+        geofence_tol = 0.0
+
     office_radius = float(office["radius_m"] or 5)
-    allowed = office_radius
-    dist = haversine(lat, lng, office["lat"], office["lng"])
+    allowed = office_radius + geofence_tol
+    dist = haversine(lat, lng, float(office["lat"]), float(office["lng"]))
     inside = dist <= allowed
     od = approved_od_for(user["id"], today())
+
+    # Multi-Office Campus Permitted Area: If outside primary assigned office, check all active company offices
+    if not inside and not od:
+        all_offices = [o for o in get_all_offices_cached(db) if o.get("active") and o.get("lat") and o.get("lng")]
+        for off in all_offices:
+            if off.get("id") == office.get("id"):
+                continue
+            cand_allowed = float(off.get("radius_m") or 5) + geofence_tol
+            cand_dist = haversine(lat, lng, float(off["lat"]), float(off["lng"]))
+            if cand_dist <= cand_allowed:
+                # Employee is physically inside this active company office location!
+                office = off
+                office_radius = float(off.get("radius_m") or 5)
+                allowed = cand_allowed
+                dist = cand_dist
+                inside = True
+                break
 
     # Reject coarse cell-tower or spoofed GPS readings beyond device tolerance
     if acc > max_acc:
@@ -168,7 +192,7 @@ def evaluate_geo(user, lat, lng, acc):
         "od": bool(od),
         "allowed": inside or bool(od),
         "od_location": od["location"] if od else None,
-        "rules": "5 meters inside accepted",
+        "rules": f"{int(allowed)} meters inside accepted",
         "lat": lat,
         "lng": lng
     }
