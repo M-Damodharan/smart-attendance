@@ -887,6 +887,8 @@ def get_notifications():
     check_and_sync_missed_punches(db)
     role = g.user["role"]
     uid = g.user["id"]
+    include_all = request.args.get("all") == "1"
+    status_filter = "" if include_all else "status='unread' AND "
 
     if role == "hr":
         unread_count = db.execute(
@@ -894,7 +896,7 @@ def get_notifications():
             (uid,)
         ).fetchone()[0]
         rows = db.execute(
-            "SELECT * FROM notifications WHERE (user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all')) "
+            f"SELECT * FROM notifications WHERE {status_filter}(user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all')) "
             "ORDER BY id DESC LIMIT 25",
             (uid,)
         ).fetchall()
@@ -904,7 +906,7 @@ def get_notifications():
             (uid,)
         ).fetchone()[0]
         rows = db.execute(
-            "SELECT * FROM notifications WHERE (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all'))) "
+            f"SELECT * FROM notifications WHERE {status_filter}(user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all'))) "
             "ORDER BY id DESC LIMIT 25",
             (uid,)
         ).fetchall()
@@ -951,6 +953,51 @@ def mark_all_notifications_read():
         db.execute(
             "UPDATE notifications SET status='read' WHERE status='unread' AND (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all')))",
             (uid,)
+        )
+    # Auto-prune old read notifications older than 7 days to keep database lean
+    try:
+        db.execute("DELETE FROM notifications WHERE status='read' AND created_at < datetime('now', '-7 days')")
+    except Exception:
+        pass
+    db.commit()
+    return jsonify(ok=True)
+
+
+@bp.post("/notifications/clear-all")
+@login_required
+def clear_all_notifications():
+    db = get_db()
+    role = g.user["role"]
+    uid = g.user["id"]
+    if role == "hr":
+        db.execute(
+            "DELETE FROM notifications WHERE (user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all'))",
+            (uid,)
+        )
+    else:
+        db.execute(
+            "DELETE FROM notifications WHERE (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all')))",
+            (uid,)
+        )
+    db.commit()
+    return jsonify(ok=True)
+
+
+@bp.post("/notifications/delete/<int:nid>")
+@login_required
+def delete_notification(nid):
+    db = get_db()
+    role = g.user["role"]
+    uid = g.user["id"]
+    if role == "hr":
+        db.execute(
+            "DELETE FROM notifications WHERE id=? AND (user_id=? OR user_id IS NULL OR target_role IN ('hr', 'all'))",
+            (nid, uid)
+        )
+    else:
+        db.execute(
+            "DELETE FROM notifications WHERE id=? AND (user_id=? OR (user_id IS NULL AND target_role IN ('employee', 'all')))",
+            (nid, uid)
         )
     db.commit()
     return jsonify(ok=True)

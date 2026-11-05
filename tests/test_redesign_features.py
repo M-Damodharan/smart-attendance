@@ -143,9 +143,11 @@ class TestRedesignFeatures(unittest.TestCase):
     def test_06_request_and_approval_notifications(self):
         """User requests notify HR, and HR approval/rejection notifies the requesting user."""
         # 1. Employee E001 applies for OD
+        from app.services import today, d2s
+        today_str = d2s(today())
         self._login(self.client, "E001", "emp123")
         res_od = self.client.post("/od", data={
-            "od_date": "2026-10-27",
+            "od_date": today_str,
             "location": "Client Plant A",
             "purpose": "Machine Calibration"
         }, follow_redirects=True)

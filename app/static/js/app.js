@@ -620,12 +620,15 @@ function renderNotificationsList(notifs) {
     const icon = kindIcons[n.kind] || '🔔';
     const isUnread = n.status === 'unread';
     return `
-      <div class="notif-item ${isUnread ? 'unread' : ''}" onclick="onNotificationItemClick(${n.id}, '${n.link_url || ''}')">
+      <div class="notif-item ${isUnread ? 'unread' : ''}" onclick="onNotificationItemClick(${n.id}, '${n.link_url || ''}')" id="notif-item-${n.id}">
         <div class="notif-icon-circle">${icon}</div>
         <div class="notif-content">
           <div class="notif-title">
             <span>${escapeHTML(n.title)}</span>
-            ${isUnread ? '<span class="status-ping" style="width:7px;height:7px;margin-left:6px;"></span>' : ''}
+            <div style="display:flex;align-items:center;gap:4px;">
+              ${isUnread ? '<span class="status-ping" style="width:7px;height:7px;"></span>' : ''}
+              <button type="button" class="notif-item-remove" onclick="deleteNotificationItem(event, ${n.id})" title="Remove notification">&times;</button>
+            </div>
           </div>
           <div class="notif-message">${escapeHTML(n.message)}</div>
           <span class="notif-time">${escapeHTML(n.created_at)}</span>
@@ -640,6 +643,32 @@ async function markNotificationRead(nid) {
     await postJSON(`/api/notifications/read/${nid}`);
     fetchNotifications(false);
   } catch (e) {}
+}
+
+async function deleteNotificationItem(e, nid) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const itemEl = document.getElementById(`notif-item-${nid}`);
+  if (itemEl) {
+    itemEl.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+    itemEl.style.opacity = '0';
+    itemEl.style.transform = 'translateX(20px)';
+    setTimeout(() => {
+      if (itemEl.parentNode) itemEl.parentNode.removeChild(itemEl);
+      const listEl = document.getElementById('notif-dropdown-list');
+      if (listEl && !listEl.children.length) {
+        listEl.innerHTML = '<div class="notif-empty-state">No notifications right now. You are all caught up!</div>';
+      }
+    }, 200);
+  }
+  seenNotifIds.add(nid);
+  saveSeenNotifIds();
+  try {
+    await postJSON(`/api/notifications/delete/${nid}`);
+    fetchNotifications(true);
+  } catch (err) {}
 }
 
 async function onNotificationItemClick(nid, linkUrl) {
@@ -668,8 +697,40 @@ async function markAllNotificationsRead(e) {
   const pill = document.getElementById('notif-unread-pill');
   if (pill) pill.style.display = 'none';
 
+  // Immediately clear notification list in UI for instant responsiveness
+  const listEl = document.getElementById('notif-dropdown-list');
+  if (listEl) {
+    listEl.innerHTML = '<div class="notif-empty-state">No notifications right now. You are all caught up!</div>';
+  }
+
   try {
     await postJSON('/api/notifications/read-all');
+    fetchNotifications(true);
+  } catch (e) {}
+}
+
+async function clearAllNotifications(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  // Dismiss any active pop toasts
+  document.querySelectorAll('.notif-toast').forEach(t => {
+    t.classList.add('dismissing');
+    setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+  });
+  const badge = document.getElementById('notif-badge');
+  if (badge) badge.style.display = 'none';
+  const pill = document.getElementById('notif-unread-pill');
+  if (pill) pill.style.display = 'none';
+
+  const listEl = document.getElementById('notif-dropdown-list');
+  if (listEl) {
+    listEl.innerHTML = '<div class="notif-empty-state">No notifications right now. You are all caught up!</div>';
+  }
+
+  try {
+    await postJSON('/api/notifications/clear-all');
     fetchNotifications(true);
   } catch (e) {}
 }

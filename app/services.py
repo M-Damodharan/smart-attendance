@@ -162,6 +162,10 @@ def create_notification(title: str, message: str, kind: str = "info", user_id: i
         "VALUES (?, ?, ?, ?, ?, 'unread', ?, ?)",
         (user_id, target_role, title, message, kind, link_url, cur_time)
     )
+    try:
+        db.commit()
+    except Exception:
+        pass
     return cursor.lastrowid
 
 

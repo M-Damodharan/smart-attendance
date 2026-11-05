@@ -66,7 +66,10 @@
             <span style="font-weight:700;font-size:0.92rem;color:var(--text-main);">Notifications</span>
             <span class="badge sm b-approved" id="notif-unread-pill" style="display:none;font-size:0.65rem;">0 unread</span>
           </div>
-          <button type="button" class="notif-mark-all-btn" onclick="markAllNotificationsRead(event)">Mark all read</button>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button type="button" class="notif-mark-all-btn" onclick="markAllNotificationsRead(event)" title="Mark all as read and remove old messages">Mark all read</button>
+            <button type="button" class="notif-clear-btn" onclick="clearAllNotifications(event)" title="Clear and remove all notifications">Clear all</button>
+          </div>
         </div>
         <div class="notif-dropdown-list" id="notif-dropdown-list">
           <div class="notif-empty-state">Loading notifications...</div>

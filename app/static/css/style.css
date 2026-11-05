@@ -4008,6 +4008,43 @@ table.grid th.wo { color: var(--status-a); }
   background: rgba(37, 99, 235, 0.1);
 }
 
+.notif-clear-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.notif-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.notif-item-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 2px 5px;
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0.55;
+  transition: all 0.15s ease;
+  margin-left: 6px;
+}
+
+.notif-item-remove:hover {
+  opacity: 1;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
 .notif-dropdown-list {
   max-height: 380px;
   overflow-y: auto;
