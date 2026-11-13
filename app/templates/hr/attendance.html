@@ -71,7 +71,7 @@
 </div>
 
 {% for g_ in groups %}
-<section class="card tablewrap shift-section" id="shift-sec-{{ loop.index }}">
+<section class="card shift-section" id="shift-sec-{{ loop.index }}">
   <h3>
     {{ g_['shift']['name'] }}
     <span class="muted small">{{ g_['shift']['start_time'] }}–{{ g_['shift']['end_time'] }}</span>
@@ -79,7 +79,8 @@
     <span class="pill" style="background:var(--bg-surface);border:1px solid var(--border-default);color:var(--text-muted)">{{ g_['not_in'] }} Not In</span>
     {% if g_['absent'] %}<span class="pill bad">{{ g_['absent'] }} Absent</span>{% endif %}
   </h3>
-  <table>
+  <div class="tablewrap">
+    <table>
     <thead>
       <tr>
         <th>Employee</th>
@@ -186,7 +187,8 @@
       <tr><td colspan="7" class="muted center" style="padding:1.5rem">No employees assigned to this shift.</td></tr>
     {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </section>
 {% endfor %}
 {% endblock %}

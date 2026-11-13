@@ -54,12 +54,13 @@
 </div>
 
 <!-- SECTION 1: Pending Missed Punches -->
-<section class="card tablewrap" id="sec-pending">
+<section class="card" id="sec-pending">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
     <h3 style="margin:0">Pending Missed OUT Punches</h3>
     <span class="pill bad">{{ total_pending }} Pending Review</span>
   </div>
-  <table>
+  <div class="tablewrap">
+    <table>
     <thead>
       <tr>
         <th>Employee</th>
@@ -138,16 +139,18 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </section>
 
 <!-- SECTION 2: Resolved History -->
-<section class="card tablewrap" id="sec-resolved" style="display:none">
+<section class="card" id="sec-resolved" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
     <h3 style="margin:0">Resolved Missed Punch History</h3>
     <span class="pill ok">{{ total_resolved }} Records</span>
   </div>
-  <table>
+  <div class="tablewrap">
+    <table>
     <thead>
       <tr>
         <th>Employee</th>
@@ -193,7 +196,8 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </section>
 
 <!-- Modal: Resolve Missed Punch with Actual Punch OUT -->

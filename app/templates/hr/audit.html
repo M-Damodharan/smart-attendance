@@ -24,8 +24,9 @@
   </div>
 </div>
 
-<section class="card tablewrap" style="margin-top:1rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05)">
-  <table>
+<section class="card" style="margin-top:1rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05);padding:0;overflow:hidden">
+  <div class="tablewrap" style="border:none;border-radius:0;box-shadow:none">
+    <table>
     <thead>
       <tr>
         <th>Timestamp (IST)</th>
@@ -63,7 +64,8 @@
       <tr><td colspan="6" class="muted center" style="padding:2rem">No security events recorded.</td></tr>
       {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </section>
 <p class="muted small" style="margin-top:0.75rem">🔒 The audit ledger is cryptographic &amp; append-only. Attacks and unauthorized prompt injections are automatically blocked and flagged in real time.</p>
 {% endblock %}

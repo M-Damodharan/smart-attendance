@@ -45,12 +45,13 @@
   </a>
 </form>
 
-<section class="card tablewrap" style="margin-bottom:1.5rem">
+<section class="card" style="margin-bottom:1.5rem">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
     <h3 style="margin:0">Category Attendance Summary</h3>
     <span class="muted small">Total Staff in Filter: <b>{{ emps|length }}</b></span>
   </div>
-  <table>
+  <div class="tablewrap">
+    <table>
     <thead>
       <tr>
         <th>Employee</th>
@@ -103,12 +104,16 @@
       <tr><td colspan="13" class="muted" style="text-align:center;padding:1.5rem">No employees match the selected category or filter.</td></tr>
     {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </section>
 
-<section class="card tablewrap">
-  <h3>Day-wise Register (Day 1 to Day {{ days|length }})</h3>
-  <table class="grid">
+<section class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+    <h3 style="margin:0">Day-wise Register (Day 1 to Day {{ days|length }})</h3>
+  </div>
+  <div class="tablewrap">
+    <table class="grid">
     <thead>
       <tr>
         <th class="sticky">Employee</th>
@@ -136,8 +141,9 @@
       </tr>
     {% endfor %}
     </tbody>
-  </table>
-  <p class="legend small muted" style="margin-top:0.75rem">
+    </table>
+  </div>
+  <p class="legend small muted" style="margin-top:0.85rem;margin-bottom:0;line-height:1.7">
     <b>P</b> full day present &bull; <b>HD</b> half day &bull; <b>A</b> absent &bull; <b>OT</b> overtime &bull; <b>L</b> leave &bull; <b>HL</b> half leave &bull; <b>OD</b> on duty &bull; <b>H</b> holiday &bull; <b>WO</b> weekly off &bull; <b>MP</b> missed punch &bull; <b>IN</b> working now
   </p>
 </section>

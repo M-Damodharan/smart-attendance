@@ -1614,7 +1614,16 @@ body.login-page .wrap {
 }
 .monthnav h3 { margin: 0; }
 .monthnav input { margin: 0; width: auto; }
-.legend { margin-top: 1rem; }
+.legend, p.legend {
+  margin-top: 1rem;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+.legend b, p.legend b {
+  color: var(--text-main);
+  font-weight: 700;
+}
 
 /* ==========================================================================
    Status Chips & Badges
@@ -2004,10 +2013,31 @@ summary {
 /* 3D Modern Data Tables */
 .tablewrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  position: relative;
+  background: var(--bg-card);
 }
+.card > .tablewrap {
+  margin: 0.25rem 0;
+}
+/* Fallback: if tablewrap is directly on .card, prevent padding leak */
+.card.tablewrap {
+  padding: 0;
+  overflow: hidden;
+}
+.card.tablewrap > h3,
+.card.tablewrap > div:first-child:not(.tablewrap):not(table),
+.card.tablewrap > .table-header {
+  padding: 1.25rem 1.25rem 0.5rem;
+}
+.card.tablewrap > p,
+.card.tablewrap > .legend {
+  padding: 0.5rem 1.25rem 1.25rem;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -2041,9 +2071,9 @@ tr.inactive td { opacity: 0.5; }
 .nowrap { white-space: nowrap; }
 
 table.grid th, table.grid td {
-  padding: 0.4rem 0.25rem;
+  padding: 0.45rem 0.35rem;
   text-align: center;
-  min-width: 32px;
+  min-width: 36px;
 }
 table.grid .chip {
   min-width: 26px;
@@ -2051,17 +2081,35 @@ table.grid .chip {
   font-size: 0.72rem;
   padding: 0 3px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 table.grid th.wo { color: var(--status-a); }
+
+/* Sticky first column in Day-wise Matrix & Grid Tables */
 .sticky {
   position: sticky;
   left: 0;
-  background: var(--bg-card) !important;
   text-align: left !important;
-  min-width: 175px;
+  min-width: 195px;
+  max-width: 260px;
   white-space: nowrap;
+  border-right: 2px solid var(--border-default) !important;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.16);
+  padding-left: 0.95rem !important;
+  padding-right: 0.95rem !important;
+}
+th.sticky {
+  background: var(--bg-surface) !important;
+  z-index: 4;
+}
+td.sticky {
+  background: var(--bg-card) !important;
   z-index: 2;
-  box-shadow: 3px 0 8px rgba(0, 0, 0, 0.08);
+}
+tbody tr:hover td.sticky {
+  background: var(--bg-surface-hover) !important;
 }
 
 .filters {
