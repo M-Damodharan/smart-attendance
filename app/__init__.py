@@ -31,7 +31,7 @@ def create_app(test_config=None):
     app.session_interface = DynamicSessionInterface()
     _setup_logging(app)
 
-    from . import ai_assistant, api, auth, db, employee, hr, security_shield
+    from . import ai_assistant, api, auth, db, employee, hr, security_shield, permissions
     from .services import STATUS_LABELS, today
 
     db.init_db(app)
@@ -45,7 +45,14 @@ def create_app(test_config=None):
 
     @app.context_processor
     def inject():
-        return {"csrf_token": auth.csrf_token, "STATUS_LABELS": STATUS_LABELS, "today": today()}
+        return {
+            "csrf_token": auth.csrf_token,
+            "STATUS_LABELS": STATUS_LABELS,
+            "today": today(),
+            "has_permission": permissions.has_permission,
+            "is_admin_user": permissions.is_admin_user,
+            "MODULE_GROUPS": permissions.MODULE_GROUPS,
+        }
 
     @app.template_filter("hm")
     def hm(v):  # "2026-10-14 14:21:00" -> "02:21 PM"

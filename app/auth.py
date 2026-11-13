@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .db import get_db
 from .face_engine import register_face_for_employee
 from .services import audit
+from .permissions import get_user_permissions, has_permission, permission_required, is_admin_user
 
 bp = Blueprint("auth", __name__)
 _FAILED_ATTEMPT_KEYS = set()
@@ -36,7 +37,12 @@ def hr_required(view):
     @wraps(view)
     @login_required
     def wrapped(*a, **kw):
-        if g.user["role"] != "hr":
+        if is_admin_user(g.user) or g.user.get("role") == "hr":
+            return view(*a, **kw)
+        # Check if user has explicit view permission to any HR module
+        perms = g.user.get("permissions") or {}
+        has_any_hr = any(k.startswith("hr_") and p.get("can_view") for k, p in perms.items())
+        if not has_any_hr:
             abort(403)
         return view(*a, **kw)
     return wrapped
@@ -108,6 +114,10 @@ def load_user():
                 u_dict["shift_id"] = cur_shift["id"]
             if not u_dict.get("category_name"):
                 u_dict["category_name"] = "Staff" if u_dict.get("role") == "hr" else "Employees"
+            # Load dynamic page permissions
+            perms, is_custom = get_user_permissions(get_db(), u_dict["id"], u_dict.get("role"), u_dict.get("emp_code"))
+            u_dict["permissions"] = perms
+            u_dict["has_custom_permissions"] = is_custom
             set_cached_user(uid, u_dict)
             g.user = u_dict
         else:

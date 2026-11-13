@@ -1,0 +1,667 @@
+{% extends "base.html" %}
+{% block title %}User &amp; Page Permissions · SBG{% endblock %}
+{% block content %}
+<div class="permissions-container" style="display:flex;flex-direction:column;gap:1.25rem;">
+
+  <!-- Header Card with User Selector & Presets -->
+  <section class="card" style="border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,0.06);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:38px;height:38px;border-radius:10px;background:rgba(15,61,79,0.1);display:flex;align-items:center;justify-content:center;color:#0f3d4f;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg>
+          </div>
+          <div>
+            <h2 style="margin:0;font-size:1.35rem;font-weight:700;">User &amp; Page Permissions</h2>
+            <p class="muted small" style="margin:2px 0 0;">Manage granular role-based page and action access across HR and Employee portals.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn sm" onclick="toggleAuditModal(true)" style="display:inline-flex;align-items:center;gap:6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Permission Audit Logs</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- User Selector Section -->
+    <div style="background:var(--bg-surface);padding:14px 16px;border-radius:12px;border:1px solid var(--border-default);display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <label for="userSelect" style="font-weight:700;font-size:0.92rem;color:var(--text-main);display:flex;align-items:center;gap:6px;">
+          <span>👤 Select Registered User:</span>
+        </label>
+        <span class="muted small">Quick switch automatically loads the selected user's active permissions</span>
+      </div>
+
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div style="flex:1 1 320px;position:relative;">
+          <select id="userSelect" class="form-control" onchange="onUserSelectChange(this.value)" style="width:100%;font-size:0.95rem;padding:9px 12px;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-card);color:var(--text-main);font-weight:600;">
+            {% for u in users %}
+            <option value="{{ u['id'] }}" {% if selected_user and selected_user['id'] == u['id'] %}selected{% endif %}>
+              [{{ u['emp_code'] }}] {{ u['name'] }} — {{ u['department'] or 'General' }} ({{ 'HR Admin' if u['role'] == 'hr' else 'Employee' }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Quick Filter Buttons -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn sm" onclick="filterUserDropdown('all')" title="Show all users">All</button>
+          <button type="button" class="btn sm" onclick="filterUserDropdown('hr')" title="Show HR administrators only">HR Admins</button>
+          <button type="button" class="btn sm" onclick="filterUserDropdown('employee')" title="Show employees only">Employees</button>
+        </div>
+      </div>
+
+      <!-- Selected User Profile Card -->
+      <div id="userProfileCard" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;background:var(--bg-card);padding:12px 14px;border-radius:10px;border:1px solid var(--border-default);margin-top:4px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg, #0f3d4f, #1b637f);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+            <span id="userAvatarText">{{ (selected_user['name'][:1]|upper) if selected_user else 'U' }}</span>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <h4 id="userNameText" style="margin:0;font-size:1.05rem;font-weight:700;">{{ selected_user['name'] if selected_user else 'Select User' }}</h4>
+              <span id="userCodeBadge" class="badge sm" style="background:rgba(15,61,79,0.12);color:var(--primary);font-weight:700;">
+                {{ selected_user['emp_code'] if selected_user else '—' }}
+              </span>
+              <span id="userRoleBadge" class="badge sm {% if selected_user and selected_user['role'] == 'hr' %}b-approved{% else %}b-pending{% endif %}" style="font-weight:600;">
+                {{ 'HR Admin' if selected_user and selected_user['role'] == 'hr' else 'Employee' }}
+              </span>
+            </div>
+            <div class="muted small" style="margin-top:2px;">
+              <span id="userDeptText">Department: {{ selected_user['department'] or 'General' if selected_user else '—' }}</span> &bull; 
+              <span id="userDesigText">Designation: {{ selected_user['designation'] or 'Staff' if selected_user else '—' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="adminLockBadge" class="badge" style="{% if not is_admin %}display:none;{% endif %}background:#dbeafe;color:#1e40af;font-weight:700;padding:6px 12px;border-radius:8px;">
+            🛡️ Root Super Admin (Full Access Retained)
+          </span>
+          <span id="customPermBadge" class="badge" style="{% if is_admin or not is_custom %}display:none;{% endif %}background:#dcfce7;color:#15803d;font-weight:700;padding:6px 12px;border-radius:8px;">
+            ⚡ Custom Permissions Active
+          </span>
+          <span id="defaultPermBadge" class="badge" style="{% if is_admin or is_custom %}display:none;{% endif %}background:#f3f4f6;color:#4b5563;font-weight:700;padding:6px 12px;border-radius:8px;">
+            📋 Default Role Permissions
+          </span>
+        </div>
+      </div>
+
+      <!-- Quick Permission Preset Action Bar -->
+      <div id="presetsBar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-top:6px;{% if is_admin %}opacity:0.6;pointer-events:none;{% endif %}">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span class="muted small" style="font-weight:600;">Quick Presets:</span>
+          <button type="button" class="btn sm" onclick="applyPreset('grant_all')" title="Grant all permissions across all modules">
+            ✨ Grant Full Access
+          </button>
+          <button type="button" class="btn sm" onclick="applyPreset('view_only')" title="Grant View access only, uncheck Add/Edit/Delete/Export">
+            👁️ Read-Only (View Only)
+          </button>
+          <button type="button" class="btn sm" onclick="applyPreset('reset_role')" title="Reset to standard role defaults">
+            🔄 Reset to Role Defaults
+          </button>
+          <button type="button" class="btn sm" onclick="applyPreset('clear_all')" title="Revoke all permissions">
+            🚫 Revoke All
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span id="unsavedChangesPill" class="badge" style="display:none;background:#fef3c7;color:#92400e;font-weight:700;">
+            ⚠️ Unsaved Changes
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Permissions Matrix Form -->
+  <form id="permissionsForm" method="post" onsubmit="onSavePermissionsSubmit(event)">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="user_id" id="formUserId" value="{{ selected_user['id'] if selected_user else '' }}">
+
+    <!-- Grouped Modules & Pages -->
+    <div style="display:flex;flex-direction:column;gap:1.25rem;">
+      {% for grp in groups %}
+      <section class="card module-group-card" style="border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,0.06);overflow:hidden;padding:0;">
+        <div style="background:var(--bg-surface);padding:12px 18px;border-bottom:1px solid var(--border-default);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.15rem;">
+              {% if grp['group_id'] == 'admin_hr_dashboard' %}📊
+              {% elif grp['group_id'] == 'attendance_operations' %}🕒
+              {% elif grp['group_id'] == 'workforce_shifts' %}👥
+              {% elif grp['group_id'] == 'approvals_hub' %}✅
+              {% elif grp['group_id'] == 'payroll_mgmt' %}💰
+              {% elif grp['group_id'] == 'reports_exports' %}📑
+              {% elif grp['group_id'] == 'system_security' %}🛡️
+              {% elif grp['group_id'] == 'employee_portal' %}📱
+              {% else %}📁{% endif %}
+            </span>
+            <h3 style="margin:0;font-size:1.05rem;font-weight:700;color:var(--text-main);">{{ grp['group_name'] }}</h3>
+            <span class="badge sm" style="background:var(--bg-card);color:var(--text-muted);border:1px solid var(--border-default);">
+              {{ grp['modules']|length }} pages
+            </span>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="btn sm" onclick="toggleGroupAll('{{ grp['group_id'] }}', true)" style="font-size:0.75rem;padding:3px 8px;">
+              Select Group
+            </button>
+            <button type="button" class="btn sm" onclick="toggleGroupAll('{{ grp['group_id'] }}', false)" style="font-size:0.75rem;padding:3px 8px;">
+              Clear Group
+            </button>
+          </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table class="table perm-table" data-group="{{ grp['group_id'] }}" style="width:100%;border-collapse:collapse;margin:0;">
+            <thead>
+              <tr style="background:var(--bg-card);border-bottom:1px solid var(--border-default);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">
+                <th style="padding:10px 16px;text-align:left;min-width:240px;">Module / Application Page</th>
+                <th style="padding:10px 12px;text-align:center;width:90px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+                    <span>View</span>
+                    <button type="button" class="col-toggle-btn" onclick="toggleColInGroup('{{ grp['group_id'] }}', 'view')" title="Toggle all View in this group">toggle</button>
+                  </div>
+                </th>
+                <th style="padding:10px 12px;text-align:center;width:90px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+                    <span>Add</span>
+                    <button type="button" class="col-toggle-btn" onclick="toggleColInGroup('{{ grp['group_id'] }}', 'add')" title="Toggle all Add in this group">toggle</button>
+                  </div>
+                </th>
+                <th style="padding:10px 12px;text-align:center;width:90px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+                    <span>Edit</span>
+                    <button type="button" class="col-toggle-btn" onclick="toggleColInGroup('{{ grp['group_id'] }}', 'edit')" title="Toggle all Edit in this group">toggle</button>
+                  </div>
+                </th>
+                <th style="padding:10px 12px;text-align:center;width:90px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+                    <span>Delete</span>
+                    <button type="button" class="col-toggle-btn" onclick="toggleColInGroup('{{ grp['group_id'] }}', 'delete')" title="Toggle all Delete in this group">toggle</button>
+                  </div>
+                </th>
+                <th style="padding:10px 12px;text-align:center;width:90px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+                    <span>Export</span>
+                    <button type="button" class="col-toggle-btn" onclick="toggleColInGroup('{{ grp['group_id'] }}', 'export')" title="Toggle all Export in this group">toggle</button>
+                  </div>
+                </th>
+                <th style="padding:10px 16px;text-align:center;width:110px;">Row Quick Toggle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in grp['modules'] %}
+              {% set m_key = m['key'] %}
+              {% set u_perm = permissions.get(m_key, {}) if permissions else {} %}
+              <tr class="perm-row" data-mod="{{ m_key }}" data-group="{{ grp['group_id'] }}" style="border-bottom:1px solid var(--border-default);transition:background 0.15s ease;">
+                <td style="padding:12px 16px;">
+                  <div style="display:flex;flex-direction:column;gap:2px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <b style="font-size:0.95rem;color:var(--text-main);">{{ m['name'] }}</b>
+                      <code style="font-size:0.72rem;background:var(--bg-surface);padding:2px 6px;border-radius:4px;color:var(--text-muted);border:1px solid var(--border-default);">
+                        {{ m['url'] }}
+                      </code>
+                    </div>
+                    <span class="muted small" style="font-size:0.8rem;line-height:1.3;">{{ m['description'] }}</span>
+                  </div>
+                </td>
+
+                <!-- View Checkbox -->
+                <td style="padding:10px 12px;text-align:center;">
+                  {% if 'view' in m['actions'] %}
+                  <label class="perm-check-label" title="Allow View for {{ m['name'] }}">
+                    <input type="checkbox" name="perm_{{ m_key }}_view" class="perm-chk perm-view" data-mod="{{ m_key }}" data-action="view" value="1"
+                           {% if is_admin or u_perm.get('can_view', 0) == 1 %}checked{% endif %}
+                           {% if is_admin %}disabled{% endif %}
+                           onchange="onPermCheckboxChanged(this)">
+                    <span class="custom-chk-box"></span>
+                  </label>
+                  {% else %}
+                  <span class="perm-na">—</span>
+                  {% endif %}
+                </td>
+
+                <!-- Add Checkbox -->
+                <td style="padding:10px 12px;text-align:center;">
+                  {% if 'add' in m['actions'] %}
+                  <label class="perm-check-label" title="Allow Add for {{ m['name'] }}">
+                    <input type="checkbox" name="perm_{{ m_key }}_add" class="perm-chk perm-add" data-mod="{{ m_key }}" data-action="add" value="1"
+                           {% if is_admin or u_perm.get('can_add', 0) == 1 %}checked{% endif %}
+                           {% if is_admin %}disabled{% endif %}
+                           onchange="onPermCheckboxChanged(this)">
+                    <span class="custom-chk-box"></span>
+                  </label>
+                  {% else %}
+                  <span class="perm-na">—</span>
+                  {% endif %}
+                </td>
+
+                <!-- Edit Checkbox -->
+                <td style="padding:10px 12px;text-align:center;">
+                  {% if 'edit' in m['actions'] %}
+                  <label class="perm-check-label" title="Allow Edit for {{ m['name'] }}">
+                    <input type="checkbox" name="perm_{{ m_key }}_edit" class="perm-chk perm-edit" data-mod="{{ m_key }}" data-action="edit" value="1"
+                           {% if is_admin or u_perm.get('can_edit', 0) == 1 %}checked{% endif %}
+                           {% if is_admin %}disabled{% endif %}
+                           onchange="onPermCheckboxChanged(this)">
+                    <span class="custom-chk-box"></span>
+                  </label>
+                  {% else %}
+                  <span class="perm-na">—</span>
+                  {% endif %}
+                </td>
+
+                <!-- Delete Checkbox -->
+                <td style="padding:10px 12px;text-align:center;">
+                  {% if 'delete' in m['actions'] %}
+                  <label class="perm-check-label" title="Allow Delete for {{ m['name'] }}">
+                    <input type="checkbox" name="perm_{{ m_key }}_delete" class="perm-chk perm-delete" data-mod="{{ m_key }}" data-action="delete" value="1"
+                           {% if is_admin or u_perm.get('can_delete', 0) == 1 %}checked{% endif %}
+                           {% if is_admin %}disabled{% endif %}
+                           onchange="onPermCheckboxChanged(this)">
+                    <span class="custom-chk-box"></span>
+                  </label>
+                  {% else %}
+                  <span class="perm-na">—</span>
+                  {% endif %}
+                </td>
+
+                <!-- Export Checkbox -->
+                <td style="padding:10px 12px;text-align:center;">
+                  {% if 'export' in m['actions'] %}
+                  <label class="perm-check-label" title="Allow Export for {{ m['name'] }}">
+                    <input type="checkbox" name="perm_{{ m_key }}_export" class="perm-chk perm-export" data-mod="{{ m_key }}" data-action="export" value="1"
+                           {% if is_admin or u_perm.get('can_export', 0) == 1 %}checked{% endif %}
+                           {% if is_admin %}disabled{% endif %}
+                           onchange="onPermCheckboxChanged(this)">
+                    <span class="custom-chk-box"></span>
+                  </label>
+                  {% else %}
+                  <span class="perm-na">—</span>
+                  {% endif %}
+                </td>
+
+                <!-- Row All / None Action -->
+                <td style="padding:10px 16px;text-align:center;">
+                  <button type="button" class="btn sm row-all-btn" onclick="toggleRowPerms('{{ m_key }}')" {% if is_admin %}disabled{% endif %} style="font-size:0.75rem;padding:3px 10px;">
+                    Toggle
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+
+    <!-- Sticky Floating Save Bar -->
+    <div id="stickySaveBar" style="position:sticky;bottom:1.5rem;z-index:90;background:var(--bg-card);border:1px solid var(--border-default);border-radius:14px;padding:12px 20px;box-shadow:0 8px 30px rgba(0,0,0,0.18);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:1.5rem;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:1.2rem;">💾</span>
+        <div>
+          <b id="saveBarTitle" style="font-size:0.95rem;color:var(--text-main);">
+            Permissions for <span id="saveBarUserName">{{ selected_user['name'] if selected_user else '' }}</span>
+          </b>
+          <div class="muted small" style="margin-top:1px;">Click 'Save Permissions' to immediately apply permissions across sidebar, routes, and APIs.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button type="button" class="btn sm" onclick="onResetToDefaultsClick()" {% if is_admin %}disabled{% endif %} style="white-space:nowrap;">
+          🔄 Reset to Default
+        </button>
+        <button type="submit" id="savePermissionsBtn" class="btn primary" {% if is_admin %}disabled{% endif %} style="display:inline-flex;align-items:center;gap:8px;padding:9px 20px;font-weight:700;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <span>Save Permissions</span>
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Notification Toast Container -->
+  <div id="permToast" style="display:none;position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.25);font-weight:600;font-size:0.92rem;transition:all 0.3s ease;"></div>
+
+  <!-- Audit Logs Modal -->
+  <div id="auditLogsModal" class="ai-modal-wrap" aria-hidden="true" style="display:none;">
+    <div class="ai-modal-backdrop" onclick="toggleAuditModal(false)"></div>
+    <div class="card" style="position:relative;z-index:1001;max-width:760px;width:95%;max-height:85vh;display:flex;flex-direction:column;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.3);overflow:hidden;padding:0;">
+      <div style="background:var(--bg-surface);padding:14px 20px;border-bottom:1px solid var(--border-default);display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <h3 style="margin:0;font-size:1.15rem;font-weight:700;">Permission Audit Trail</h3>
+        </div>
+        <button type="button" class="btn sm" onclick="toggleAuditModal(false)">✕ Close</button>
+      </div>
+
+      <div style="padding:16px 20px;overflow-y:auto;flex:1 1 auto;">
+        <div id="auditLogContent">
+          {% if audit_logs %}
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            {% for l in audit_logs %}
+            <div style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;border:1px solid var(--border-default);">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:6px;">
+                <span class="badge sm b-approved" style="font-weight:700;">{{ l['action'] }}</span>
+                <span class="muted small" style="font-size:0.78rem;">🕒 {{ l['created_at'] }} (IST)</span>
+              </div>
+              <div style="font-size:0.88rem;color:var(--text-main);margin-bottom:4px;">
+                <b>Target:</b> {{ l['target_name'] or 'Employee' }} ({{ l['target_code'] or '—' }}) &bull; 
+                <b>Changed By:</b> {{ l['actor_name'] or 'Administrator' }} &bull; 
+                <b>IP:</b> <code style="font-size:0.75rem;">{{ l['ip_address'] or '—' }}</code>
+              </div>
+              <div class="muted small" style="line-height:1.4;background:var(--bg-card);padding:6px 10px;border-radius:6px;border:1px solid var(--border-default);">
+                {{ l['details'] }}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="muted" style="text-align:center;padding:2rem;">No permission modifications recorded yet.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Styles for checkboxes and custom controls -->
+<style>
+.perm-check-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  margin: 0;
+}
+.perm-chk {
+  opacity: 0;
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.custom-chk-box {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1.5px solid var(--border-default);
+  background: var(--bg-card);
+  transition: all 0.15s ease-in-out;
+  position: relative;
+}
+.perm-chk:checked + .custom-chk-box {
+  background: var(--primary, #0f3d4f);
+  border-color: var(--primary, #0f3d4f);
+}
+.perm-chk:checked + .custom-chk-box:after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.perm-chk:disabled + .custom-chk-box {
+  background: rgba(15,61,79,0.3);
+  border-color: rgba(15,61,79,0.3);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.perm-na {
+  color: var(--text-muted);
+  opacity: 0.4;
+  font-size: 0.9rem;
+}
+.col-toggle-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.col-toggle-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.perm-row:hover {
+  background: rgba(15,61,79,0.03);
+}
+</style>
+
+<script>
+let CURRENT_USER_ID = {{ selected_user['id'] if selected_user else 'null' }};
+let IS_ADMIN_USER = {{ 'true' if is_admin else 'false' }};
+let HAS_UNSAVED_CHANGES = false;
+
+function showToast(message, isOk = true) {
+  const toast = document.getElementById('permToast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.style.background = isOk ? '#059669' : '#dc2626';
+  toast.style.color = '#ffffff';
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 4000);
+}
+
+function markUnsaved() {
+  if (IS_ADMIN_USER) return;
+  HAS_UNSAVED_CHANGES = true;
+  const pill = document.getElementById('unsavedChangesPill');
+  if (pill) pill.style.display = 'inline-block';
+}
+
+function clearUnsaved() {
+  HAS_UNSAVED_CHANGES = false;
+  const pill = document.getElementById('unsavedChangesPill');
+  if (pill) pill.style.display = 'none';
+}
+
+function onPermCheckboxChanged(chk) {
+  markUnsaved();
+  // If Add, Edit, Delete, or Export is checked, auto-enable View because viewing is a prerequisite
+  if (chk.checked && chk.dataset.action !== 'view') {
+    const row = chk.closest('tr');
+    if (row) {
+      const viewChk = row.querySelector('.perm-view');
+      if (viewChk && !viewChk.checked) {
+        viewChk.checked = true;
+      }
+    }
+  }
+}
+
+function toggleRowPerms(modKey) {
+  if (IS_ADMIN_USER) return;
+  const row = document.querySelector(`tr[data-mod="${modKey}"]`);
+  if (!row) return;
+  const chks = row.querySelectorAll('.perm-chk:not(:disabled)');
+  const allChecked = Array.from(chks).every(c => c.checked);
+  chks.forEach(c => {
+    c.checked = !allChecked;
+  });
+  markUnsaved();
+}
+
+function toggleGroupAll(groupId, enable) {
+  if (IS_ADMIN_USER) return;
+  const table = document.querySelector(`table[data-group="${groupId}"]`);
+  if (!table) return;
+  const chks = table.querySelectorAll('.perm-chk:not(:disabled)');
+  chks.forEach(c => {
+    c.checked = enable;
+  });
+  markUnsaved();
+}
+
+function toggleColInGroup(groupId, action) {
+  if (IS_ADMIN_USER) return;
+  const table = document.querySelector(`table[data-group="${groupId}"]`);
+  if (!table) return;
+  const chks = table.querySelectorAll(`.perm-${action}:not(:disabled)`);
+  const allChecked = Array.from(chks).every(c => c.checked);
+  chks.forEach(c => {
+    c.checked = !allChecked;
+    if (!allChecked && action !== 'view') {
+      const row = c.closest('tr');
+      if (row) {
+        const viewChk = row.querySelector('.perm-view');
+        if (viewChk && !viewChk.checked) viewChk.checked = true;
+      }
+    }
+  });
+  markUnsaved();
+}
+
+function applyPreset(preset) {
+  if (IS_ADMIN_USER) return;
+  const allChks = document.querySelectorAll('.perm-chk:not(:disabled)');
+  if (preset === 'grant_all') {
+    allChks.forEach(c => c.checked = true);
+    markUnsaved();
+    showToast('Applied Full Access preset (all checkboxes selected)');
+  } else if (preset === 'view_only') {
+    allChks.forEach(c => {
+      c.checked = (c.dataset.action === 'view');
+    });
+    markUnsaved();
+    showToast('Applied Read-Only preset (only View selected)');
+  } else if (preset === 'clear_all') {
+    allChks.forEach(c => c.checked = false);
+    markUnsaved();
+    showToast('Cleared all permissions');
+  } else if (preset === 'reset_role') {
+    onResetToDefaultsClick();
+  }
+}
+
+function onUserSelectChange(userId) {
+  if (HAS_UNSAVED_CHANGES) {
+    if (!confirm('You have unsaved permission changes. Switch user anyway?')) {
+      document.getElementById('userSelect').value = CURRENT_USER_ID;
+      return;
+    }
+  }
+  window.location.href = `{{ url_for('hr.permissions') }}?user_id=${userId}`;
+}
+
+function filterUserDropdown(type) {
+  const sel = document.getElementById('userSelect');
+  if (!sel) return;
+  for (let i = 0; i < sel.options.length; i++) {
+    const opt = sel.options[i];
+    const text = opt.text.toLowerCase();
+    if (type === 'all') {
+      opt.style.display = '';
+    } else if (type === 'hr') {
+      opt.style.display = text.includes('hr admin') ? '' : 'none';
+    } else if (type === 'employee') {
+      opt.style.display = text.includes('employee') ? '' : 'none';
+    }
+  }
+}
+
+function toggleAuditModal(open) {
+  const m = document.getElementById('auditLogsModal');
+  if (m) m.style.display = open ? 'flex' : 'none';
+}
+
+async function onSavePermissionsSubmit(e) {
+  e.preventDefault();
+  if (IS_ADMIN_USER) {
+    showToast('Super Admin always retains 100% full access.');
+    return;
+  }
+
+  const btn = document.getElementById('savePermissionsBtn');
+  if (btn) btn.disabled = true;
+
+  const permissions = {};
+  document.querySelectorAll('.perm-row').forEach(row => {
+    const mod = row.dataset.mod;
+    permissions[mod] = {
+      can_view: row.querySelector('.perm-view') ? (row.querySelector('.perm-view').checked ? 1 : 0) : 0,
+      can_add: row.querySelector('.perm-add') ? (row.querySelector('.perm-add').checked ? 1 : 0) : 0,
+      can_edit: row.querySelector('.perm-edit') ? (row.querySelector('.perm-edit').checked ? 1 : 0) : 0,
+      can_delete: row.querySelector('.perm-delete') ? (row.querySelector('.perm-delete').checked ? 1 : 0) : 0,
+      can_export: row.querySelector('.perm-export') ? (row.querySelector('.perm-export').checked ? 1 : 0) : 0,
+    };
+  });
+
+  try {
+    const res = await fetch("{{ url_for('hr.permissions_save') }}", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+      },
+      body: JSON.stringify({
+        user_id: CURRENT_USER_ID,
+        permissions: permissions
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      clearUnsaved();
+      showToast(data.message || 'Permissions updated successfully!', true);
+      const customBadge = document.getElementById('customPermBadge');
+      const defaultBadge = document.getElementById('defaultPermBadge');
+      if (customBadge) customBadge.style.display = 'inline-block';
+      if (defaultBadge) defaultBadge.style.display = 'none';
+    } else {
+      showToast(data.error || 'Failed to save permissions', false);
+    }
+  } catch (err) {
+    showToast('Network error while saving permissions: ' + err, false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function onResetToDefaultsClick() {
+  if (IS_ADMIN_USER) return;
+  if (!confirm('Are you sure you want to reset this user\'s permissions to standard role defaults?')) {
+    return;
+  }
+
+  try {
+    const res = await fetch("{{ url_for('hr.permissions_reset') }}", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+      },
+      body: JSON.stringify({ user_id: CURRENT_USER_ID })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      clearUnsaved();
+      showToast('Permissions reset to role defaults. Reloading...', true);
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } else {
+      showToast(data.error || 'Failed to reset permissions', false);
+    }
+  } catch (err) {
+    showToast('Network error while resetting permissions: ' + err, false);
+  }
+}
+</script>
+{% endblock %}

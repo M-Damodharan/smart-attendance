@@ -1,10 +1,11 @@
 from datetime import date, timedelta
 
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for, send_file
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for, send_file, abort
 from werkzeug.security import check_password_hash
 
 from .auth import employee_required
 from .db import get_db
+from .permissions import permission_required, has_permission, is_admin_user
 from .services import (audit, build_register, check_and_sync_missed_punches, create_notification, d2s, daterange, get_employee_category,
                        get_employee_shift_for_date, get_upcoming_holiday_cached, leave_balance, month_range, now, parse_dt, s2d, today,
                        working_days)
@@ -19,6 +20,7 @@ def _shift(user, target_date=None, shift_id=None):
 
 @bp.route("/dashboard")
 @employee_required
+@permission_required("emp_dashboard", "view")
 def dashboard():
     db, u = get_db(), g.user
     check_and_sync_missed_punches(db)
@@ -105,6 +107,7 @@ def dashboard():
 
 @bp.route("/punch")
 @employee_required
+@permission_required("emp_punch", "view")
 def punch():
     db, u = get_db(), g.user
     check_and_sync_missed_punches(db)
@@ -154,6 +157,7 @@ def punch():
 
 @bp.route("/history")
 @employee_required
+@permission_required("emp_history", "view")
 def history():
     u, t = g.user, today()
     try:
@@ -171,6 +175,7 @@ def history():
 
 @bp.route("/history/export")
 @employee_required
+@permission_required("emp_history", "export")
 def export_history():
     from .exports import build_employee_attendance_doc
     u, t = g.user, today()
@@ -198,6 +203,9 @@ def export_history():
 @bp.route("/leave", methods=["GET", "POST"])
 @employee_required
 def leave():
+    act = "add" if request.method == "POST" else "view"
+    if not has_permission(g.user, "emp_leave", act):
+        abort(403, description=f"Access Denied: You do not have '{act.capitalize()}' permission for Leave Applications.")
     db, u, t = get_db(), g.user, today()
     if request.method == "POST":
         action = request.form.get("action")
@@ -265,6 +273,9 @@ def leave():
 @bp.route("/od", methods=["GET", "POST"])
 @employee_required
 def od():
+    act = "add" if request.method == "POST" else "view"
+    if not has_permission(g.user, "emp_od", act):
+        abort(403, description=f"Access Denied: You do not have '{act.capitalize()}' permission for On Duty requests.")
     db, u, t = get_db(), g.user, today()
     if request.method == "POST":
         if request.form.get("action") == "cancel":
@@ -313,6 +324,9 @@ def od():
 @bp.route("/face-change", methods=["GET", "POST"])
 @employee_required
 def face_change():
+    act = "add" if request.method == "POST" else "view"
+    if not has_permission(g.user, "emp_face_id", act):
+        abort(403, description=f"Access Denied: You do not have '{act.capitalize()}' permission for Face ID Management.")
     db, u = get_db(), g.user
     if request.method == "POST":
         action = request.form.get("action")
@@ -370,6 +384,9 @@ def face_change():
 @bp.route("/permission", methods=["GET", "POST"])
 @employee_required
 def permission():
+    act = "add" if request.method == "POST" else "view"
+    if not has_permission(g.user, "emp_permission", act):
+        abort(403, description=f"Access Denied: You do not have '{act.capitalize()}' permission for Permission Slips.")
     db, u, t = get_db(), g.user, today()
     if request.method == "POST":
         action = request.form.get("action")
@@ -431,6 +448,7 @@ def permission():
 # ------------------------------------------------------------------ my salary
 @bp.route("/my-salary")
 @employee_required
+@permission_required("emp_salary", "view")
 def my_salary():
     db, u = get_db(), g.user
     rows = db.execute("""
@@ -452,6 +470,7 @@ def my_salary():
 
 @bp.route("/my-salary/payslip/<int:payroll_id>")
 @employee_required
+@permission_required("emp_salary", "view")
 def my_payslip(payroll_id):
     db, u = get_db(), g.user
     rec = db.execute("""
@@ -475,6 +494,7 @@ def my_payslip(payroll_id):
 # ------------------------------------------------------------------ my sunday duty
 @bp.route("/my-sunday-duty")
 @employee_required
+@permission_required("emp_sunday_duty", "view")
 def my_sunday_duty():
     db, u = get_db(), g.user
     rows = db.execute("""
@@ -494,6 +514,9 @@ def my_sunday_duty():
 @bp.route("/late-coming/submit", methods=["GET", "POST"])
 @employee_required
 def late_coming_submit():
+    act = "add" if request.method == "POST" else "view"
+    if not has_permission(g.user, "emp_late_submit", act):
+        abort(403, description=f"Access Denied: You do not have '{act.capitalize()}' permission for Late Reason Submission.")
     db, u, t = get_db(), g.user, today()
     if request.method == "POST":
         att_id = request.form.get("att_id")

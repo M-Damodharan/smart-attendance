@@ -354,11 +354,14 @@ def webauthn_status():
 @bp.post("/punch")
 @employee_required
 def punch():
+    db, user = get_db(), g.user
+    from .permissions import has_permission
+    if not has_permission(user, "emp_punch", "add"):
+        return _err("Attendance punch permission has been disabled for your account by the administrator.", code=403)
     d = request.get_json(silent=True) or {}
     kind = d.get("kind")
     if kind not in ("in", "out"):
         return _err("Invalid action.")
-    db, user = get_db(), g.user
     check_and_sync_missed_punches(db)
     t = now()
     from datetime import datetime, timedelta

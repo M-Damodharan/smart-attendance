@@ -405,6 +405,36 @@ CREATE TABLE IF NOT EXISTS payroll_audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_payroll_audit_p ON payroll_audit_log(payroll_id);
+
+CREATE TABLE IF NOT EXISTS user_page_permissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    module_key TEXT NOT NULL,
+    can_view INTEGER NOT NULL DEFAULT 0,
+    can_add INTEGER NOT NULL DEFAULT 0,
+    can_edit INTEGER NOT NULL DEFAULT 0,
+    can_delete INTEGER NOT NULL DEFAULT 0,
+    can_export INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    updated_by INTEGER REFERENCES employees(id),
+    UNIQUE(user_id, module_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_page_perm_user ON user_page_permissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_page_perm_mod ON user_page_permissions(module_key);
+
+CREATE TABLE IF NOT EXISTS permission_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_user_id INTEGER NOT NULL REFERENCES employees(id),
+    changed_by_id INTEGER NOT NULL REFERENCES employees(id),
+    action TEXT NOT NULL,
+    details TEXT,
+    ip_address TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_perm_audit_user ON permission_audit_log(target_user_id);
 """
 
 
@@ -578,6 +608,39 @@ def init_db(app):
     )
     """)
     con.execute("CREATE INDEX IF NOT EXISTS idx_perm_emp ON permission_requests(emp_id, perm_date)")
+
+    # Create user_page_permissions and permission_audit_log if missing in existing database
+    con.execute("""
+    CREATE TABLE IF NOT EXISTS user_page_permissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        module_key TEXT NOT NULL,
+        can_view INTEGER NOT NULL DEFAULT 0,
+        can_add INTEGER NOT NULL DEFAULT 0,
+        can_edit INTEGER NOT NULL DEFAULT 0,
+        can_delete INTEGER NOT NULL DEFAULT 0,
+        can_export INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+        updated_by INTEGER REFERENCES employees(id),
+        UNIQUE(user_id, module_key)
+    )
+    """)
+    con.execute("CREATE INDEX IF NOT EXISTS idx_user_page_perm_user ON user_page_permissions(user_id)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_user_page_perm_mod ON user_page_permissions(module_key)")
+
+    con.execute("""
+    CREATE TABLE IF NOT EXISTS permission_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_user_id INTEGER NOT NULL REFERENCES employees(id),
+        changed_by_id INTEGER NOT NULL REFERENCES employees(id),
+        action TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+    )
+    """)
+    con.execute("CREATE INDEX IF NOT EXISTS idx_perm_audit_user ON permission_audit_log(target_user_id)")
 
     _seed_categories(con)
 

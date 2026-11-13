@@ -12,6 +12,17 @@ from .auth import hr_required
 from .db import get_db
 from .face_engine import register_face_for_employee, reset_face_for_employee
 from .maintenance import safe_clean_cache, get_cache_status
+from .permissions import (
+    permission_required,
+    has_permission,
+    is_admin_user,
+    get_user_permissions,
+    save_user_permissions,
+    reset_user_permissions,
+    MODULE_GROUPS,
+    ALL_MODULES,
+    ALL_ACTIONS,
+)
 from .services import (coords_from_maps_link, geocode_place_name, audit, build_register, check_and_sync_missed_punches, clear_shared_cache,
                        create_notification, d2s, daterange,
                        finalize_attendance, format_duration, get_all_shifts_cached, get_employee_category,
@@ -48,6 +59,7 @@ def _employees(only_active=True, shift_id=None, dept=None, category_id=None, inc
 @bp.route("/")
 @bp.route("/dashboard")
 @hr_required
+@permission_required("hr_dashboard", "view")
 def dashboard():
     db, t = get_db(), today()
     check_and_sync_missed_punches(db)
@@ -169,6 +181,7 @@ def dashboard():
 # ------------------------------------------------------------------ employee master
 @bp.route("/employees")
 @hr_required
+@permission_required("hr_employees", "view")
 def employees():
     rows = get_db().execute(
         "SELECT e.*, s.name shift_name, o.name office_name, c.name category_name FROM employees e "
@@ -182,6 +195,13 @@ def employees():
 @bp.route("/employees/<int:eid>", methods=["GET", "POST"])
 @hr_required
 def employee_form(eid=None):
+    # Action authorization check
+    if request.method == "POST":
+        action_needed = "edit" if eid else "add"
+    else:
+        action_needed = "edit" if eid else "add"
+    if not has_permission(g.user, "hr_employees", action_needed):
+        abort(403, description=f"Access Denied: You do not have '{action_needed.capitalize()}' permission for Employee Directory.")
     db = get_db()
     emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() if eid else None
     if eid and not emp:
@@ -284,6 +304,7 @@ def employee_form(eid=None):
 
 @bp.post("/employees/<int:eid>/reset-password")
 @hr_required
+@permission_required("hr_employees", "edit")
 def reset_password(eid):
     db = get_db()
     emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() or abort(404)
@@ -297,6 +318,7 @@ def reset_password(eid):
 
 @bp.post("/employees/<int:eid>/register-face")
 @hr_required
+@permission_required("hr_employees", "edit")
 def register_face(eid):
     db = get_db()
     emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() or abort(404)
@@ -327,6 +349,7 @@ def register_face(eid):
 @bp.post("/employees/<int:eid>/reset-face")
 @bp.post("/employees/<int:eid>/reset-device")
 @hr_required
+@permission_required("hr_employees", "edit")
 def reset_face(eid):
     db = get_db()
     emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() or abort(404)
@@ -340,6 +363,7 @@ def reset_face(eid):
 # ------------------------------------------------------------------ daily attendance (Shift 1 / Shift 2)
 @bp.route("/attendance")
 @hr_required
+@permission_required("hr_attendance", "view")
 def attendance():
     db = get_db()
     check_and_sync_missed_punches(db)
@@ -406,6 +430,7 @@ def attendance():
 # ------------------------------------------------------------------ Shift Management & Bulk Assignment
 @bp.route("/shifts", methods=["GET"])
 @hr_required
+@permission_required("hr_shifts", "view")
 def shifts():
     db = get_db()
     dept = request.args.get("dept") or None
@@ -474,6 +499,7 @@ def shifts():
 
 @bp.post("/shifts/bulk-assign")
 @hr_required
+@permission_required("hr_shifts", "edit")
 def bulk_assign_shifts():
     db = get_db()
     emp_ids = request.form.getlist("emp_ids")
@@ -543,6 +569,7 @@ def bulk_assign_shifts():
 # ------------------------------------------------------------------ approvals
 @bp.route("/approvals")
 @hr_required
+@permission_required("hr_approvals", "view")
 def approvals():
     db = get_db()
     tab = request.args.get("tab", "pending")
@@ -564,6 +591,7 @@ def approvals():
 
 @bp.post("/approvals/<kind>/<int:rid>")
 @hr_required
+@permission_required("hr_approvals", "edit")
 def decide(kind, rid):
     db = get_db()
     table = {"leave": "leaves", "od": "od_requests", "face": "face_change_requests", "permission": "permission_requests"}.get(kind) or abort(404)
@@ -626,6 +654,9 @@ def decide(kind, rid):
 @bp.route("/corrections", methods=["GET", "POST"])
 @hr_required
 def corrections():
+    act = "edit" if request.method == "POST" else "view"
+    if not has_permission(g.user, "hr_corrections", act):
+        abort(403, description=f"Access Denied: You do not have '{act.capitalize()}' permission for Attendance Corrections.")
     db = get_db()
     if request.method == "POST":
         f = request.form
@@ -685,6 +716,7 @@ def corrections():
 # ------------------------------------------------------------------ HR – Missed Punch List & Resolution
 @bp.route("/missed-punches")
 @hr_required
+@permission_required("hr_missed_punches", "view")
 def missed_punches():
     db = get_db()
     check_and_sync_missed_punches(db)
@@ -733,6 +765,7 @@ def missed_punches():
 
 @bp.route("/missed-punches/resolve", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_missed_punches", "edit")
 def missed_punch_resolve():
     if request.method == "GET":
         return redirect(url_for("hr.missed_punches"))
@@ -835,6 +868,7 @@ def missed_punch_resolve():
 # ------------------------------------------------------------------ audit log
 @bp.route("/audit")
 @hr_required
+@permission_required("hr_audit", "view")
 def audit_log():
     q, action = request.args.get("q", "").strip(), request.args.get("action", "")
     sql, args = "SELECT * FROM audit_log WHERE 1=1", []
@@ -867,6 +901,7 @@ def _report_ctx():
 
 @bp.route("/reports")
 @hr_required
+@permission_required("hr_reports", "view")
 def reports():
     start, end, emps, reg, shift_id, dept, category_id = _report_ctx()
     db = get_db()
@@ -881,6 +916,7 @@ def reports():
 
 @bp.route("/reports/export")
 @hr_required
+@permission_required("hr_reports", "export")
 def export():
     from .exports import build_workbook
     start, end, emps, reg, shift_id, dept, category_id = _report_ctx()
@@ -897,6 +933,7 @@ def export():
 
 @bp.route("/reports/employee/<int:eid>/export")
 @hr_required
+@permission_required("hr_reports", "export")
 def export_employee(eid):
     from .exports import build_employee_attendance_doc
     db = get_db()
@@ -924,6 +961,9 @@ def export_employee(eid):
 @bp.route("/settings", methods=["GET", "POST"])
 @hr_required
 def settings():
+    action_type = "edit" if request.method == "POST" else "view"
+    if not has_permission(g.user, "hr_settings", action_type):
+        abort(403, description=f"Access Denied: You do not have '{action_type.capitalize()}' permission for System Settings.")
     db = get_db()
     if request.method == "POST":
         f, act = request.form, request.form.get("action")
@@ -1299,6 +1339,7 @@ def create_snapshot_route():
 # ------------------------------------------------------------------ user access control
 @bp.post("/employees/<int:eid>/access")
 @hr_required
+@permission_required("hr_employees", "edit")
 def toggle_access(eid):
     db = get_db()
     emp = db.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone() or abort(404)
@@ -1315,6 +1356,7 @@ def toggle_access(eid):
 
 @bp.route("/employees/<int:eid>/delete", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_employees", "delete")
 def delete_employee(eid):
     if request.method == "GET":
         flash("To delete an employee, please use the Delete button in Employee Master.", "info")
@@ -1440,6 +1482,7 @@ def delete_employee(eid):
 # ------------------------------------------------------------------ AI Biometric Security & Buddy Punch Audit
 @bp.route("/face-security-audit")
 @hr_required
+@permission_required("hr_face_audit", "view")
 def face_security_audit():
     db = get_db()
     from .services import d2s, today
@@ -1486,6 +1529,7 @@ def face_security_audit():
 
 @bp.post("/face-security-audit/resolve/<int:alert_id>")
 @hr_required
+@permission_required("hr_face_audit", "edit")
 def resolve_face_security_alert(alert_id):
     db = get_db()
     action = request.form.get("action")  # "unlock" | "confirm"
@@ -1514,6 +1558,7 @@ def resolve_face_security_alert(alert_id):
 
 @bp.post("/face-security-audit/scan")
 @hr_required
+@permission_required("hr_face_audit", "edit")
 def scan_daily_face_audit():
     db = get_db()
     from .services import d2s, today
@@ -1537,6 +1582,7 @@ def scan_daily_face_audit():
 # ------------------------------------------------------------------ HR Cloud Backup & Live Sync
 @bp.route("/cloud-backup-sync")
 @hr_required
+@permission_required("hr_cloud_backup", "view")
 def cloud_backup_sync():
     from .cloud_backup import get_cloud_telemetry, list_cloud_backups
     telemetry = get_cloud_telemetry()
@@ -1568,6 +1614,7 @@ def cloud_backup_sync_run():
 
 @bp.post("/cloud-backup-sync/api/backup")
 @hr_required
+@permission_required("hr_cloud_backup", "add")
 def cloud_backup_create_run():
     from .cloud_backup import create_cloud_backup
     data = request.get_json(silent=True) or request.form
@@ -1601,6 +1648,7 @@ def cloud_backup_restore_stage():
 
 @bp.post("/cloud-backup-sync/api/restore/confirm")
 @hr_required
+@permission_required("hr_cloud_backup", "edit")
 def cloud_backup_restore_confirm():
     from .cloud_backup import apply_staged_restore
     data = request.get_json(silent=True) or request.form
@@ -1617,6 +1665,7 @@ def cloud_backup_restore_confirm():
 
 @bp.get("/cloud-backup-sync/download/<backup_id>")
 @hr_required
+@permission_required("hr_cloud_backup", "export")
 def cloud_backup_download(backup_id):
     import os
     try:
@@ -1643,6 +1692,7 @@ def cloud_backup_download(backup_id):
 # ==============================================================================
 @bp.route("/powerbi-dashboard")
 @hr_required
+@permission_required("hr_powerbi", "view")
 def powerbi_dashboard():
     db, t = get_db(), today()
     total_emps = db.execute("SELECT COUNT(*) FROM employees WHERE active=1 AND role='employee'").fetchone()[0]
@@ -1651,6 +1701,7 @@ def powerbi_dashboard():
 
 @bp.route("/api/powerbi-analytics")
 @hr_required
+@permission_required("hr_powerbi", "view")
 def api_powerbi_analytics():
     db, t = get_db(), today()
     sel_date_str = request.args.get("date", d2s(t))
@@ -1829,6 +1880,7 @@ def _nearest_sunday(ref_date=None):
 
 @bp.route("/sunday-working")
 @hr_required
+@permission_required("hr_sunday_working", "view")
 def sunday_working():
     db = get_db()
     req_date = request.args.get("date")
@@ -1882,6 +1934,7 @@ def sunday_working():
 
 @bp.route("/sunday-working/assign", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_sunday_working", "add")
 def sunday_working_assign():
     if request.method == "GET":
         return redirect(url_for("hr.sunday_working"))
@@ -1928,6 +1981,7 @@ def sunday_working_assign():
 
 @bp.route("/sunday-working/record-punch", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_sunday_working", "edit")
 def sunday_working_record_punch():
     if request.method == "GET":
         return redirect(url_for("hr.sunday_working"))
@@ -1957,6 +2011,7 @@ def sunday_working_record_punch():
 
 @bp.route("/sunday-working/approve/<int:sw_id>", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_sunday_working", "edit")
 def sunday_working_approve(sw_id):
     if request.method == "GET":
         return redirect(url_for("hr.sunday_working"))
@@ -1991,6 +2046,7 @@ def sunday_working_approve(sw_id):
 
 @bp.route("/sunday-working/export")
 @hr_required
+@permission_required("hr_sunday_working", "export")
 def sunday_working_export():
     import csv
     db = get_db()
@@ -2040,6 +2096,7 @@ def sunday_working_export():
 # ==============================================================================
 @bp.route("/late-coming")
 @hr_required
+@permission_required("hr_late_coming", "view")
 def late_coming():
     db, t = get_db(), today()
     active_tab = request.args.get("tab", "pending")
@@ -2111,6 +2168,7 @@ def late_coming():
 
 @bp.route("/late-coming/decide/<int:req_id>", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_late_coming", "edit")
 def late_coming_decide(req_id):
     if request.method == "GET":
         return redirect(url_for("hr.late_coming"))
@@ -2155,6 +2213,7 @@ def late_coming_decide(req_id):
 # ==============================================================================
 @bp.route("/payroll")
 @hr_required
+@permission_required("hr_payroll", "view")
 def payroll():
     db, t = get_db(), today()
     month_param = request.args.get("month", t.strftime("%Y-%m"))
@@ -2210,6 +2269,9 @@ def payroll():
 @bp.route("/payroll/setup", methods=["GET", "POST"])
 @hr_required
 def payroll_setup():
+    action_type = "edit" if request.method == "POST" else "view"
+    if not has_permission(g.user, "hr_payroll_setup", action_type):
+        abort(403, description=f"Access Denied: You do not have '{action_type.capitalize()}' permission for Payroll Setup.")
     db = get_db()
     if request.method == "POST":
         emp_ids = request.form.getlist("emp_id")
@@ -2278,6 +2340,7 @@ def payroll_setup():
 
 @bp.route("/payroll/calculate", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_payroll", "add")
 def payroll_calculate():
     if request.method == "GET":
         return redirect(url_for("hr.payroll"))
@@ -2445,6 +2508,7 @@ def payroll_calculate():
 
 @bp.route("/payroll/approve/<int:payroll_id>", methods=["GET", "POST"])
 @hr_required
+@permission_required("hr_payroll", "edit")
 def payroll_approve(payroll_id):
     if request.method == "GET":
         return redirect(url_for("hr.payroll"))
@@ -2484,6 +2548,7 @@ def payroll_approve(payroll_id):
 
 @bp.route("/payroll/payslip/<int:payroll_id>")
 @hr_required
+@permission_required("hr_payroll", "view")
 def payroll_payslip(payroll_id):
     db = get_db()
     rec = db.execute("""
@@ -2506,6 +2571,7 @@ def payroll_payslip(payroll_id):
 
 @bp.route("/payroll/export")
 @hr_required
+@permission_required("hr_payroll", "export")
 def payroll_export():
     import csv
     db = get_db()
@@ -2554,5 +2620,193 @@ def payroll_export():
         as_attachment=True,
         download_name=filename
     )
+
+
+# ------------------------------------------------------------------ User & Page Permissions (Admin Module)
+@bp.route("/permissions")
+@hr_required
+@permission_required("hr_permissions", "view")
+def permissions():
+    db = get_db()
+    users = db.execute(
+        "SELECT id, emp_code, name, role, department, designation, active "
+        "FROM employees "
+        "ORDER BY CASE WHEN role='hr' THEN 0 ELSE 1 END, emp_code"
+    ).fetchall()
+
+    user_id_param = request.args.get("user_id")
+    selected_user = None
+    if user_id_param:
+        try:
+            uid = int(user_id_param)
+            for u in users:
+                if u["id"] == uid:
+                    selected_user = u
+                    break
+        except (ValueError, TypeError):
+            selected_user = None
+
+    if not selected_user and users:
+        # Default to first non-admin user or first user
+        selected_user = users[0]
+
+    user_perms = {}
+    is_custom = False
+    is_admin = False
+    if selected_user:
+        is_admin = is_admin_user(selected_user)
+        user_perms, is_custom = get_user_permissions(
+            db,
+            selected_user["id"],
+            selected_user["role"],
+            selected_user["emp_code"]
+        )
+
+    # Fetch recent audit logs for permissions
+    audit_logs = db.execute(
+        "SELECT a.*, e.name target_name, e.emp_code target_code, actor.name actor_name "
+        "FROM permission_audit_log a "
+        "LEFT JOIN employees e ON e.id=a.target_user_id "
+        "LEFT JOIN employees actor ON actor.id=a.changed_by_id "
+        "ORDER BY a.id DESC LIMIT 30"
+    ).fetchall()
+
+    return render_template(
+        "hr/permissions.html",
+        users=users,
+        selected_user=selected_user,
+        permissions=user_perms,
+        is_custom=is_custom,
+        is_admin=is_admin,
+        groups=MODULE_GROUPS,
+        all_actions=ALL_ACTIONS,
+        audit_logs=audit_logs,
+    )
+
+
+@bp.route("/permissions/api/<int:uid>")
+@hr_required
+@permission_required("hr_permissions", "view")
+def permissions_api(uid):
+    db = get_db()
+    u = db.execute(
+        "SELECT id, emp_code, name, role, department, designation, active FROM employees WHERE id=?",
+        (uid,)
+    ).fetchone()
+    if not u:
+        return jsonify(ok=False, error="User not found", code=404), 404
+
+    is_admin = is_admin_user(u)
+    perms, is_custom = get_user_permissions(db, u["id"], u["role"], u["emp_code"])
+    logs = db.execute(
+        "SELECT a.*, actor.name actor_name FROM permission_audit_log a "
+        "LEFT JOIN employees actor ON actor.id=a.changed_by_id "
+        "WHERE a.target_user_id=? ORDER BY a.id DESC LIMIT 20",
+        (uid,)
+    ).fetchall()
+
+    return jsonify(
+        ok=True,
+        user=dict(u),
+        is_admin=is_admin,
+        is_custom=is_custom,
+        permissions=perms,
+        audit_logs=[dict(l) for l in logs]
+    )
+
+
+@bp.route("/permissions/save", methods=["POST"])
+@hr_required
+@permission_required("hr_permissions", "edit")
+def permissions_save():
+    db = get_db()
+    is_ajax = request.is_json or request.path.endswith("/save")
+    data = request.get_json(silent=True) or request.form
+
+    user_id = data.get("user_id")
+    if not user_id:
+        if is_ajax:
+            return jsonify(ok=False, error="Missing target user_id"), 400
+        flash("Missing target user_id", "error")
+        return redirect(url_for("hr.permissions"))
+
+    try:
+        user_id = int(user_id)
+    except (ValueError, TypeError):
+        if is_ajax:
+            return jsonify(ok=False, error="Invalid user_id"), 400
+        flash("Invalid user_id", "error")
+        return redirect(url_for("hr.permissions"))
+
+    # If incoming data is JSON with permissions map
+    perms_data = data.get("permissions")
+    if not perms_data and not request.is_json:
+        perms_data = {}
+        for k, v in request.form.items():
+            if k.startswith("perm_"):
+                parts = k[5:].rsplit("_", 1)
+                if len(parts) == 2:
+                    mod_k, act = parts
+                    if mod_k not in perms_data:
+                        perms_data[mod_k] = {}
+                    perms_data[mod_k][f"can_{act}"] = 1 if v in ("1", "on", "true") else 0
+
+    if not isinstance(perms_data, dict):
+        perms_data = {}
+
+    try:
+        result = save_user_permissions(
+            db,
+            user_id,
+            perms_data,
+            updated_by_id=g.user["id"],
+            ip_address=request.remote_addr
+        )
+        if is_ajax:
+            return jsonify(ok=True, message=result["message"])
+        flash(result["message"], "ok")
+        return redirect(url_for("hr.permissions", user_id=user_id))
+    except Exception as e:
+        logger.exception("Error saving user permissions")
+        if is_ajax:
+            return jsonify(ok=False, error=str(e)), 500
+        flash(f"Error saving permissions: {e}", "error")
+        return redirect(url_for("hr.permissions", user_id=user_id))
+
+
+@bp.route("/permissions/reset", methods=["POST"])
+@hr_required
+@permission_required("hr_permissions", "edit")
+def permissions_reset():
+    db = get_db()
+    is_ajax = request.is_json or request.path.endswith("/reset")
+    data = request.get_json(silent=True) or request.form
+
+    user_id = data.get("user_id")
+    if not user_id:
+        if is_ajax:
+            return jsonify(ok=False, error="Missing target user_id"), 400
+        flash("Missing target user_id", "error")
+        return redirect(url_for("hr.permissions"))
+
+    try:
+        user_id = int(user_id)
+        result = reset_user_permissions(
+            db,
+            user_id,
+            updated_by_id=g.user["id"],
+            ip_address=request.remote_addr
+        )
+        if is_ajax:
+            return jsonify(ok=True, message=result["message"])
+        flash(result["message"], "ok")
+        return redirect(url_for("hr.permissions", user_id=user_id))
+    except Exception as e:
+        logger.exception("Error resetting user permissions")
+        if is_ajax:
+            return jsonify(ok=False, error=str(e)), 500
+        flash(f"Error resetting permissions: {e}", "error")
+        return redirect(url_for("hr.permissions", user_id=user_id))
+
 
 
