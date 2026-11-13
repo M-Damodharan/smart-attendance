@@ -9,11 +9,11 @@
     <p class="muted small" style="margin:2px 0 0">Live check-in status, working hours, selfies, and GPS verification</p>
   </div>
   <div class="monthnav">
-    <a class="btn sm" href="?date={{ prev }}" title="Previous day">‹</a>
+    <a class="btn sm" href="{{ url_for('hr.attendance', date=prev) }}" title="Previous day">‹</a>
     <form method="get" class="inline">
       <input type="date" name="date" value="{{ d }}" onchange="this.form.submit()">
     </form>
-    <a class="btn sm" href="?date={{ nxt }}" title="Next day">›</a>
+    <a class="btn sm" href="{{ url_for('hr.attendance', date=nxt) }}" title="Next day">›</a>
     <a class="btn sm" href="{{ url_for('hr.missed_punches') }}" style="margin-left:0.5rem;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);font-weight:600">⚠️ Missed Punches ({{ pending_mp_count }})</a>
     <a class="btn sm primary" href="{{ url_for('hr.corrections') }}" style="margin-left:0.5rem">+ Add / Correct Punch</a>
   </div>

@@ -9,9 +9,9 @@
     <p class="muted small" style="margin:2px 0 0">Filter by category, shift, department, and download employee attendance documents</p>
   </div>
   <div class="monthnav">
-    <a class="btn sm" href="?month={{ prev }}&shift={{ shift_id or '' }}&dept={{ dept or '' }}&category={{ category_id or '' }}">‹</a>
+    <a class="btn sm" href="{{ url_for('hr.reports', month=prev, shift=shift_id or '', dept=dept or '', category=category_id or '') }}">‹</a>
     <strong>{{ start.strftime('%B %Y') }}</strong>
-    <a class="btn sm" href="?month={{ nxt }}&shift={{ shift_id or '' }}&dept={{ dept or '' }}&category={{ category_id or '' }}">›</a>
+    <a class="btn sm" href="{{ url_for('hr.reports', month=nxt, shift=shift_id or '', dept=dept or '', category=category_id or '') }}">›</a>
   </div>
 </div>
 

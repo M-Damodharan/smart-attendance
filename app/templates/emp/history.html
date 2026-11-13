@@ -4,9 +4,9 @@
 {% block content %}
 <section class="card" style="margin-bottom:1.25rem">
   <div class="monthnav" style="margin-bottom:1rem">
-    <a class="btn sm" href="?month={{ prev }}">‹</a>
+    <a class="btn sm" href="{{ url_for('emp.history', month=prev) }}">‹</a>
     <h3>{{ start.strftime('%B %Y') }}</h3>
-    <a class="btn sm" href="?month={{ nxt }}">›</a>
+    <a class="btn sm" href="{{ url_for('emp.history', month=nxt) }}">›</a>
   </div>
 
   <!-- Category & Download Action Bar -->

@@ -807,7 +807,7 @@ if (document.readyState === 'loading') {
       return false;
     }
     try {
-      const u = new URL(urlStr, window.location.origin);
+      const u = new URL(urlStr, window.location.href);
       if (u.origin !== window.location.origin) return false;
       const p = u.pathname;
       if (p.startsWith('/logout') || p.startsWith('/login') || p.includes('/download') || p.includes('/api/') || p === '/change-password') {
@@ -822,7 +822,7 @@ if (document.readyState === 'loading') {
   function prefetchUrl(urlStr) {
     if (!isValidPrefetchUrl(urlStr)) return;
     try {
-      const u = new URL(urlStr, window.location.origin);
+      const u = new URL(urlStr, window.location.href);
       const cleanUrl = u.pathname + u.search;
       if (cleanUrl === window.location.pathname + window.location.search) return;
 
@@ -868,7 +868,7 @@ if (document.readyState === 'loading') {
     const mainWrap = document.querySelector('main.wrap');
     if (mainWrap) mainWrap.classList.add('instant-loading');
 
-    const u = new URL(url, window.location.origin);
+    const u = new URL(url, window.location.href);
     const cleanUrl = u.pathname + u.search;
 
     let html = null;
@@ -912,7 +912,7 @@ if (document.readyState === 'loading') {
       document.querySelectorAll('nav.nav a').forEach(a => {
         const aHref = a.getAttribute('href');
         if (aHref) {
-          const aPath = new URL(aHref, window.location.origin).pathname;
+          const aPath = new URL(aHref, window.location.href).pathname;
           if (aPath === currentPath) {
             a.classList.add('on');
           } else {
@@ -958,7 +958,7 @@ if (document.readyState === 'loading') {
     const href = link.getAttribute('href');
     if (!isValidPrefetchUrl(href)) return;
 
-    const targetUrl = new URL(href, window.location.origin);
+    const targetUrl = new URL(link.href || href, window.location.href);
 
     // Let hardware/biometric camera pages navigate natively with immediate visual feedback
     if (targetUrl.pathname === '/punch' || targetUrl.pathname === '/face-change' || targetUrl.pathname.includes('/onboarding-face')) {

@@ -4,7 +4,7 @@
 {% block wrapclass %}wide{% endblock %}
 {% block content %}
 <div class="ph"><h2>Approvals</h2>
-  <div class="tabs"><a class="{{ 'on' if tab=='pending' }}" href="?tab=pending">Pending</a><a class="{{ 'on' if tab=='history' }}" href="?tab=history">History</a></div></div>
+  <div class="tabs"><a class="{{ 'on' if tab=='pending' }}" href="{{ url_for('hr.approvals', tab='pending') }}">Pending</a><a class="{{ 'on' if tab=='history' }}" href="{{ url_for('hr.approvals', tab='history') }}">History</a></div></div>
 
 {% macro actions(kind, id) %}
   <form method="post" action="{{ url_for('hr.decide', kind=kind, rid=id, tab=tab) }}" class="decide">
