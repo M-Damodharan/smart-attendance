@@ -454,6 +454,21 @@
         </div>
       </form>
     </div>
+
+    <!-- Account Session & Sign Out -->
+    <div style="border-top:1px solid var(--border-default);padding-top:1rem;margin-top:1.25rem;display:flex;justify-content:space-between;align-items:center;background:rgba(239,68,68,0.04);border-radius:12px;padding:12px 14px;border:1px solid rgba(239,68,68,0.2);">
+      <div>
+        <div style="font-size:0.88rem;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:6px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Account Session
+        </div>
+        <div class="muted small" style="margin-top:2px;">Sign out of this device securely</div>
+      </div>
+      <a href="{{ url_for('auth.logout') }}" class="btn sm danger" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-weight:700;padding:7px 14px;border-radius:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out / Logout
+      </a>
+    </div>
   </div>
 </div>
 

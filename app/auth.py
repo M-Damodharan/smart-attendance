@@ -3,7 +3,7 @@ import time
 import threading
 from functools import wraps
 
-from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, g, jsonify, make_response, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_db
@@ -90,6 +90,8 @@ def load_user():
         return
     uid = session.get("uid")
     if uid:
+        if not session.permanent:
+            session.permanent = True
         cached_u = get_cached_user(uid, ttl=30.0)
         if cached_u:
             g.user = cached_u
@@ -194,12 +196,15 @@ def login(login_type=None):
     elif active_type not in ("staff", "employee", "contract", "accounts"):
         active_type = "employee"
 
-    if request.method == "GET" and g.user and not current_app.config.get("TESTING"):
-        nxt = request.args.get("next")
-        if nxt and nxt.startswith("/") and not nxt.startswith("//"):
-            if not (g.user["role"] != "hr" and nxt.startswith("/hr")):
-                return redirect(nxt)
-        return redirect(url_for("hr.dashboard" if g.user["role"] == "hr" else "emp.dashboard"))
+    if request.method == "GET":
+        if request.args.get("logged_out"):
+            flash("You have been signed out successfully. Please sign in to continue.", "ok")
+        elif g.user and not current_app.config.get("TESTING"):
+            nxt = request.args.get("next")
+            if nxt and nxt.startswith("/") and not nxt.startswith("//"):
+                if not (g.user["role"] != "hr" and nxt.startswith("/hr")):
+                    return redirect(nxt)
+            return redirect(url_for("hr.dashboard" if g.user["role"] == "hr" else "emp.dashboard"))
 
     if request.method == "POST":
         # Form submission specifies login_type; if omitted (e.g. legacy test/API call to /login), check URL
@@ -331,9 +336,9 @@ def login(login_type=None):
                     db.commit()
                 except Exception:
                     pass
-            session.permanent = True
             existing_csrf = session.get("csrf")
             session.clear()
+            session.permanent = True
             session["uid"], session["name"], session["role"] = u["id"], u["name"], u["role"]
             session["login_type"] = login_type_post
             session["category"] = cat_code
@@ -387,12 +392,34 @@ def login(login_type=None):
 
 @bp.route("/logout", methods=["POST", "GET"])
 def logout():
-    if g.user:
-        clear_user_cache(g.user["id"])
-        audit("LOGOUT", "employee", g.user["id"])
-        get_db().commit()
+    user_id = g.user["id"] if g.user else session.get("uid")
+    if user_id:
+        clear_user_cache(user_id)
+        audit("LOGOUT", "employee", user_id, actor=g.user or {"id": user_id})
+        try:
+            get_db().commit()
+        except Exception:
+            pass
     session.clear()
-    return redirect(url_for("auth.login"))
+    session.permanent = False
+    g.user = None
+
+    resp = make_response(redirect(url_for("auth.login", logged_out="1")))
+
+    cookie_name = current_app.config.get("SESSION_COOKIE_NAME", "session")
+    cookie_path = current_app.config.get("SESSION_COOKIE_PATH", "/")
+    cookie_domain = current_app.config.get("SESSION_COOKIE_DOMAIN", None)
+
+    for c_name in (cookie_name, "session", "sbg_session", "remember_token"):
+        resp.delete_cookie(c_name, path=cookie_path, domain=cookie_domain)
+        resp.delete_cookie(c_name, path="/")
+
+    # Anti-caching and security headers to guarantee clean logout on all devices and browsers
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, private"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    resp.headers["Clear-Site-Data"] = '"cache", "cookies"'
+    return resp
 
 
 @bp.route("/change-password", methods=["GET", "POST"])
@@ -547,6 +574,7 @@ def switch_account():
     orig_auth = session.get("authorized_accounts", [])
     csrf_val = session.get("csrf")
     session.clear()
+    session.permanent = True
 
     session["uid"] = target["id"]
     session["name"] = target["name"]

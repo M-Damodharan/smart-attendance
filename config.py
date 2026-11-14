@@ -74,14 +74,17 @@ class Config:
     ENV_NAME = ENV
     PRODUCTION = PRODUCTION
     DEMO_DATA = os.environ.get("DEMO_DATA", "0" if PRODUCTION else "1") == "1"
-    PERMANENT_SESSION_LIFETIME = 30 * 24 * 3600     # persistent login for 30 days
+    PERMANENT_SESSION_LIFETIME = 90 * 24 * 3600     # persistent login for 90 days (3 months)
+    SESSION_REFRESH_EACH_REQUEST = True             # automatically slide expiration on every user request
     BEHIND_PROXY = os.environ.get("BEHIND_PROXY", "1" if PRODUCTION else "0") == "1"
     LOG_FILE = os.environ.get("LOG_FILE", os.path.join(BASE_DIR, "instance", "app.log"))
 
     # ---- Security -------------------------------------------------------
     SECRET_KEY = _resolve_secret_key()
+    SESSION_COOKIE_NAME = "session"
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_PATH = "/"
     # Set SESSION_COOKIE_SECURE=1 when served over HTTPS
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "1" if PRODUCTION else "0") == "1"
     MAX_CONTENT_LENGTH = 8 * 1024 * 1024  # 8 MB per request
