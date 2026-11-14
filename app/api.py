@@ -1050,10 +1050,12 @@ def save_theme():
         theme_mode = "light"
 
     custom_colors_str = None
-    if custom_colors:
+    if custom_colors and theme_name == "custom":
         if isinstance(custom_colors, str):
             try:
                 parsed = json.loads(custom_colors)
+                while isinstance(parsed, str):
+                    parsed = json.loads(parsed)
                 custom_colors_str = json.dumps(parsed)
             except Exception:
                 custom_colors_str = None
@@ -1072,6 +1074,14 @@ def save_theme():
                 updated_at=datetime('now', '+5 hours', '+30 minutes')
         """, (g.user["id"], theme_name, theme_mode, custom_colors_str))
         db.commit()
+
+        # Update in-memory user and session immediately
+        g.user["theme_name"] = theme_name
+        g.user["theme_mode"] = theme_mode
+        g.user["custom_colors"] = custom_colors_str
+        session["theme_name"] = theme_name
+        session["theme_mode"] = theme_mode
+
         from .auth import clear_user_cache
         clear_user_cache(g.user["id"])
 

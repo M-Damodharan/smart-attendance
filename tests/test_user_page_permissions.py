@@ -33,17 +33,42 @@ from app.permissions import (
 class TestUserPagePermissions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = create_app()
-        cls.app.config["TESTING"] = True
-        cls.app.config["WTF_CSRF_ENABLED"] = False
+        cls.app = create_app({"TESTING": True, "WTF_CSRF_ENABLED": False})
         cls.client = cls.app.test_client()
 
     def setUp(self):
         with self.app.app_context():
             db = get_db()
-            # Ensure an HR admin and test employee exist
-            self.hr_user = db.execute("SELECT * FROM employees WHERE role='hr' LIMIT 1").fetchone()
+            from app.permissions import get_admin_code
+            admin_code = get_admin_code()
+            self.hr_user = db.execute(
+                "SELECT * FROM employees WHERE UPPER(emp_code)=?",
+                (admin_code,)
+            ).fetchone()
+            if not self.hr_user:
+                db.execute(
+                    "INSERT OR REPLACE INTO employees (emp_code, name, role, password_hash, must_change_pw) VALUES (?, 'HR Admin', 'hr', 'testhash', 0)",
+                    (admin_code,)
+                )
+                db.commit()
+                self.hr_user = db.execute("SELECT * FROM employees WHERE UPPER(emp_code)=?", (admin_code,)).fetchone()
+            else:
+                db.execute("UPDATE employees SET must_change_pw=0 WHERE id=?", (self.hr_user["id"],))
+                db.commit()
+                self.hr_user = db.execute("SELECT * FROM employees WHERE id=?", (self.hr_user["id"],)).fetchone()
+
             self.emp_user = db.execute("SELECT * FROM employees WHERE role='employee' ORDER BY id LIMIT 1").fetchone()
+            if not self.emp_user:
+                db.execute(
+                    "INSERT OR REPLACE INTO employees (emp_code, name, role, password_hash, must_change_pw) VALUES ('EMP001', 'Test Employee', 'employee', 'testhash', 0)"
+                )
+                db.commit()
+                self.emp_user = db.execute("SELECT * FROM employees WHERE role='employee' ORDER BY id LIMIT 1").fetchone()
+            else:
+                db.execute("UPDATE employees SET must_change_pw=0 WHERE id=?", (self.emp_user["id"],))
+                db.commit()
+                self.emp_user = db.execute("SELECT * FROM employees WHERE id=?", (self.emp_user["id"],)).fetchone()
+
             self.assertIsNotNone(self.hr_user, "HR admin user must exist")
             self.assertIsNotNone(self.emp_user, "Employee user must exist")
 
@@ -61,7 +86,11 @@ class TestUserPagePermissions(unittest.TestCase):
         """Super Admin (HR001 / ADMIN_CODE) always retains 100% full access to all modules and actions."""
         with self.app.app_context():
             db = get_db()
-            admin = db.execute("SELECT * FROM employees WHERE emp_code='HR001'").fetchone()
+            from app.permissions import get_admin_code
+            admin_code = get_admin_code()
+            admin = db.execute("SELECT * FROM employees WHERE UPPER(emp_code)=?", (admin_code,)).fetchone()
+            if not admin:
+                admin = self.hr_user
             self.assertIsNotNone(admin)
             self.assertTrue(is_admin_user(admin))
 

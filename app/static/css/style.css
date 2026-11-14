@@ -4492,6 +4492,16 @@ main.wrap.instant-loading {
   --brand-cyan: #0ea5e9;
   --brand-gradient: linear-gradient(135deg, #0b253e 0%, #17426b 100%);
   --hero-gradient: linear-gradient(135deg, #0a1f33 0%, #15385b 50%, #1d4e7d 100%);
+  --bg-page: #edf2f7;
+  --bg-surface: #f8fafc;
+  --bg-surface-hover: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-card-elevated: #ffffff;
+  --border-default: #dbe4ef;
+  --border-focus: #0284c7;
+  --text-main: #0f172a;
+  --text-secondary: #334155;
+  --shadow-3d-btn: 0 4px 0 #075985, 0 8px 18px rgba(2, 132, 199, 0.25);
 }
 [data-color-theme="default_blue"][data-theme="dark"] {
   --brand-primary: #0284c7;
@@ -4501,6 +4511,16 @@ main.wrap.instant-loading {
   --brand-cyan: #38bdf8;
   --brand-gradient: linear-gradient(135deg, #091a2e 0%, #0f2c4a 100%);
   --hero-gradient: linear-gradient(135deg, #071524 0%, #0c233c 50%, #113458 100%);
+  --bg-page: #071321;
+  --bg-surface: #0b1e33;
+  --bg-surface-hover: #102945;
+  --bg-card: #0f2640;
+  --bg-card-elevated: #143254;
+  --border-default: #1c4573;
+  --border-focus: #38bdf8;
+  --text-main: #f8fafc;
+  --text-secondary: #94a3b8;
+  --shadow-3d-btn: 0 4px 0 #0284c7, 0 8px 20px rgba(56, 189, 248, 0.45);
 }
 
 /* 2. Modern Purple */

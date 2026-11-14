@@ -243,13 +243,14 @@
     </div>
   </div>
 
-  <form id="custom-theme-form" onsubmit="saveCustomTheme(event)">
+  <form id="custom-theme-form" onsubmit="event.preventDefault(); saveCustomTheme(event); return false;" method="POST" action="javascript:void(0);">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 1.5rem;">
       <div class="color-field-wrap">
         <label for="color_primary" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Primary Brand Color</label>
         <div class="color-input-combo">
-          <input type="color" id="picker_primary" value="#0f2c4a" oninput="syncColorField('primary', this.value)">
-          <input type="text" id="color_primary" name="primary" value="#0f2c4a" maxlength="7" oninput="syncColorPicker('primary', this.value)">
+          <input type="color" id="picker_primary" value="{{ custom_colors.get('primary') or '#0f2c4a' }}" oninput="syncColorField('primary', this.value)">
+          <input type="text" id="color_primary" name="primary" value="{{ custom_colors.get('primary') or '#0f2c4a' }}" maxlength="7" oninput="syncColorPicker('primary', this.value)">
         </div>
         <span class="muted small">Buttons, active headers &amp; key branding</span>
       </div>
@@ -257,8 +258,8 @@
       <div class="color-field-wrap">
         <label for="color_secondary" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Secondary / Accent Color</label>
         <div class="color-input-combo">
-          <input type="color" id="picker_secondary" value="#0284c7" oninput="syncColorField('secondary', this.value)">
-          <input type="text" id="color_secondary" name="secondary" value="#0284c7" maxlength="7" oninput="syncColorPicker('secondary', this.value)">
+          <input type="color" id="picker_secondary" value="{{ custom_colors.get('secondary') or '#0284c7' }}" oninput="syncColorField('secondary', this.value)">
+          <input type="text" id="color_secondary" name="secondary" value="{{ custom_colors.get('secondary') or '#0284c7' }}" maxlength="7" oninput="syncColorPicker('secondary', this.value)">
         </div>
         <span class="muted small">Active tabs, links, focus rings &amp; badges</span>
       </div>
@@ -266,8 +267,8 @@
       <div class="color-field-wrap">
         <label for="color_bg" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Page Background (Canvas)</label>
         <div class="color-input-combo">
-          <input type="color" id="picker_bg" value="#edf2f7" oninput="syncColorField('bg', this.value)">
-          <input type="text" id="color_bg" name="bg" value="#edf2f7" maxlength="7" oninput="syncColorPicker('bg', this.value)">
+          <input type="color" id="picker_bg" value="{{ custom_colors.get('bg') or '#edf2f7' }}" oninput="syncColorField('bg', this.value)">
+          <input type="text" id="color_bg" name="bg" value="{{ custom_colors.get('bg') or '#edf2f7' }}" maxlength="7" oninput="syncColorPicker('bg', this.value)">
         </div>
         <span class="muted small">Main page canvas &amp; backdrop</span>
       </div>
@@ -275,8 +276,8 @@
       <div class="color-field-wrap">
         <label for="color_card" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Card &amp; Panel Surface</label>
         <div class="color-input-combo">
-          <input type="color" id="picker_card" value="#ffffff" oninput="syncColorField('card', this.value)">
-          <input type="text" id="color_card" name="card" value="#ffffff" maxlength="7" oninput="syncColorPicker('card', this.value)">
+          <input type="color" id="picker_card" value="{{ custom_colors.get('card') or '#ffffff' }}" oninput="syncColorField('card', this.value)">
+          <input type="text" id="color_card" name="card" value="{{ custom_colors.get('card') or '#ffffff' }}" maxlength="7" oninput="syncColorPicker('card', this.value)">
         </div>
         <span class="muted small">Dashboard cards, modals &amp; tables</span>
       </div>
@@ -284,8 +285,8 @@
       <div class="color-field-wrap">
         <label for="color_sidebar" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Sidebar &amp; Nav Surface</label>
         <div class="color-input-combo">
-          <input type="color" id="picker_sidebar" value="#f8fafc" oninput="syncColorField('sidebar', this.value)">
-          <input type="text" id="color_sidebar" name="sidebar" value="#f8fafc" maxlength="7" oninput="syncColorPicker('sidebar', this.value)">
+          <input type="color" id="picker_sidebar" value="{{ custom_colors.get('sidebar') or '#f8fafc' }}" oninput="syncColorField('sidebar', this.value)">
+          <input type="text" id="color_sidebar" name="sidebar" value="{{ custom_colors.get('sidebar') or '#f8fafc' }}" maxlength="7" oninput="syncColorPicker('sidebar', this.value)">
         </div>
         <span class="muted small">Top navigation, chips &amp; menu items</span>
       </div>
@@ -293,8 +294,8 @@
       <div class="color-field-wrap">
         <label for="color_text" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Text Main Color</label>
         <div class="color-input-combo">
-          <input type="color" id="picker_text" value="#0f172a" oninput="syncColorField('text', this.value)">
-          <input type="text" id="color_text" name="text" value="#0f172a" maxlength="7" oninput="syncColorPicker('text', this.value)">
+          <input type="color" id="picker_text" value="{{ custom_colors.get('text') or '#0f172a' }}" oninput="syncColorField('text', this.value)">
+          <input type="text" id="color_text" name="text" value="{{ custom_colors.get('text') or '#0f172a' }}" maxlength="7" oninput="syncColorPicker('text', this.value)">
         </div>
         <span class="muted small">Headings, titles &amp; primary typography</span>
       </div>
@@ -342,7 +343,7 @@
 
     <div style="display: flex; justify-content: flex-end; gap: 10px; align-items: center; flex-wrap: wrap;">
       <button type="button" class="btn" onclick="resetCustomColors()">Reset to Active Palette</button>
-      <button type="submit" class="btn primary" id="btn-save-custom-theme" style="font-weight:700;">
+      <button type="button" class="btn primary" id="btn-save-custom-theme" onclick="saveCustomTheme(event)" style="font-weight:700;">
         <span>💾 Save &amp; Apply Custom Theme</span>
       </button>
     </div>
@@ -364,6 +365,17 @@ const VALID_THEMES = [
   'orange_modern',
   'custom'
 ];
+
+const PRESET_PALETTES = {
+  default_blue: { primary: '#0f2c4a', secondary: '#0284c7', bg: '#f0f4f8', card: '#ffffff', sidebar: '#f8fafc', text: '#0f172a' },
+  modern_purple: { primary: '#4f46e5', secondary: '#818cf8', bg: '#f5f3ff', card: '#ffffff', sidebar: '#faf5ff', text: '#1e1b4b' },
+  emerald_green: { primary: '#059669', secondary: '#10b981', bg: '#ecfdf5', card: '#ffffff', sidebar: '#f0fdf4', text: '#064e3b' },
+  ocean_teal: { primary: '#0d9488', secondary: '#14b8a6', bg: '#f0fdfa', card: '#ffffff', sidebar: '#ccfbf1', text: '#134e4a' },
+  dark_premium: { primary: '#3b82f6', secondary: '#60a5fa', bg: '#0b1120', card: '#111827', sidebar: '#0f172a', text: '#f9fafb' },
+  midnight_black: { primary: '#6366f1', secondary: '#818cf8', bg: '#000000', card: '#090d16', sidebar: '#05070a', text: '#ffffff' },
+  rose_pink: { primary: '#e11d48', secondary: '#f43f5e', bg: '#fff1f2', card: '#ffffff', sidebar: '#ffe4e6', text: '#4c0519' },
+  orange_modern: { primary: '#ea580c', secondary: '#f97316', bg: '#fff7ed', card: '#ffffff', sidebar: '#ffedd5', text: '#431407' }
+};
 
 let activeTheme = localStorage.getItem('sbg_color_theme') || '{{ current_theme or "default_blue" }}';
 let activeMode = localStorage.getItem('theme') || localStorage.getItem('sbg_theme_mode') || '{{ current_mode or "light" }}';
@@ -409,25 +421,35 @@ function setThemeMode(mode) {
   // If using custom theme, re-apply custom variables
   if (activeTheme === 'custom') {
     applyCustomVariablesFromInputs();
+  } else {
+    clearCustomVariableOverrides();
   }
 
   updateUIIndicators();
-  persistThemeToServer(activeTheme, activeMode, getCustomColorsFromInputs());
+  persistThemeToServer(activeTheme, activeMode, activeTheme === 'custom' ? getCustomColorsFromInputs() : null);
 }
 
-function setColorTheme(themeName) {
+async function setColorTheme(themeName) {
   if (!VALID_THEMES.includes(themeName)) return;
   activeTheme = themeName;
   document.documentElement.setAttribute('data-color-theme', themeName);
 
-  // If selecting midnight black or dark premium, default to dark mode if not already set
+  // If selecting midnight black, default to dark mode if not already set
   if (themeName === 'midnight_black' && activeMode !== 'dark') {
-    setThemeMode('dark');
+    activeMode = 'dark';
+    document.documentElement.setAttribute('data-theme', 'dark');
+    try {
+      localStorage.setItem('theme', 'dark');
+      localStorage.setItem('sbg_theme_mode', 'dark');
+    } catch(e) {}
   }
 
   // Clear inline custom variable overrides when choosing a preset theme
   if (themeName !== 'custom') {
     clearCustomVariableOverrides();
+    try {
+      localStorage.removeItem('sbg_custom_colors');
+    } catch(e) {}
   }
 
   try {
@@ -435,7 +457,7 @@ function setColorTheme(themeName) {
   } catch(e) {}
 
   updateUIIndicators();
-  persistThemeToServer(activeTheme, activeMode, null);
+  await persistThemeToServer(activeTheme, activeMode, null);
 
   if (typeof showNotificationPopToast === 'function') {
     const formatted = themeName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -495,7 +517,13 @@ function applyCustomVariablesFromInputs() {
 
 function clearCustomVariableOverrides() {
   const root = document.documentElement;
-  const props = ['--brand-primary', '--brand-hover', '--brand-accent', '--brand-cyan', '--bg-page', '--bg-canvas', '--bg-card', '--bg-card-elevated', '--bg-surface', '--text-main', '--text-default'];
+  const props = [
+    '--brand-primary', '--brand-hover', '--brand-accent', '--brand-cyan',
+    '--bg-page', '--bg-canvas', '--bg-card', '--bg-card-elevated',
+    '--bg-surface', '--bg-hover', '--border-default', '--border-focus',
+    '--text-main', '--text-default', '--text-muted',
+    '--status-late', '--status-absent', '--status-halfday', '--status-present'
+  ];
   props.forEach(p => root.style.removeProperty(p));
 }
 
@@ -516,11 +544,30 @@ function loadDefaultCustomPresets(type) {
   previewCustomColorsRealtime();
 }
 
-function saveCustomTheme(e) {
-  if (e) e.preventDefault();
+async function saveCustomTheme(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const btn = document.getElementById('btn-save-custom-theme');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Saving Theme...</span>';
+  }
+
   const c = getCustomColorsFromInputs();
   activeTheme = 'custom';
   document.documentElement.setAttribute('data-color-theme', 'custom');
+
+  // Apply to documentElement
+  const root = document.documentElement;
+  if (c.primary) { root.style.setProperty('--brand-primary', c.primary); root.style.setProperty('--brand-hover', c.primary); }
+  if (c.secondary) { root.style.setProperty('--brand-accent', c.secondary); root.style.setProperty('--brand-cyan', c.secondary); }
+  if (c.bg) { root.style.setProperty('--bg-page', c.bg); root.style.setProperty('--bg-canvas', c.bg); }
+  if (c.card) { root.style.setProperty('--bg-card', c.card); root.style.setProperty('--bg-card-elevated', c.card); }
+  if (c.sidebar) { root.style.setProperty('--bg-surface', c.sidebar); }
+  if (c.text) { root.style.setProperty('--text-main', c.text); root.style.setProperty('--text-default', c.text); }
 
   try {
     localStorage.setItem('sbg_color_theme', 'custom');
@@ -528,7 +575,19 @@ function saveCustomTheme(e) {
   } catch(err) {}
 
   updateUIIndicators();
-  persistThemeToServer('custom', activeMode, c);
+  const ok = await persistThemeToServer('custom', activeMode, c);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<span>✓ Saved &amp; Applied!</span>';
+    btn.style.backgroundColor = '#059669';
+    btn.style.color = '#ffffff';
+    setTimeout(() => {
+      btn.innerHTML = originalHtml || '<span>💾 Save &amp; Apply Custom Theme</span>';
+      btn.style.backgroundColor = '';
+      btn.style.color = '';
+    }, 1800);
+  }
 
   if (typeof showNotificationPopToast === 'function') {
     showNotificationPopToast({
@@ -542,11 +601,24 @@ function saveCustomTheme(e) {
 
 function resetCustomColors() {
   clearCustomVariableOverrides();
-  setColorTheme('default_blue');
+  const targetTheme = (activeTheme && activeTheme !== 'custom' && PRESET_PALETTES[activeTheme]) ? activeTheme : 'default_blue';
+  const pal = PRESET_PALETTES[targetTheme];
+  if (pal) {
+    Object.keys(pal).forEach(k => {
+      const pick = document.getElementById(`picker_${k}`);
+      const txt = document.getElementById(`color_${k}`);
+      if (pick) pick.value = pal[k];
+      if (txt) txt.value = pal[k];
+    });
+  }
+  setColorTheme(targetTheme);
 }
 
 function resetToDefaultTheme() {
   clearCustomVariableOverrides();
+  try {
+    localStorage.removeItem('sbg_custom_colors');
+  } catch(e) {}
   setThemeMode('light');
   setColorTheme('default_blue');
 }
@@ -592,20 +664,25 @@ function updateContrastRatio() {
 
 async function persistThemeToServer(themeName, themeMode, customColors) {
   try {
-    await fetch('/api/theme/save', {
+    const tok = typeof csrf === 'function' ? csrf() : (document.querySelector('input[name="csrf_token"]')?.value || '');
+    const res = await fetch('/api/theme/save', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': typeof csrf === 'function' ? csrf() : ''
+        'X-CSRFToken': tok
       },
       body: JSON.stringify({
         theme_name: themeName,
         theme_mode: themeMode,
-        custom_colors: customColors ? JSON.stringify(customColors) : null
+        custom_colors: customColors ? (typeof customColors === 'object' ? customColors : JSON.parse(customColors)) : null,
+        csrf_token: tok
       })
     });
+    const data = await res.json();
+    return data && data.ok;
   } catch(err) {
     console.warn('Backend theme sync notice:', err);
+    return false;
   }
 }
 
@@ -614,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Populate custom input fields if saved in localStorage or server
   try {
     const saved = localStorage.getItem('sbg_custom_colors');
-    if (saved) {
+    if (saved && activeTheme === 'custom') {
       const c = JSON.parse(saved);
       Object.keys(c).forEach(k => {
         const pick = document.getElementById(`picker_${k}`);

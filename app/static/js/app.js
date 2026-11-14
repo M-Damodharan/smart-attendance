@@ -23,28 +23,43 @@ async function postJSON(url, data) {
 
 // Theme Handling (Color Themes, Modes & Custom Palettes)
 function initTheme() {
+  const customProps = [
+    '--brand-primary', '--brand-hover', '--brand-active', '--brand-accent', '--brand-cyan',
+    '--brand-gradient', '--hero-gradient', '--bg-page', '--bg-canvas', '--bg-card',
+    '--bg-card-elevated', '--bg-surface', '--bg-surface-hover', '--text-main', '--text-secondary', '--text-default',
+    '--border-default', '--border-focus', '--shadow-3d-btn'
+  ];
+
   function applyActiveThemeSettings() {
     try {
       const savedMode = localStorage.getItem('theme') || localStorage.getItem('sbg_theme_mode');
       const prefDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const mode = savedMode ? savedMode : (prefDark ? 'dark' : 'light');
+      const mode = (savedMode && (savedMode === 'light' || savedMode === 'dark')) ? savedMode : (prefDark ? 'dark' : 'light');
       const colorTheme = localStorage.getItem('sbg_color_theme') || 'default_blue';
 
-      document.documentElement.setAttribute('data-theme', mode);
-      document.documentElement.setAttribute('data-color-theme', colorTheme);
+      const root = document.documentElement;
+      root.setAttribute('data-theme', mode);
+      root.setAttribute('data-color-theme', colorTheme);
 
       if (colorTheme === 'custom') {
-        const raw = localStorage.getItem('sbg_custom_colors');
+        let raw = localStorage.getItem('sbg_custom_colors');
         if (raw) {
-          const c = typeof raw === 'string' ? JSON.parse(raw) : raw;
-          const root = document.documentElement;
-          if (c.primary) { root.style.setProperty('--brand-primary', c.primary); root.style.setProperty('--brand-hover', c.primary); }
-          if (c.secondary) { root.style.setProperty('--brand-accent', c.secondary); root.style.setProperty('--brand-cyan', c.secondary); }
-          if (c.bg) { root.style.setProperty('--bg-page', c.bg); root.style.setProperty('--bg-canvas', c.bg); }
-          if (c.card) { root.style.setProperty('--bg-card', c.card); root.style.setProperty('--bg-card-elevated', c.card); }
-          if (c.sidebar) { root.style.setProperty('--bg-surface', c.sidebar); }
-          if (c.text) { root.style.setProperty('--text-main', c.text); root.style.setProperty('--text-default', c.text); }
+          let c = raw;
+          while (typeof c === 'string') {
+            try { c = JSON.parse(c); } catch(err) { break; }
+          }
+          if (c && typeof c === 'object') {
+            if (c.primary) { root.style.setProperty('--brand-primary', c.primary); root.style.setProperty('--brand-hover', c.primary); root.style.setProperty('--brand-active', c.primary); }
+            if (c.secondary) { root.style.setProperty('--brand-accent', c.secondary); root.style.setProperty('--brand-cyan', c.secondary); root.style.setProperty('--border-focus', c.secondary); }
+            if (c.bg) { root.style.setProperty('--bg-page', c.bg); root.style.setProperty('--bg-canvas', c.bg); }
+            if (c.card) { root.style.setProperty('--bg-card', c.card); root.style.setProperty('--bg-card-elevated', c.card); }
+            if (c.sidebar) { root.style.setProperty('--bg-surface', c.sidebar); root.style.setProperty('--bg-surface-hover', c.sidebar); }
+            if (c.text) { root.style.setProperty('--text-main', c.text); root.style.setProperty('--text-default', c.text); }
+          }
         }
+      } else {
+        // Preset theme active: clear custom overrides
+        customProps.forEach(p => root.style.removeProperty(p));
       }
     } catch (e) {}
   }
@@ -64,12 +79,13 @@ function initTheme() {
 
     // Background sync with server if logged in
     const activeColor = localStorage.getItem('sbg_color_theme') || 'default_blue';
-    const rawColors = localStorage.getItem('sbg_custom_colors');
+    const rawColors = activeColor === 'custom' ? localStorage.getItem('sbg_custom_colors') : null;
+    const tok = typeof csrf === 'function' ? csrf() : '';
     if (typeof fetch === 'function') {
       fetch('/api/theme/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': typeof csrf === 'function' ? csrf() : '' },
-        body: JSON.stringify({ theme_name: activeColor, theme_mode: next, custom_colors: rawColors })
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': tok },
+        body: JSON.stringify({ theme_name: activeColor, theme_mode: next, custom_colors: rawColors, csrf_token: tok })
       }).catch(() => {});
     }
   }

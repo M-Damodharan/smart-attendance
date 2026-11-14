@@ -672,6 +672,10 @@ def theme_settings():
     if pref and pref["custom_colors"]:
         try:
             custom_colors = json.loads(pref["custom_colors"])
+            while isinstance(custom_colors, str):
+                custom_colors = json.loads(custom_colors)
+            if not isinstance(custom_colors, dict):
+                custom_colors = {}
         except Exception:
             custom_colors = {}
     return render_template(

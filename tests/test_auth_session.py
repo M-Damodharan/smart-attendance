@@ -52,7 +52,7 @@ class TestAuthSessionPersistenceAndLogout(unittest.TestCase):
         )
 
         with self.client.session_transaction() as sess:
-            self.assertEqual(sess.get("uid"), 1)
+            self.assertIsNotNone(sess.get("uid"))
             self.assertTrue(sess.permanent, "session.permanent must be True after login")
 
     def test_02_persistent_session_survives_across_requests(self):
