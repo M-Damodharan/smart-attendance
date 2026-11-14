@@ -1005,3 +1005,81 @@ def delete_notification(nid):
     db.commit()
     return jsonify(ok=True)
 
+
+# ------------------------------------------------------------------ Theme Customization
+VALID_THEMES = (
+    "default_blue",
+    "modern_purple",
+    "emerald_green",
+    "ocean_teal",
+    "dark_premium",
+    "midnight_black",
+    "rose_pink",
+    "orange_modern",
+    "custom",
+)
+
+
+@bp.get("/theme")
+def get_theme():
+    if not g.user:
+        return jsonify(ok=True, theme_name="default_blue", theme_mode="light", custom_colors=None)
+    db = get_db()
+    row = db.execute("SELECT theme_name, theme_mode, custom_colors FROM user_preferences WHERE user_id=?", (g.user["id"],)).fetchone()
+    if row:
+        custom_cols = None
+        if row["custom_colors"]:
+            try:
+                custom_cols = json.loads(row["custom_colors"])
+            except Exception:
+                custom_cols = None
+        return jsonify(ok=True, theme_name=row["theme_name"], theme_mode=row["theme_mode"], custom_colors=custom_cols)
+    return jsonify(ok=True, theme_name="default_blue", theme_mode="light", custom_colors=None)
+
+
+@bp.post("/theme/save")
+def save_theme():
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    theme_name = data.get("theme_name", "default_blue")
+    theme_mode = data.get("theme_mode", "light")
+    custom_colors = data.get("custom_colors")
+
+    if theme_name not in VALID_THEMES:
+        theme_name = "default_blue"
+    if theme_mode not in ("light", "dark"):
+        theme_mode = "light"
+
+    custom_colors_str = None
+    if custom_colors:
+        if isinstance(custom_colors, str):
+            try:
+                parsed = json.loads(custom_colors)
+                custom_colors_str = json.dumps(parsed)
+            except Exception:
+                custom_colors_str = None
+        elif isinstance(custom_colors, dict):
+            custom_colors_str = json.dumps(custom_colors)
+
+    if g.user:
+        db = get_db()
+        db.execute("""
+            INSERT INTO user_preferences (user_id, theme_name, theme_mode, custom_colors, updated_at)
+            VALUES (?, ?, ?, ?, datetime('now', '+5 hours', '+30 minutes'))
+            ON CONFLICT(user_id) DO UPDATE SET
+                theme_name=excluded.theme_name,
+                theme_mode=excluded.theme_mode,
+                custom_colors=excluded.custom_colors,
+                updated_at=datetime('now', '+5 hours', '+30 minutes')
+        """, (g.user["id"], theme_name, theme_mode, custom_colors_str))
+        db.commit()
+        from .auth import clear_user_cache
+        clear_user_cache(g.user["id"])
+
+    return jsonify(
+        ok=True,
+        theme_name=theme_name,
+        theme_mode=theme_mode,
+        custom_colors=json.loads(custom_colors_str) if custom_colors_str else None,
+        message="Theme saved successfully"
+    )
+

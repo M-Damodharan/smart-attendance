@@ -2809,4 +2809,11 @@ def permissions_reset():
         return redirect(url_for("hr.permissions", user_id=user_id))
 
 
+@bp.route("/theme", methods=["GET"])
+@hr_required
+def theme_settings():
+    return redirect(url_for("emp.theme_settings"))
+
+
+
 

@@ -435,6 +435,16 @@ CREATE TABLE IF NOT EXISTS permission_audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_perm_audit_user ON permission_audit_log(target_user_id);
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+    theme_name TEXT NOT NULL DEFAULT 'default_blue',
+    theme_mode TEXT NOT NULL DEFAULT 'light',
+    custom_colors TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_pref_user ON user_preferences(user_id);
 """
 
 
@@ -641,6 +651,17 @@ def init_db(app):
     )
     """)
     con.execute("CREATE INDEX IF NOT EXISTS idx_perm_audit_user ON permission_audit_log(target_user_id)")
+
+    con.execute("""
+    CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id INTEGER PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+        theme_name TEXT NOT NULL DEFAULT 'default_blue',
+        theme_mode TEXT NOT NULL DEFAULT 'light',
+        custom_colors TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+    )
+    """)
+    con.execute("CREATE INDEX IF NOT EXISTS idx_user_pref_user ON user_preferences(user_id)")
 
     _seed_categories(con)
 

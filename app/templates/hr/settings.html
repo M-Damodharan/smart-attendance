@@ -477,6 +477,22 @@
   {% endif %}
 </section>
 
+<!-- Theme Customization & Appearance Settings -->
+<section class="card" id="theme-appearance" style="border: 1.5px solid var(--border-default); border-radius: 16px; margin-bottom: 1.5rem; padding: 1.5rem; background: var(--bg-card);">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+    <div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:1.4rem;">🎨</span>
+        <h3 style="margin:0; font-size:1.2rem; font-weight:700;">Application Themes &amp; UI Customization</h3>
+      </div>
+      <p class="muted small" style="margin:4px 0 0;">Personalize workspace themes, switch Light/Dark mode, select from 8 premium ready-made color palettes or build custom corporate branding.</p>
+    </div>
+    <a href="{{ url_for('emp.theme_settings') }}" class="btn primary" style="font-weight:700; display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border-radius:10px; text-decoration:none;">
+      <span>🎨 Open Theme Settings &rarr;</span>
+    </a>
+  </div>
+</section>
+
 <!-- Account Session & Device Logout -->
 <section class="card" id="session-logout" style="border: 1.5px solid var(--border-default); border-radius: 16px; margin-bottom: 1.5rem; padding: 1.5rem; background: var(--bg-card);">
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">

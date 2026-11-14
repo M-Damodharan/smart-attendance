@@ -1,0 +1,631 @@
+{% extends "base.html" %}
+{% block title %}Theme & Appearance Settings · SBG{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+
+{% block content %}
+<div class="ph" style="margin-bottom: 1.5rem;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <h2 style="margin: 0;">🎨 Theme &amp; Appearance Settings</h2>
+      <span class="badge b-approved" id="current-theme-badge" style="font-size: 0.78rem;">● Active: Default Blue</span>
+    </div>
+    <div class="muted small" style="margin-top: 4px;">
+      Personalize your workspace aesthetic. Select from 8 curated designer themes, toggle Light/Dark mode, or build custom company branding.
+    </div>
+  </div>
+  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+    <button type="button" class="btn sm" onclick="resetToDefaultTheme()" style="display:inline-flex;align-items:center;gap:6px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      Reset to Default Blue
+    </button>
+  </div>
+</div>
+
+<!-- SECTION 1: Light Mode vs Dark Mode -->
+<section class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700;">1. Display Mode (Light vs. Dark)</h3>
+      <span class="muted small">Optimized contrast for bright daylight environments or low-light comfort.</span>
+    </div>
+    <span class="muted small" id="mode-status-text">Current Mode: <b>Light</b></span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+    <!-- Light Mode Card -->
+    <div class="theme-mode-card" id="mode-card-light" onclick="setThemeMode('light')" tabindex="0" role="button">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div class="theme-mode-icon-box light">☀️</div>
+        <div>
+          <b style="font-size: 1.05rem; display: block; color: var(--text-main);">Light Mode</b>
+          <span class="muted small">Daylight Crisp &bull; High Contrast</span>
+        </div>
+        <span class="mode-check-badge" id="check-light">✓ Active</span>
+      </div>
+      <p class="muted small" style="margin: 0; line-height: 1.45;">
+        Clean porcelain canvas, crisp dark text, and subtle 3D surface elevations. Ideal for daytime office work and brightly lit screens.
+      </p>
+    </div>
+
+    <!-- Dark Mode Card -->
+    <div class="theme-mode-card" id="mode-card-dark" onclick="setThemeMode('dark')" tabindex="0" role="button">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <div class="theme-mode-icon-box dark">🌙</div>
+        <div>
+          <b style="font-size: 1.05rem; display: block; color: var(--text-main);">Dark Mode</b>
+          <span class="muted small">Night Contrast &bull; OLED Optimized</span>
+        </div>
+        <span class="mode-check-badge" id="check-dark">✓ Active</span>
+      </div>
+      <p class="muted small" style="margin: 0; line-height: 1.45;">
+        Deep obsidian surfaces, glowing colored highlights, and zero glare. Designed to reduce eye fatigue and save battery life on mobile devices.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 2: 8 Curated Ready-Made Themes -->
+<section class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 8px;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700;">2. Ready-Made Color Themes</h3>
+      <span class="muted small">Select any palette to instantly restyle buttons, navigation, dashboard cards, forms and tables across the entire app.</span>
+    </div>
+    <span class="badge b-approved" style="font-size: 0.76rem;">Instant 0ms Live Switch</span>
+  </div>
+
+  <div class="theme-palette-grid">
+    <!-- 1. Default Professional Blue -->
+    <div class="theme-palette-card" id="card-theme-default_blue" onclick="setColorTheme('default_blue')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#0284c7;"></span>
+          <b>Default Professional Blue</b>
+        </div>
+        <span class="active-pill" id="badge-theme-default_blue">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#0f2c4a;" title="Primary #0f2c4a"></span>
+        <span class="swatch" style="background:#0284c7;" title="Accent #0284c7"></span>
+        <span class="swatch" style="background:#0ea5e9;" title="Cyan #0ea5e9"></span>
+        <span class="swatch" style="background:#edf2f7;border:1px solid #cbd5e1;" title="Canvas #edf2f7"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">Corporate industrial navy and electric sapphire blue accents.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('default_blue');event.stopPropagation();">Apply Theme</button>
+    </div>
+
+    <!-- 2. Modern Purple -->
+    <div class="theme-palette-card" id="card-theme-modern_purple" onclick="setColorTheme('modern_purple')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#7c3aed;"></span>
+          <b>Modern Purple</b>
+        </div>
+        <span class="active-pill" id="badge-theme-modern_purple">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#5b21b6;" title="Primary #5b21b6"></span>
+        <span class="swatch" style="background:#7c3aed;" title="Accent #7c3aed"></span>
+        <span class="swatch" style="background:#a78bfa;" title="Light #a78bfa"></span>
+        <span class="swatch" style="background:#f5f3ff;border:1px solid #ddd6fe;" title="Canvas #f5f3ff"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">High-tech royal violet and vibrant amethyst gradients.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('modern_purple');event.stopPropagation();">Apply Theme</button>
+    </div>
+
+    <!-- 3. Emerald Green -->
+    <div class="theme-palette-card" id="card-theme-emerald_green" onclick="setColorTheme('emerald_green')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#059669;"></span>
+          <b>Emerald Green</b>
+        </div>
+        <span class="active-pill" id="badge-theme-emerald_green">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#065f46;" title="Primary #065f46"></span>
+        <span class="swatch" style="background:#059669;" title="Accent #059669"></span>
+        <span class="swatch" style="background:#34d399;" title="Mint #34d399"></span>
+        <span class="swatch" style="background:#ecfdf5;border:1px solid #a7f3d0;" title="Canvas #ecfdf5"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">Fresh botanical emerald, deep jade, and crisp mint highlights.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('emerald_green');event.stopPropagation();">Apply Theme</button>
+    </div>
+
+    <!-- 4. Ocean Teal -->
+    <div class="theme-palette-card" id="card-theme-ocean_teal" onclick="setColorTheme('ocean_teal')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#0d9488;"></span>
+          <b>Ocean Teal</b>
+        </div>
+        <span class="active-pill" id="badge-theme-ocean_teal">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#115e59;" title="Primary #115e59"></span>
+        <span class="swatch" style="background:#0d9488;" title="Accent #0d9488"></span>
+        <span class="swatch" style="background:#2dd4bf;" title="Turquoise #2dd4bf"></span>
+        <span class="swatch" style="background:#f0fdfa;border:1px solid #99f6e4;" title="Canvas #f0fdfa"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">Cool oceanic cyan, deep marine teal, and turquoise radiance.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('ocean_teal');event.stopPropagation();">Apply Theme</button>
+    </div>
+
+    <!-- 5. Dark Premium -->
+    <div class="theme-palette-card" id="card-theme-dark_premium" onclick="setColorTheme('dark_premium')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#38bdf8;"></span>
+          <b>Dark Premium</b>
+        </div>
+        <span class="active-pill" id="badge-theme-dark_premium">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#090e17;" title="Primary #090e17"></span>
+        <span class="swatch" style="background:#1e293b;" title="Surface #1e293b"></span>
+        <span class="swatch" style="background:#38bdf8;" title="Neon Cyan #38bdf8"></span>
+        <span class="swatch" style="background:#64748b;" title="Slate #64748b"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">Obsidian gunmetal slate with vivid electric neon cyan highlights.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('dark_premium');event.stopPropagation();">Apply Theme</button>
+    </div>
+
+    <!-- 6. Midnight Black -->
+    <div class="theme-palette-card" id="card-theme-midnight_black" onclick="setColorTheme('midnight_black')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#18181b;"></span>
+          <b>Midnight Black</b>
+        </div>
+        <span class="active-pill" id="badge-theme-midnight_black">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#000000;border:1px solid #3f3f46;" title="Pure OLED #000000"></span>
+        <span class="swatch" style="background:#18181b;" title="Surface #18181b"></span>
+        <span class="swatch" style="background:#71717a;" title="Carbon #71717a"></span>
+        <span class="swatch" style="background:#fafafa;" title="Platinum #fafafa"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">100% True OLED deep black, carbon surfaces, and platinum accents.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('midnight_black');event.stopPropagation();">Apply Theme</button>
+    </div>
+
+    <!-- 7. Rose Pink -->
+    <div class="theme-palette-card" id="card-theme-rose_pink" onclick="setColorTheme('rose_pink')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#e11d48;"></span>
+          <b>Rose Pink</b>
+        </div>
+        <span class="active-pill" id="badge-theme-rose_pink">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#9f1239;" title="Primary #9f1239"></span>
+        <span class="swatch" style="background:#e11d48;" title="Accent #e11d48"></span>
+        <span class="swatch" style="background:#fb7185;" title="Pink #fb7185"></span>
+        <span class="swatch" style="background:#fff1f2;border:1px solid #fecdd3;" title="Canvas #fff1f2"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">Bold crimson ruby, raspberry rose, and soft blossom undertones.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('rose_pink');event.stopPropagation();">Apply Theme</button>
+    </div>
+
+    <!-- 8. Orange Modern -->
+    <div class="theme-palette-card" id="card-theme-orange_modern" onclick="setColorTheme('orange_modern')">
+      <div class="theme-card-header">
+        <div class="theme-title-wrap">
+          <span class="theme-dot" style="background:#ea580c;"></span>
+          <b>Orange Modern</b>
+        </div>
+        <span class="active-pill" id="badge-theme-orange_modern">Active</span>
+      </div>
+      <div class="theme-swatch-row">
+        <span class="swatch" style="background:#9a3412;" title="Primary #9a3412"></span>
+        <span class="swatch" style="background:#ea580c;" title="Accent #ea580c"></span>
+        <span class="swatch" style="background:#fb923c;" title="Amber #fb923c"></span>
+        <span class="swatch" style="background:#fff7ed;border:1px solid #fed7aa;" title="Canvas #fff7ed"></span>
+      </div>
+      <p class="muted small" style="margin: 8px 0 12px; line-height: 1.4;">Warm energetic terracotta, burnt amber, and bright tangerine.</p>
+      <button type="button" class="btn sm primary theme-apply-btn" onclick="setColorTheme('orange_modern');event.stopPropagation();">Apply Theme</button>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3: Custom Color Palette & Branding Builder -->
+<section class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 8px;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700;">3. Custom Color Palette &amp; Corporate Branding</h3>
+      <span class="muted small">Customize primary, secondary, canvas, card, sidebar and typography colors to match your organization.</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button type="button" class="btn sm" onclick="loadDefaultCustomPresets('navy')">Preset Navy</button>
+      <button type="button" class="btn sm" onclick="loadDefaultCustomPresets('forest')">Preset Forest</button>
+      <button type="button" class="btn sm" onclick="loadDefaultCustomPresets('sunset')">Preset Sunset</button>
+    </div>
+  </div>
+
+  <form id="custom-theme-form" onsubmit="saveCustomTheme(event)">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 1.5rem;">
+      <div class="color-field-wrap">
+        <label for="color_primary" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Primary Brand Color</label>
+        <div class="color-input-combo">
+          <input type="color" id="picker_primary" value="#0f2c4a" oninput="syncColorField('primary', this.value)">
+          <input type="text" id="color_primary" name="primary" value="#0f2c4a" maxlength="7" oninput="syncColorPicker('primary', this.value)">
+        </div>
+        <span class="muted small">Buttons, active headers &amp; key branding</span>
+      </div>
+
+      <div class="color-field-wrap">
+        <label for="color_secondary" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Secondary / Accent Color</label>
+        <div class="color-input-combo">
+          <input type="color" id="picker_secondary" value="#0284c7" oninput="syncColorField('secondary', this.value)">
+          <input type="text" id="color_secondary" name="secondary" value="#0284c7" maxlength="7" oninput="syncColorPicker('secondary', this.value)">
+        </div>
+        <span class="muted small">Active tabs, links, focus rings &amp; badges</span>
+      </div>
+
+      <div class="color-field-wrap">
+        <label for="color_bg" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Page Background (Canvas)</label>
+        <div class="color-input-combo">
+          <input type="color" id="picker_bg" value="#edf2f7" oninput="syncColorField('bg', this.value)">
+          <input type="text" id="color_bg" name="bg" value="#edf2f7" maxlength="7" oninput="syncColorPicker('bg', this.value)">
+        </div>
+        <span class="muted small">Main page canvas &amp; backdrop</span>
+      </div>
+
+      <div class="color-field-wrap">
+        <label for="color_card" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Card &amp; Panel Surface</label>
+        <div class="color-input-combo">
+          <input type="color" id="picker_card" value="#ffffff" oninput="syncColorField('card', this.value)">
+          <input type="text" id="color_card" name="card" value="#ffffff" maxlength="7" oninput="syncColorPicker('card', this.value)">
+        </div>
+        <span class="muted small">Dashboard cards, modals &amp; tables</span>
+      </div>
+
+      <div class="color-field-wrap">
+        <label for="color_sidebar" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Sidebar &amp; Nav Surface</label>
+        <div class="color-input-combo">
+          <input type="color" id="picker_sidebar" value="#f8fafc" oninput="syncColorField('sidebar', this.value)">
+          <input type="text" id="color_sidebar" name="sidebar" value="#f8fafc" maxlength="7" oninput="syncColorPicker('sidebar', this.value)">
+        </div>
+        <span class="muted small">Top navigation, chips &amp; menu items</span>
+      </div>
+
+      <div class="color-field-wrap">
+        <label for="color_text" style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:6px;">Text Main Color</label>
+        <div class="color-input-combo">
+          <input type="color" id="picker_text" value="#0f172a" oninput="syncColorField('text', this.value)">
+          <input type="text" id="color_text" name="text" value="#0f172a" maxlength="7" oninput="syncColorPicker('text', this.value)">
+        </div>
+        <span class="muted small">Headings, titles &amp; primary typography</span>
+      </div>
+    </div>
+
+    <!-- Live Preview Sandbox -->
+    <div style="background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+        <span style="font-weight:700;font-size:0.92rem;color:var(--text-main);">🔍 Live Interactive Preview Sandbox</span>
+        <div id="contrast-compliance-badge" class="badge" style="background:rgba(16,185,129,0.15);color:#059669;font-weight:700;">
+          ✓ AA Compliant (7.8:1 Contrast)
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:12px;align-items:center;">
+        <!-- Card preview -->
+        <div style="background:var(--bg-card);border:1px solid var(--border-default);padding:14px;border-radius:10px;">
+          <h4 style="margin:0 0 6px 0;font-size:0.95rem;">Attendance Overview</h4>
+          <p class="muted small" style="margin:0 0 10px 0;">Sample dashboard metric container</p>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <span class="chip chip-p">P</span>
+            <span class="chip chip-ot">OT</span>
+            <span class="chip chip-a">A</span>
+            <span class="badge b-approved">Approved</span>
+          </div>
+        </div>
+
+        <!-- Buttons preview -->
+        <div style="background:var(--bg-card);border:1px solid var(--border-default);padding:14px;border-radius:10px;">
+          <h4 style="margin:0 0 10px 0;font-size:0.95rem;">Interactive Controls</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="btn sm primary">Primary Button</button>
+            <button type="button" class="btn sm">Secondary</button>
+            <button type="button" class="btn sm danger">Danger</button>
+          </div>
+        </div>
+
+        <!-- Form preview -->
+        <div style="background:var(--bg-card);border:1px solid var(--border-default);padding:14px;border-radius:10px;">
+          <label style="display:block;font-size:0.8rem;margin-bottom:4px;font-weight:600;">Sample Input Field</label>
+          <input type="text" value="Sri Balaji Gears · Hosur Plant" style="width:100%;font-size:0.85rem;" readonly>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <button type="button" class="btn" onclick="resetCustomColors()">Reset to Active Palette</button>
+      <button type="submit" class="btn primary" id="btn-save-custom-theme" style="font-weight:700;">
+        <span>💾 Save &amp; Apply Custom Theme</span>
+      </button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Available themes list
+const VALID_THEMES = [
+  'default_blue',
+  'modern_purple',
+  'emerald_green',
+  'ocean_teal',
+  'dark_premium',
+  'midnight_black',
+  'rose_pink',
+  'orange_modern',
+  'custom'
+];
+
+let activeTheme = localStorage.getItem('sbg_color_theme') || '{{ current_theme or "default_blue" }}';
+let activeMode = localStorage.getItem('theme') || localStorage.getItem('sbg_theme_mode') || '{{ current_mode or "light" }}';
+
+function updateUIIndicators() {
+  // Mode indicators
+  const isDark = activeMode === 'dark';
+  document.getElementById('mode-card-light').classList.toggle('active', !isDark);
+  document.getElementById('mode-card-dark').classList.toggle('active', isDark);
+  document.getElementById('check-light').style.display = !isDark ? 'inline-block' : 'none';
+  document.getElementById('check-dark').style.display = isDark ? 'inline-block' : 'none';
+  document.getElementById('mode-status-text').innerHTML = `Current Mode: <b>${isDark ? '🌙 Dark Mode' : '☀️ Light Mode'}</b>`;
+
+  // Palette cards
+  VALID_THEMES.forEach(t => {
+    const card = document.getElementById(`card-theme-${t}`);
+    const badge = document.getElementById(`badge-theme-${t}`);
+    if (card) {
+      card.classList.toggle('active', t === activeTheme);
+    }
+    if (badge) {
+      badge.style.display = t === activeTheme ? 'inline-block' : 'none';
+    }
+  });
+
+  const badgeHeader = document.getElementById('current-theme-badge');
+  if (badgeHeader) {
+    const label = activeTheme.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    badgeHeader.textContent = `● Active: ${label} (${activeMode.toUpperCase()})`;
+  }
+
+  updateContrastRatio();
+}
+
+function setThemeMode(mode) {
+  activeMode = mode === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', activeMode);
+  try {
+    localStorage.setItem('theme', activeMode);
+    localStorage.setItem('sbg_theme_mode', activeMode);
+  } catch(e) {}
+
+  // If using custom theme, re-apply custom variables
+  if (activeTheme === 'custom') {
+    applyCustomVariablesFromInputs();
+  }
+
+  updateUIIndicators();
+  persistThemeToServer(activeTheme, activeMode, getCustomColorsFromInputs());
+}
+
+function setColorTheme(themeName) {
+  if (!VALID_THEMES.includes(themeName)) return;
+  activeTheme = themeName;
+  document.documentElement.setAttribute('data-color-theme', themeName);
+
+  // If selecting midnight black or dark premium, default to dark mode if not already set
+  if (themeName === 'midnight_black' && activeMode !== 'dark') {
+    setThemeMode('dark');
+  }
+
+  // Clear inline custom variable overrides when choosing a preset theme
+  if (themeName !== 'custom') {
+    clearCustomVariableOverrides();
+  }
+
+  try {
+    localStorage.setItem('sbg_color_theme', themeName);
+  } catch(e) {}
+
+  updateUIIndicators();
+  persistThemeToServer(activeTheme, activeMode, null);
+
+  if (typeof showNotificationPopToast === 'function') {
+    const formatted = themeName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    showNotificationPopToast({
+      id: Date.now(),
+      title: '🎨 Theme Applied',
+      message: `${formatted} theme is now active across all devices!`,
+      kind: 'info'
+    });
+  }
+}
+
+function syncColorField(key, val) {
+  const txt = document.getElementById(`color_${key}`);
+  if (txt) txt.value = val;
+  previewCustomColorsRealtime();
+}
+
+function syncColorPicker(key, val) {
+  if (/^#[0-9A-F]{6}$/i.test(val)) {
+    const pick = document.getElementById(`picker_${key}`);
+    if (pick) pick.value = val;
+    previewCustomColorsRealtime();
+  }
+}
+
+function getCustomColorsFromInputs() {
+  return {
+    primary: document.getElementById('color_primary').value,
+    secondary: document.getElementById('color_secondary').value,
+    bg: document.getElementById('color_bg').value,
+    card: document.getElementById('color_card').value,
+    sidebar: document.getElementById('color_sidebar').value,
+    text: document.getElementById('color_text').value
+  };
+}
+
+function previewCustomColorsRealtime() {
+  const c = getCustomColorsFromInputs();
+  const root = document.documentElement;
+  root.setAttribute('data-color-theme', 'custom');
+  activeTheme = 'custom';
+
+  if (c.primary) { root.style.setProperty('--brand-primary', c.primary); root.style.setProperty('--brand-hover', c.primary); }
+  if (c.secondary) { root.style.setProperty('--brand-accent', c.secondary); root.style.setProperty('--brand-cyan', c.secondary); }
+  if (c.bg) { root.style.setProperty('--bg-page', c.bg); root.style.setProperty('--bg-canvas', c.bg); }
+  if (c.card) { root.style.setProperty('--bg-card', c.card); root.style.setProperty('--bg-card-elevated', c.card); }
+  if (c.sidebar) { root.style.setProperty('--bg-surface', c.sidebar); }
+  if (c.text) { root.style.setProperty('--text-main', c.text); root.style.setProperty('--text-default', c.text); }
+
+  updateUIIndicators();
+}
+
+function applyCustomVariablesFromInputs() {
+  previewCustomColorsRealtime();
+}
+
+function clearCustomVariableOverrides() {
+  const root = document.documentElement;
+  const props = ['--brand-primary', '--brand-hover', '--brand-accent', '--brand-cyan', '--bg-page', '--bg-canvas', '--bg-card', '--bg-card-elevated', '--bg-surface', '--text-main', '--text-default'];
+  props.forEach(p => root.style.removeProperty(p));
+}
+
+function loadDefaultCustomPresets(type) {
+  const presets = {
+    navy: { primary: '#0f2c4a', secondary: '#0284c7', bg: '#edf2f7', card: '#ffffff', sidebar: '#f8fafc', text: '#0f172a' },
+    forest: { primary: '#064e3b', secondary: '#059669', bg: '#ecfdf5', card: '#ffffff', sidebar: '#f0fdf4', text: '#022c22' },
+    sunset: { primary: '#7c2d12', secondary: '#ea580c', bg: '#fff7ed', card: '#ffffff', sidebar: '#ffedd5', text: '#431407' }
+  };
+  const p = presets[type];
+  if (!p) return;
+  Object.keys(p).forEach(k => {
+    const pick = document.getElementById(`picker_${k}`);
+    const txt = document.getElementById(`color_${k}`);
+    if (pick) pick.value = p[k];
+    if (txt) txt.value = p[k];
+  });
+  previewCustomColorsRealtime();
+}
+
+function saveCustomTheme(e) {
+  if (e) e.preventDefault();
+  const c = getCustomColorsFromInputs();
+  activeTheme = 'custom';
+  document.documentElement.setAttribute('data-color-theme', 'custom');
+
+  try {
+    localStorage.setItem('sbg_color_theme', 'custom');
+    localStorage.setItem('sbg_custom_colors', JSON.stringify(c));
+  } catch(err) {}
+
+  updateUIIndicators();
+  persistThemeToServer('custom', activeMode, c);
+
+  if (typeof showNotificationPopToast === 'function') {
+    showNotificationPopToast({
+      id: Date.now(),
+      title: '🎨 Custom Theme Saved',
+      message: 'Your custom corporate color palette has been saved and applied!',
+      kind: 'info'
+    });
+  }
+}
+
+function resetCustomColors() {
+  clearCustomVariableOverrides();
+  setColorTheme('default_blue');
+}
+
+function resetToDefaultTheme() {
+  clearCustomVariableOverrides();
+  setThemeMode('light');
+  setColorTheme('default_blue');
+}
+
+function updateContrastRatio() {
+  const textHex = document.getElementById('color_text')?.value || '#0f172a';
+  const bgHex = document.getElementById('color_card')?.value || '#ffffff';
+
+  function hexToLum(hex) {
+    const c = hex.replace('#', '');
+    const r = parseInt(c.substr(0, 2), 16) / 255;
+    const g = parseInt(c.substr(2, 2), 16) / 255;
+    const b = parseInt(c.substr(4, 2), 16) / 255;
+    const a = [r, g, b].map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+  }
+
+  try {
+    const l1 = hexToLum(textHex);
+    const l2 = hexToLum(bgHex);
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    const ratio = ((lighter + 0.05) / (darker + 0.05)).toFixed(1);
+
+    const badge = document.getElementById('contrast-compliance-badge');
+    if (badge) {
+      if (ratio >= 7.0) {
+        badge.style.background = 'rgba(16,185,129,0.15)';
+        badge.style.color = '#059669';
+        badge.textContent = `⭐ AAA Compliant (${ratio}:1)`;
+      } else if (ratio >= 4.5) {
+        badge.style.background = 'rgba(59,130,246,0.15)';
+        badge.style.color = '#2563eb';
+        badge.textContent = `✓ AA Compliant (${ratio}:1)`;
+      } else {
+        badge.style.background = 'rgba(239,68,68,0.15)';
+        badge.style.color = '#ef4444';
+        badge.textContent = `⚠️ Low Contrast (${ratio}:1)`;
+      }
+    }
+  } catch(e) {}
+}
+
+async function persistThemeToServer(themeName, themeMode, customColors) {
+  try {
+    await fetch('/api/theme/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': typeof csrf === 'function' ? csrf() : ''
+      },
+      body: JSON.stringify({
+        theme_name: themeName,
+        theme_mode: themeMode,
+        custom_colors: customColors ? JSON.stringify(customColors) : null
+      })
+    });
+  } catch(err) {
+    console.warn('Backend theme sync notice:', err);
+  }
+}
+
+// Initial UI Setup on page load
+document.addEventListener('DOMContentLoaded', () => {
+  // Populate custom input fields if saved in localStorage or server
+  try {
+    const saved = localStorage.getItem('sbg_custom_colors');
+    if (saved) {
+      const c = JSON.parse(saved);
+      Object.keys(c).forEach(k => {
+        const pick = document.getElementById(`picker_${k}`);
+        const txt = document.getElementById(`color_${k}`);
+        if (pick && c[k]) pick.value = c[k];
+        if (txt && c[k]) txt.value = c[k];
+      });
+    }
+  } catch(e) {}
+
+  updateUIIndicators();
+});
+</script>
+{% endblock %}

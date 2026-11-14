@@ -120,6 +120,26 @@ def load_user():
             perms, is_custom = get_user_permissions(get_db(), u_dict["id"], u_dict.get("role"), u_dict.get("emp_code"))
             u_dict["permissions"] = perms
             u_dict["has_custom_permissions"] = is_custom
+
+            # Load user theme preferences
+            try:
+                pref = get_db().execute(
+                    "SELECT theme_name, theme_mode, custom_colors FROM user_preferences WHERE user_id=?",
+                    (u_dict["id"],)
+                ).fetchone()
+                if pref:
+                    u_dict["theme_name"] = pref["theme_name"]
+                    u_dict["theme_mode"] = pref["theme_mode"]
+                    u_dict["custom_colors"] = pref["custom_colors"]
+                else:
+                    u_dict["theme_name"] = "default_blue"
+                    u_dict["theme_mode"] = "light"
+                    u_dict["custom_colors"] = None
+            except Exception:
+                u_dict["theme_name"] = "default_blue"
+                u_dict["theme_mode"] = "light"
+                u_dict["custom_colors"] = None
+
             set_cached_user(uid, u_dict)
             g.user = u_dict
         else:

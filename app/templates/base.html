@@ -14,14 +14,47 @@
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}" type="image/png">
   <link rel="icon" href="{{ url_for('static', filename='img/icon.svg') }}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Inter:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <script>
     (function(){
       try {
-        const saved = localStorage.getItem('theme');
-        const prefDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const theme = saved ? saved : (prefDark ? 'dark' : 'light');
-        document.documentElement.setAttribute('data-theme', theme);
-      } catch (e) {}
+        const srvName = {{ (g.user.get('theme_name') or '')|tojson if g.user else '""' }};
+        const srvMode = {{ (g.user.get('theme_mode') or '')|tojson if g.user else '""' }};
+        const srvColors = {{ (g.user.get('custom_colors') or '')|tojson if g.user else '""' }};
+
+        if (srvName) localStorage.setItem('sbg_color_theme', srvName);
+        if (srvMode) {
+          localStorage.setItem('theme', srvMode);
+          localStorage.setItem('sbg_theme_mode', srvMode);
+        }
+        if (srvColors) localStorage.setItem('sbg_custom_colors', srvColors);
+
+        const savedMode = localStorage.getItem('theme') || localStorage.getItem('sbg_theme_mode');
+        const prefDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const mode = savedMode ? savedMode : (prefDark ? 'dark' : 'light');
+        const colorTheme = localStorage.getItem('sbg_color_theme') || 'default_blue';
+
+        document.documentElement.setAttribute('data-theme', mode);
+        document.documentElement.setAttribute('data-color-theme', colorTheme);
+
+        if (colorTheme === 'custom') {
+          const raw = localStorage.getItem('sbg_custom_colors');
+          if (raw) {
+            const c = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            const root = document.documentElement;
+            if (c.primary) { root.style.setProperty('--brand-primary', c.primary); root.style.setProperty('--brand-hover', c.primary); }
+            if (c.secondary) { root.style.setProperty('--brand-accent', c.secondary); root.style.setProperty('--brand-cyan', c.secondary); }
+            if (c.bg) { root.style.setProperty('--bg-page', c.bg); root.style.setProperty('--bg-canvas', c.bg); }
+            if (c.card) { root.style.setProperty('--bg-card', c.card); root.style.setProperty('--bg-card-elevated', c.card); }
+            if (c.sidebar) { root.style.setProperty('--bg-surface', c.sidebar); }
+            if (c.text) { root.style.setProperty('--text-main', c.text); root.style.setProperty('--text-default', c.text); }
+          }
+        }
+      } catch (e) {
+        console.warn('Early theme init notice:', e);
+      }
     })();
   </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_v }}">
@@ -48,6 +81,15 @@
       <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
       <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
+    <a href="{{ url_for('emp.theme_settings') }}" class="theme-palette-btn" id="theme-palette-btn" title="Customize Themes &amp; Colors" aria-label="Theme settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+        <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+        <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+        <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+      </svg>
+    </a>
 
     <!-- Notification Bell Trigger -->
     <div class="notif-wrapper" style="position:relative;">
@@ -211,6 +253,10 @@
     <span>Cloud Sync</span>
   </a>
   {% endif %}
+  <a href="{{ url_for('emp.theme_settings') }}" class="{{ 'on' if ep in ('emp.theme_settings', 'hr.theme_settings') }}" title="Customize Application Themes &amp; Colors">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><circle cx="12" cy="12" r="4"/></svg>
+    <span>Themes</span>
+  </a>
 </nav>
 {% else %}
 <nav class="nav emp-nav" aria-label="Employee Navigation">
@@ -274,6 +320,10 @@
     <span>Face ID</span>
   </a>
   {% endif %}
+  <a href="{{ url_for('emp.theme_settings') }}" class="{{ 'on' if ep in ('emp.theme_settings', 'hr.theme_settings') }}" title="Customize Application Themes &amp; Colors">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><circle cx="12" cy="12" r="4"/></svg>
+    <span>Themes</span>
+  </a>
 
   {# If an employee has custom view permissions for HR modules, render them cleanly #}
   {% if has_permission(g.user, 'hr_attendance', 'view') %}
@@ -448,9 +498,14 @@
           <input type="tel" id="prof_emergency" name="emergency_contact" value="{{ g.user['emergency_contact'] or '' }}" placeholder="e.g. 9123456780" style="width:100%">
         </div>
         <div id="profile-update-status" style="margin-bottom:1rem;font-size:0.84rem;display:none"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px">
-          <button type="button" class="btn sm" onclick="closeProfileModal()">Cancel</button>
-          <button type="submit" class="btn sm primary" id="btn-save-profile">Save Details</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <a href="{{ url_for('emp.theme_settings') }}" class="btn sm" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:6px 12px;border-radius:8px;text-decoration:none;">
+            <span>🎨</span> Customize Theme
+          </a>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn sm" onclick="closeProfileModal()">Cancel</button>
+            <button type="submit" class="btn sm primary" id="btn-save-profile">Save Details</button>
+          </div>
         </div>
       </form>
     </div>

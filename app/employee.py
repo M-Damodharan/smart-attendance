@@ -597,3 +597,28 @@ def late_coming_submit():
         today=t
     )
 
+
+# ------------------------------------------------------------------ Dedicated Theme Customizer
+@bp.route("/settings/theme", methods=["GET"])
+@bp.route("/theme", methods=["GET"])
+def theme_settings():
+    if not g.user:
+        return redirect(url_for("auth.login", next=request.path))
+    db = get_db()
+    pref = db.execute("SELECT theme_name, theme_mode, custom_colors FROM user_preferences WHERE user_id=?", (g.user["id"],)).fetchone()
+    current_theme = pref["theme_name"] if pref else (g.user.get("theme_name") or "default_blue")
+    current_mode = pref["theme_mode"] if pref else (g.user.get("theme_mode") or "light")
+    import json
+    custom_colors = {}
+    if pref and pref["custom_colors"]:
+        try:
+            custom_colors = json.loads(pref["custom_colors"])
+        except Exception:
+            custom_colors = {}
+    return render_template(
+        "theme_settings.html",
+        current_theme=current_theme,
+        current_mode=current_mode,
+        custom_colors=custom_colors
+    )
+
