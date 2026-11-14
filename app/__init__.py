@@ -96,7 +96,7 @@ def create_app(test_config=None):
 
     @app.context_processor
     def inject_asset_version():
-        return dict(asset_v="20261113_1535")
+        return dict(asset_v="20261114_1120")
 
     @app.route("/sw.js")
     def service_worker():

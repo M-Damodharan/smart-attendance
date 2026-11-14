@@ -13,12 +13,24 @@
   </div>
 
   <!-- Quick GPS link & coordinates setter -->
-  <form method="post" id="quick-location-form" onsubmit="onSetLocationSubmit(event, this)" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:0.75rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+  {% set cur_lat = offices[0]['lat'] if offices and offices[0]['lat'] else 12.762738 %}
+  {% set cur_lng = offices[0]['lng'] if offices and offices[0]['lng'] else 77.802674 %}
+  {% set cur_loc_str = (cur_lat|string ~ ', ' ~ cur_lng|string) if cur_lat else '' %}
+  <form method="post" action="{{ url_for('hr.settings') }}" id="quick-location-form" onsubmit="onSetLocationSubmit(event, this)" class="row-form" style="background:var(--bg-surface);padding:12px 14px;border-radius:10px;margin-bottom:0.75rem;border:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="action" value="office_link">
     <input type="hidden" name="radius_m" value="5">
+    
+    <div style="width:100%;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:2px 2px 4px;font-size:0.83rem;border-bottom:1px solid var(--border-default);margin-bottom:4px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="color:var(--text-muted)">📍 Currently Fixed Location:</span>
+        <strong id="active-location-display" style="font-family:monospace;color:var(--text-main);font-size:0.9rem;">{{ cur_loc_str }}</strong>
+      </div>
+      <span class="badge b-approved" style="font-size:0.72rem;padding:3px 8px;">Strict 5m Policy Active</span>
+    </div>
+
     <div style="flex:3 1 260px;">
-      <input id="quick-location-input" name="link" placeholder="Paste Google Maps link, 'lat,lng', DMS or GPS coords" required style="width:100%;box-sizing:border-box;">
+      <input id="quick-location-input" name="link" value="{{ cur_loc_str }}" placeholder="Paste Google Maps link, 'lat,lng', DMS or GPS coords" required style="width:100%;box-sizing:border-box;">
     </div>
     <select name="id" id="quick-location-dept" title="Apply to Department Location" required style="flex:2 1 200px">
       <option value="all" selected>🏢 All Departments (Entire Campus / Company Location)</option>
@@ -40,7 +52,7 @@
   <!-- 4 Department-Separated Location Cards Grid -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;margin-bottom:1rem;">
     {% for o in offices %}
-    <form method="post" onsubmit="onOfficeSaveSubmit(event, this)" style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+    <form method="post" action="{{ url_for('hr.settings') }}" onsubmit="onOfficeSaveSubmit(event, this)" style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="office">
       <input type="hidden" name="id" value="{{ o['id'] }}">
@@ -725,25 +737,41 @@ async function onSetLocationSubmit(e, form){
     btn.disabled = true;
   }
   const feedbackEl = document.getElementById('quick-location-feedback');
+  const actionUrl = form.getAttribute('action') || window.location.pathname || '{{ url_for("hr.settings") }}';
 
   try {
     const formData = new FormData(form);
-    const res = await fetch(form.action || window.location.href, {
+    const metaCsrf = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = formData.get('csrf_token') || (metaCsrf ? metaCsrf.content : '');
+    const res = await fetch(actionUrl, {
       method: 'POST',
       body: formData,
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-CSRFToken': csrfToken
       }
     });
     const data = await res.json();
     if(data.ok){
+      const latFixed = parseFloat(data.lat).toFixed(6);
+      const lngFixed = parseFloat(data.lng).toFixed(6);
+      const locStr = `${latFixed}, ${lngFixed}`;
+      
+      const inputEl = document.getElementById('quick-location-input');
+      if(inputEl) {
+        inputEl.value = locStr;
+        inputEl.style.borderColor = '#10b981';
+      }
+      const activeDisp = document.getElementById('active-location-display');
+      if(activeDisp) activeDisp.textContent = locStr;
+
       if(feedbackEl){
         feedbackEl.style.display = 'block';
         feedbackEl.style.background = 'rgba(16,185,129,0.15)';
         feedbackEl.style.border = '1px solid #10b981';
         feedbackEl.style.color = '#065f46';
-        feedbackEl.innerHTML = `✓ <strong>Confirmed:</strong> ${data.message}`;
+        feedbackEl.innerHTML = `✓ <strong>Location Set &amp; Fixed:</strong> ${locStr} · ${data.message}`;
       }
       if(btn){
         btn.innerHTML = '✓ Location Active!';
@@ -756,16 +784,14 @@ async function onSetLocationSubmit(e, form){
       }
       // Instantly update department cards on the page without reload
       if(data.lat && data.lng){
-        const lat = parseFloat(data.lat).toFixed(6);
-        const lng = parseFloat(data.lng).toFixed(6);
         const targetId = data.target_id;
         document.querySelectorAll('form[onsubmit*="onOfficeSaveSubmit"]').forEach(cf => {
           const idInp = cf.querySelector('input[name=id]');
           if(targetId === 'all' || (idInp && idInp.value == targetId)){
             const latInp = cf.querySelector('input[name=lat]');
             const lngInp = cf.querySelector('input[name=lng]');
-            if(latInp) latInp.value = lat;
-            if(lngInp) lngInp.value = lng;
+            if(latInp) latInp.value = latFixed;
+            if(lngInp) lngInp.value = lngFixed;
           }
         });
       }
@@ -791,6 +817,8 @@ async function onSetLocationSubmit(e, form){
       }
     }
   } catch(err){
+    console.warn('AJAX location set failed, using fallback:', err);
+    form.action = actionUrl;
     form.submit();
   }
 }
@@ -810,28 +838,41 @@ async function onOfficeSaveSubmit(e, form){
     feedbackEl.style.cssText = 'margin-top:6px;font-weight:600;text-align:center;transition:all 0.3s ease;';
     form.appendChild(feedbackEl);
   }
+  const actionUrl = form.getAttribute('action') || window.location.pathname || '{{ url_for("hr.settings") }}';
 
   try {
     const formData = new FormData(form);
-    const res = await fetch(form.action || window.location.href, {
+    const metaCsrf = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = formData.get('csrf_token') || (metaCsrf ? metaCsrf.content : '');
+    const res = await fetch(actionUrl, {
       method: 'POST',
       body: formData,
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-CSRFToken': csrfToken
       }
     });
     const data = await res.json();
     if(data.ok){
+      const latFixed = parseFloat(data.lat).toFixed(6);
+      const lngFixed = parseFloat(data.lng).toFixed(6);
+      const locStr = `${latFixed}, ${lngFixed}`;
       feedbackEl.style.display = 'block';
       feedbackEl.style.color = '#10b981';
-      feedbackEl.textContent = `✓ Saved: ${data.lat.toFixed(6)}, ${data.lng.toFixed(6)} (Strict ${data.radius}m Radius Active)`;
+      feedbackEl.textContent = `✓ Saved & Fixed: ${locStr} (Strict ${data.radius}m Radius Active)`;
+
+      const inputEl = document.getElementById('quick-location-input');
+      if(inputEl) inputEl.value = locStr;
+      const activeDisp = document.getElementById('active-location-display');
+      if(activeDisp) activeDisp.textContent = locStr;
+
       if(data.apply_to_all || formData.get('apply_to_all') === '1'){
         document.querySelectorAll('form[onsubmit*="onOfficeSaveSubmit"]').forEach(cf => {
           const latInp = cf.querySelector('input[name=lat]');
           const lngInp = cf.querySelector('input[name=lng]');
-          if(latInp) latInp.value = data.lat.toFixed(6);
-          if(lngInp) lngInp.value = data.lng.toFixed(6);
+          if(latInp) latInp.value = latFixed;
+          if(lngInp) lngInp.value = lngFixed;
         });
       }
       if(btn){
@@ -861,6 +902,8 @@ async function onOfficeSaveSubmit(e, form){
       }
     }
   } catch(err){
+    console.warn('AJAX save office failed, using fallback:', err);
+    form.action = actionUrl;
     form.submit();
   }
 }

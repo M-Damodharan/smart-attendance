@@ -200,5 +200,33 @@ class LocationSettingTestCase(unittest.TestCase):
         self.assertIn("Could not parse coordinates", html)
 
 
+    def test_ajax_set_location_persists_after_refresh(self):
+        self._login_hr()
+        # 1. AJAX Set Location via quick GPS bar
+        res = self.client.post(
+            "/hr/settings",
+            data={
+                "action": "office_link",
+                "link": "12.765432, 77.812345",
+                "id": "all",
+                "radius_m": "5"
+            },
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertEqual(data.get("lat"), 12.765432)
+        self.assertEqual(data.get("lng"), 77.812345)
+
+        # 2. Simulate page refresh (GET /hr/settings)
+        res_refresh = self.client.get("/hr/settings")
+        self.assertEqual(res_refresh.status_code, 200)
+        html = res_refresh.data.decode("utf-8")
+        # Ensure the fixed location is preserved and displayed
+        self.assertIn("12.765432, 77.812345", html)
+        self.assertIn("Currently Fixed Location", html)
+
+
 if __name__ == "__main__":
     unittest.main()
