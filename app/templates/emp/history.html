@@ -19,10 +19,23 @@
       <span class="muted small" style="margin-left:6px;display:inline-block">10 hrs regular + 2 hrs OT</span>
       {% endif %}
     </div>
-    <a class="btn primary sm" href="{{ url_for('emp.export_history', month=start.strftime('%Y-%m')) }}" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:6px 14px">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      <span>Download Monthly Attendance Doc</span>
-    </a>
+    <div style="display:inline-flex;gap:6px;flex-wrap:wrap">
+      <a class="btn primary sm" href="{{ url_for('emp.export_history', month=start.strftime('%Y-%m'), format='pdf') }}" title="Download Corporate PDF Attendance Record" style="display:inline-flex;align-items:center;gap:5px;font-weight:600;padding:6px 12px;background:#DC2626;border-color:#DC2626;color:#FFF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>PDF</span>
+      </a>
+      <a class="btn sm" href="{{ url_for('emp.export_history', month=start.strftime('%Y-%m'), format='docx') }}" title="Download Word DOCX Document" style="display:inline-flex;align-items:center;gap:5px;font-weight:600;padding:6px 12px;background:#2563EB;border-color:#2563EB;color:#FFF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Word</span>
+      </a>
+      <a class="btn sm" href="{{ url_for('emp.export_history', month=start.strftime('%Y-%m'), format='xlsx') }}" title="Download Detailed Excel Spreadsheet" style="display:inline-flex;align-items:center;gap:5px;font-weight:600;padding:6px 12px;background:#059669;border-color:#059669;color:#FFF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Excel</span>
+      </a>
+      <a class="btn sm" href="{{ url_for('emp.export_history', month=start.strftime('%Y-%m'), format='csv') }}" title="Download Raw CSV" style="display:inline-flex;align-items:center;gap:5px;font-weight:600;padding:6px 10px;background:var(--bg-surface);border:1px solid var(--border-default);color:var(--text-main)">
+        <span>CSV</span>
+      </a>
+    </div>
   </div>
 
   {% set s = reg['summary'] %}

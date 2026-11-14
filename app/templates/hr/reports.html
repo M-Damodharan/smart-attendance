@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% from "_macros.html" import chip with context %}
-{% block title %}Monthly Reports · SBG{% endblock %}
+{% block title %}Monthly Reports &amp; Exports · SBG{% endblock %}
 {% block wrapclass %}wide{% endblock %}
 {% block content %}
 <div class="ph">
   <div>
-    <h2>Monthly Attendance Reports &amp; Exports</h2>
-    <p class="muted small" style="margin:2px 0 0">Filter by category, shift, department, and download employee attendance documents</p>
+    <h2>Monthly Attendance Reports &amp; Document Export Hub</h2>
+    <p class="muted small" style="margin:2px 0 0">Enterprise document generator for daily register, master employee directory, payroll, leave, and monthly muster rolls</p>
   </div>
   <div class="monthnav">
     <a class="btn sm" href="{{ url_for('hr.reports', month=prev, shift=shift_id or '', dept=dept or '', category=category_id or '') }}">‹</a>
@@ -15,6 +15,141 @@
   </div>
 </div>
 
+<!-- ===================================================================== -->
+<!-- ENTERPRISE DOCUMENT & REPORT EXPORT CENTER                           -->
+<!-- ===================================================================== -->
+<section class="card" style="margin-bottom:1.5rem;background:var(--bg-card);border:1px solid var(--border-default);border-radius:12px;box-shadow:var(--shadow-sm)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border-default);padding-bottom:0.75rem">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="background:var(--brand-accent);color:#FFF;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem">
+        📑
+      </div>
+      <div>
+        <h3 style="margin:0;font-size:1.05rem">Enterprise Document &amp; Report Hub</h3>
+        <p class="muted small" style="margin:0">Export formatted corporate PDF, Excel (XLSX), Word (DOCX), and CSV records</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button type="button" class="btn sm" onclick="triggerLivePreview()" style="display:inline-flex;align-items:center;gap:5px;font-weight:600">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>Live Preview</span>
+      </button>
+      <button type="button" class="btn sm" onclick="triggerPrintView()" style="display:inline-flex;align-items:center;gap:5px;font-weight:600">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span>Print View</span>
+      </button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:12px;margin-bottom:1.25rem">
+    <!-- Report Type -->
+    <div>
+      <label class="small muted" style="display:block;margin-bottom:4px;font-weight:600">Report Module</label>
+      <select id="hubReportType" onchange="onReportTypeChange()" style="width:100%;padding:0.45rem 0.65rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main);font-weight:600">
+        <option value="attendance" selected>📋 Attendance Register</option>
+        <option value="monthly_summary">📊 Muster Roll Monthly Summary</option>
+        <option value="employees">👥 Master Employee Directory</option>
+        <option value="salary">💰 Monthly Payroll &amp; Salary</option>
+        <option value="leave">🏖️ Leave Requests &amp; Approvals</option>
+      </select>
+    </div>
+
+    <!-- Date Range / Month -->
+    <div id="hubDateRangeGroup">
+      <label class="small muted" style="display:block;margin-bottom:4px;font-weight:600">Date Range (From &rarr; To)</label>
+      <div style="display:flex;gap:4px">
+        <input type="date" id="hubFromDate" value="{{ start.strftime('%Y-%m-01') }}" style="width:50%;padding:0.42rem 0.5rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main);font-size:0.85rem">
+        <input type="date" id="hubToDate" value="{{ end.strftime('%Y-%m-%d') }}" style="width:50%;padding:0.42rem 0.5rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main);font-size:0.85rem">
+      </div>
+    </div>
+
+    <div id="hubMonthGroup" style="display:none">
+      <label class="small muted" style="display:block;margin-bottom:4px;font-weight:600">Month Period</label>
+      <input type="month" id="hubMonth" value="{{ start.strftime('%Y-%m') }}" style="width:100%;padding:0.42rem 0.65rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main);font-size:0.85rem">
+    </div>
+
+    <!-- Department Filter -->
+    <div>
+      <label class="small muted" style="display:block;margin-bottom:4px;font-weight:600">Department</label>
+      <select id="hubDept" style="width:100%;padding:0.45rem 0.65rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main)">
+        <option value="">All Departments</option>
+        {% for d in depts %}
+        <option value="{{ d }}" {{ 'selected' if dept==d }}>{{ d }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Workforce Category -->
+    <div>
+      <label class="small muted" style="display:block;margin-bottom:4px;font-weight:600">Workforce Category</label>
+      <select id="hubCategory" style="width:100%;padding:0.45rem 0.65rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main)">
+        <option value="">All Categories</option>
+        {% for c in categories %}
+        <option value="{{ c['id'] }}" {{ 'selected' if category_id==c['id'] }}>🏷️ {{ c['name'] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Attendance / Approval Status -->
+    <div id="hubStatusGroup">
+      <label class="small muted" style="display:block;margin-bottom:4px;font-weight:600">Status Filter</label>
+      <select id="hubStatus" style="width:100%;padding:0.45rem 0.65rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main)">
+        <option value="">All Records</option>
+        <option value="P">Present (P)</option>
+        <option value="OT">Overtime (OT)</option>
+        <option value="HD">Half Day (HD)</option>
+        <option value="A">Absent (A)</option>
+        <option value="Approved">Approved</option>
+        <option value="Pending">Pending</option>
+        <option value="Rejected">Rejected</option>
+      </select>
+    </div>
+
+    <!-- Page Orientation -->
+    <div>
+      <label class="small muted" style="display:block;margin-bottom:4px;font-weight:600">A4 Orientation</label>
+      <select id="hubOrientation" style="width:100%;padding:0.45rem 0.65rem;border-radius:8px;border:1px solid var(--border-default);background:var(--bg-surface);color:var(--text-main);font-weight:600">
+        <option value="landscape" selected>Landscape (Wide Table)</option>
+        <option value="portrait">Portrait (Standard)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Export Actions Row -->
+  <div style="background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;padding:0.75rem 1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span class="muted small" style="font-weight:600">Export As:</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <!-- PDF Button -->
+      <button type="button" onclick="executeExport('pdf')" class="btn primary sm" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;background:#DC2626;border-color:#DC2626;color:#FFF;padding:6px 14px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Export PDF</span>
+      </button>
+
+      <!-- Word Button -->
+      <button type="button" onclick="executeExport('docx')" class="btn sm" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;background:#2563EB;border-color:#2563EB;color:#FFF;padding:6px 14px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Word (DOCX)</span>
+      </button>
+
+      <!-- Excel Button -->
+      <button type="button" onclick="executeExport('xlsx')" class="btn sm" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;background:#059669;border-color:#059669;color:#FFF;padding:6px 14px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Excel (XLSX)</span>
+      </button>
+
+      <!-- CSV Button -->
+      <button type="button" onclick="executeExport('csv')" class="btn sm" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;background:var(--bg-card);border:1px solid var(--border-default);color:var(--text-main);padding:6px 12px">
+        <span>CSV</span>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- FAST MONTHLY REGISTER FILTER BAR                                      -->
+<!-- ===================================================================== -->
 <form method="get" class="filters" style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <input type="hidden" name="month" value="{{ start.strftime('%Y-%m') }}">
   
@@ -45,8 +180,11 @@
   </a>
 </form>
 
+<!-- ===================================================================== -->
+<!-- CATEGORY ATTENDANCE SUMMARY TABLE                                     -->
+<!-- ===================================================================== -->
 <section class="card" style="margin-bottom:1.5rem">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:8px">
     <h3 style="margin:0">Category Attendance Summary</h3>
     <span class="muted small">Total Staff in Filter: <b>{{ emps|length }}</b></span>
   </div>
@@ -66,7 +204,7 @@
         <th>Work Hrs</th>
         <th>OT Hrs</th>
         <th>Payable</th>
-        <th>Action</th>
+        <th>Export Doc</th>
       </tr>
     </thead>
     <tbody>
@@ -93,11 +231,12 @@
         <td style="text-align:right">{{ s['hours'] }}h</td>
         <td style="text-align:right;font-weight:600;color:var(--brand-accent)">{{ s['ot_hours'] }}h</td>
         <td style="text-align:center"><b>{{ s['payable'] }}</b></td>
-        <td>
-          <a class="btn sm" href="{{ url_for('hr.export_employee', eid=e['id'], month=start.strftime('%Y-%m')) }}" title="Download {{ e['emp_code'] }} Attendance Document (Day 1 to 31)" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:0.75rem">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Doc</span>
-          </a>
+        <td style="white-space:nowrap">
+          <div style="display:inline-flex;gap:4px">
+            <a class="btn sm" href="{{ url_for('hr.export_employee', eid=e['id'], month=start.strftime('%Y-%m'), format='pdf') }}" title="Download Corporate PDF" style="padding:2px 7px;font-size:0.72rem;background:#DC2626;border-color:#DC2626;color:#FFF;font-weight:600">PDF</a>
+            <a class="btn sm" href="{{ url_for('hr.export_employee', eid=e['id'], month=start.strftime('%Y-%m'), format='docx') }}" title="Download Word DOCX" style="padding:2px 7px;font-size:0.72rem;background:#2563EB;border-color:#2563EB;color:#FFF;font-weight:600">Word</a>
+            <a class="btn sm" href="{{ url_for('hr.export_employee', eid=e['id'], month=start.strftime('%Y-%m'), format='xlsx') }}" title="Download Detailed Excel" style="padding:2px 7px;font-size:0.72rem;background:#059669;border-color:#059669;color:#FFF;font-weight:600">XLSX</a>
+          </div>
         </td>
       </tr>
     {% else %}
@@ -108,6 +247,9 @@
   </div>
 </section>
 
+<!-- ===================================================================== -->
+<!-- DAY-WISE MUSTER REGISTER TABLE                                        -->
+<!-- ===================================================================== -->
 <section class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
     <h3 style="margin:0">Day-wise Register (Day 1 to Day {{ days|length }})</h3>
@@ -147,4 +289,205 @@
     <b>P</b> full day present &bull; <b>HD</b> half day &bull; <b>A</b> absent &bull; <b>OT</b> overtime &bull; <b>L</b> leave &bull; <b>HL</b> half leave &bull; <b>OD</b> on duty &bull; <b>H</b> holiday &bull; <b>WO</b> weekly off &bull; <b>MP</b> missed punch &bull; <b>IN</b> working now
   </p>
 </section>
+
+<!-- ===================================================================== -->
+<!-- LIVE PREVIEW MODAL                                                    -->
+<!-- ===================================================================== -->
+<div id="previewModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.7);z-index:9999;align-items:center;justify-content:center;padding:16px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)">
+  <div style="background:var(--bg-card);color:var(--text-main);width:100%;max-width:1150px;max-height:90vh;border-radius:14px;box-shadow:var(--shadow-lg);border:1px solid var(--border-default);display:flex;flex-direction:column;overflow:hidden">
+    <!-- Modal Header -->
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border-default);display:flex;align-items:center;justify-content:space-between;background:var(--bg-surface)">
+      <div>
+        <h3 id="prevModalTitle" style="margin:0;font-size:1.1rem;color:var(--text-main)">Document Preview</h3>
+        <span id="prevModalSubtitle" class="muted small">Live preview of database records</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" class="btn sm" onclick="triggerPrintView()" style="display:inline-flex;align-items:center;gap:4px">
+          🖨️ Print
+        </button>
+        <button type="button" class="btn sm" onclick="closePreviewModal()" style="padding:4px 10px;font-weight:700">
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Body -->
+    <div id="prevModalBody" style="padding:16px 20px;overflow-y:auto;flex:1">
+      <div id="prevLoading" style="text-align:center;padding:40px;color:var(--text-muted)">
+        <div style="font-size:2rem;margin-bottom:8px">⏳</div>
+        <div>Loading report data...</div>
+      </div>
+      <div id="prevContent" style="display:none">
+        <!-- KPIs Row -->
+        <div id="prevKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px"></div>
+        <!-- Table -->
+        <div class="tablewrap" style="max-height:480px;overflow-y:auto;border:1px solid var(--border-default);border-radius:8px">
+          <table id="prevTable" style="margin:0;width:100%;font-size:0.82rem">
+            <thead><tr id="prevHeadRow"></tr></thead>
+            <tbody id="prevBodyRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer Actions -->
+    <div style="padding:12px 20px;border-top:1px solid var(--border-default);background:var(--bg-surface);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <span id="prevRecordCount" class="muted small">Showing records</span>
+      <div style="display:flex;gap:6px">
+        <button type="button" onclick="executeExport('pdf')" class="btn primary sm" style="background:#DC2626;border-color:#DC2626;color:#FFF">PDF</button>
+        <button type="button" onclick="executeExport('docx')" class="btn sm" style="background:#2563EB;border-color:#2563EB;color:#FFF">Word</button>
+        <button type="button" onclick="executeExport('xlsx')" class="btn sm" style="background:#059669;border-color:#059669;color:#FFF">Excel</button>
+        <button type="button" onclick="executeExport('csv')" class="btn sm">CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function onReportTypeChange() {
+    var t = document.getElementById("hubReportType").value;
+    var dateGrp = document.getElementById("hubDateRangeGroup");
+    var monthGrp = document.getElementById("hubMonthGroup");
+    var statGrp = document.getElementById("hubStatusGroup");
+
+    if (t === "salary" || t === "monthly_summary") {
+      dateGrp.style.display = "none";
+      monthGrp.style.display = "block";
+    } else {
+      dateGrp.style.display = "block";
+      monthGrp.style.display = "none";
+    }
+
+    if (t === "employees" || t === "salary") {
+      statGrp.style.display = "none";
+    } else {
+      statGrp.style.display = "block";
+    }
+  }
+
+  function getHubParams() {
+    var repType = document.getElementById("hubReportType").value;
+    var fromDate = document.getElementById("hubFromDate").value;
+    var toDate = document.getElementById("hubToDate").value;
+    var month = document.getElementById("hubMonth").value;
+    var dept = document.getElementById("hubDept").value;
+    var category = document.getElementById("hubCategory").value;
+    var status = document.getElementById("hubStatus").value;
+    var orientation = document.getElementById("hubOrientation").value;
+
+    return {
+      report_type: repType,
+      from_date: fromDate,
+      to_date: toDate,
+      month: month,
+      dept: dept,
+      category: category,
+      status: status,
+      orientation: orientation
+    };
+  }
+
+  function executeExport(fmt) {
+    var p = getHubParams();
+    p.format = fmt;
+    var qs = new URLSearchParams(p).toString();
+    window.location.href = "{{ url_for('hr.download_report') }}?" + qs;
+  }
+
+  function triggerPrintView() {
+    var p = getHubParams();
+    p.autoprint = 1;
+    var qs = new URLSearchParams(p).toString();
+    window.open("{{ url_for('hr.print_report') }}?" + qs, "_blank");
+  }
+
+  function triggerLivePreview() {
+    var p = getHubParams();
+    var modal = document.getElementById("previewModal");
+    var loading = document.getElementById("prevLoading");
+    var content = document.getElementById("prevContent");
+    
+    modal.style.display = "flex";
+    loading.style.display = "block";
+    content.style.display = "none";
+
+    var qs = new URLSearchParams(p).toString();
+    fetch("{{ url_for('hr.preview_report') }}?" + qs)
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data.ok) {
+          alert("Error loading preview: " + (data.error || "Unknown error"));
+          closePreviewModal();
+          return;
+        }
+
+        document.getElementById("prevModalTitle").textContent = data.title;
+        document.getElementById("prevRecordCount").textContent = "Total records found: " + data.total_records + (data.rows.length < data.total_records ? " (previewing first " + data.rows.length + ")" : "");
+
+        // Render KPI Cards
+        var kpisDiv = document.getElementById("prevKpis");
+        kpisDiv.innerHTML = "";
+        if (data.summary_kpis && data.summary_kpis.length) {
+          data.summary_kpis.forEach(function(k) {
+            var box = document.createElement("div");
+            box.style.cssText = "background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:8px 12px;text-align:center";
+            box.innerHTML = "<div class='muted small' style='font-size:0.75rem;text-transform:uppercase'>" + k.label + "</div><div style='font-size:1.15rem;font-weight:700;color:var(--brand-accent)'>" + k.value + "</div>";
+            kpisDiv.appendChild(box);
+          });
+        }
+
+        // Render Table Headers
+        var trHead = document.getElementById("prevHeadRow");
+        trHead.innerHTML = "";
+        data.headers.forEach(function(h, idx) {
+          var th = document.createElement("th");
+          th.textContent = h;
+          var align = data.alignments && data.alignments[idx] ? data.alignments[idx] : "L";
+          th.style.textAlign = align === "R" ? "right" : (align === "C" ? "center" : "left");
+          trHead.appendChild(th);
+        });
+
+        // Render Table Rows
+        var tbody = document.getElementById("prevBodyRows");
+        tbody.innerHTML = "";
+        data.rows.forEach(function(row) {
+          var tr = document.createElement("tr");
+          row.forEach(function(cell, idx) {
+            var td = document.createElement("td");
+            td.textContent = cell !== null ? cell : "—";
+            var align = data.alignments && data.alignments[idx] ? data.alignments[idx] : "L";
+            td.style.textAlign = align === "R" ? "right" : (align === "C" ? "center" : "left");
+            if (align === "C" && (cell === "P" || cell === "Approved" || cell === "Active")) {
+              td.style.color = "#059669";
+              td.style.fontWeight = "700";
+            } else if (align === "C" && (cell === "A" || cell === "Rejected" || cell === "MP")) {
+              td.style.color = "#DC2626";
+              td.style.fontWeight = "700";
+            } else if (align === "C" && (cell === "HD" || cell === "Pending")) {
+              td.style.color = "#D97706";
+              td.style.fontWeight = "700";
+            }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+
+        loading.style.display = "none";
+        content.style.display = "block";
+      })
+      .catch(function(err) {
+        alert("Failed to load preview: " + err);
+        closePreviewModal();
+      });
+  }
+
+  function closePreviewModal() {
+    document.getElementById("previewModal").style.display = "none";
+  }
+
+  // Close modal on Escape
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") closePreviewModal();
+  });
+</script>
 {% endblock %}

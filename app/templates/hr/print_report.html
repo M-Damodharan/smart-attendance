@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} · SBG Smart Attendance</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  <style>
+    :root {
+      --print-navy: #0F2C4A;
+      --print-blue: #0284C7;
+      --print-border: #CBD5E1;
+      --print-muted: #64748B;
+      --print-bg-alt: #F8FAFC;
+    }
+    body {
+      background: #F1F5F9;
+      color: #0F172A;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      line-height: 1.4;
+      font-size: 13px;
+    }
+    .print-actions-bar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #0F2C4A;
+      color: #FFFFFF;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .print-sheet {
+      background: #FFFFFF;
+      max-width: 1050px;
+      margin: 24px auto;
+      padding: 36px 40px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+      box-sizing: border-box;
+    }
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    .header-table td {
+      vertical-align: top;
+      padding: 0;
+    }
+    .logo-img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      border-radius: 6px;
+      margin-right: 14px;
+    }
+    .brand-title {
+      font-size: 19px;
+      font-weight: 800;
+      color: var(--print-navy);
+      letter-spacing: 0.5px;
+      margin: 0 0 3px 0;
+    }
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--print-muted);
+      margin: 0 0 6px 0;
+    }
+    .report-title-tag {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--print-blue);
+      margin: 0;
+    }
+    .meta-box-header {
+      text-align: right;
+      font-size: 11px;
+      color: var(--print-muted);
+      line-height: 1.6;
+    }
+    .divider {
+      height: 3px;
+      background: var(--print-navy);
+      margin: 12px 0 16px 0;
+      border-radius: 2px;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      background: var(--print-bg-alt);
+      border: 1px solid var(--print-border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .meta-item {
+      font-size: 11.5px;
+    }
+    .meta-label {
+      color: var(--print-muted);
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .meta-value {
+      color: #0F172A;
+      font-weight: 700;
+    }
+    .kpi-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .kpi-card {
+      flex: 1 1 120px;
+      background: #FFFFFF;
+      border: 1.5px solid var(--print-blue);
+      border-radius: 6px;
+      padding: 8px 12px;
+      text-align: center;
+    }
+    .kpi-lbl {
+      font-size: 10.5px;
+      color: var(--print-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .kpi-val {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--print-navy);
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: 24px;
+    }
+    .data-table th {
+      background: var(--print-navy);
+      color: #FFFFFF;
+      font-weight: 700;
+      padding: 7px 8px;
+      border: 1px solid #1E3A5F;
+      text-align: left;
+    }
+    .data-table td {
+      padding: 6px 8px;
+      border: 1px solid var(--print-border);
+      color: #1E293B;
+    }
+    .data-table tr:nth-child(even) td {
+      background: var(--print-bg-alt);
+    }
+    .badge-status {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 10px;
+    }
+    .st-p { color: #059669; }
+    .st-a { color: #DC2626; }
+    .st-hd { color: #D97706; }
+    .st-ot { color: #7C3AED; }
+    .st-l { color: #0284C7; }
+
+    .signature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 36px;
+      padding-top: 14px;
+      page-break-inside: avoid;
+    }
+    .sig-col {
+      text-align: center;
+    }
+    .sig-line {
+      border-top: 1px dashed var(--print-muted);
+      margin-top: 40px;
+      margin-bottom: 6px;
+    }
+    .sig-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--print-navy);
+    }
+    .sig-sub {
+      font-size: 10px;
+      color: var(--print-muted);
+    }
+
+    @media print {
+      body {
+        background: #FFFFFF;
+        font-size: 10pt;
+      }
+      .no-print, .print-actions-bar {
+        display: none !important;
+      }
+      .print-sheet {
+        box-shadow: none;
+        margin: 0;
+        padding: 0;
+        max-width: 100%;
+        border-radius: 0;
+      }
+      @page {
+        margin: 10mm;
+      }
+      .data-table th {
+        background: #0F2C4A !important;
+        color: #FFFFFF !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .data-table tr:nth-child(even) td {
+        background: #F8FAFC !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .kpi-card {
+        border: 1px solid #0284C7 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .signature-grid {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-actions-bar no-print">
+    <div style="display:flex;align-items:center;gap:12px">
+      <img src="{{ url_for('static', filename='img/sbg_logo.png') }}" style="width:28px;height:28px;border-radius:4px" alt="Logo">
+      <strong style="font-size:14px">Print &amp; Document Preview · SBG Smart Attendance</strong>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="window.print()" class="btn primary sm" style="background:#0284C7;border-color:#0284C7;color:#FFF;padding:6px 16px;font-weight:700;border-radius:6px;cursor:pointer">
+        🖨️ Print Document
+      </button>
+      <button onclick="window.close()" class="btn sm" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#FFF;padding:6px 12px;border-radius:6px;cursor:pointer">
+        ✕ Close
+      </button>
+    </div>
+  </div>
+
+  <div class="print-sheet">
+    <table class="header-table">
+      <tr>
+        <td style="width:60px">
+          <img src="{{ url_for('static', filename='img/sbg_logo.png') }}" class="logo-img" alt="SBG Logo">
+        </td>
+        <td>
+          <h1 class="brand-title">SRI BALAJI GEARS (SBG)</h1>
+          <p class="brand-subtitle">Industrial Estate, Hosur, Tamil Nadu · Smart Attendance &amp; Workforce Intelligence</p>
+          <h2 class="report-title-tag">{{ title }}</h2>
+        </td>
+        <td class="meta-box-header" style="width:230px">
+          <div><b>Generated:</b> {{ now_dt.strftime('%d %b %Y, %I:%M %p') if now_dt else '' }}</div>
+          <div><b>Status:</b> Official Corporate Record</div>
+          <div><b>Records:</b> {{ total_records }} entries</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="divider"></div>
+
+    {% if metadata %}
+    <div class="meta-grid">
+      {% for m in metadata %}
+      <div class="meta-item">
+        <span class="meta-label">{{ m.label }}:</span>
+        <span class="meta-value">{{ m.value }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if summary_kpis %}
+    <div class="kpi-row">
+      {% for k in summary_kpis %}
+      <div class="kpi-card">
+        <div class="kpi-lbl">{{ k.label }}</div>
+        <div class="kpi-val">{{ k.value }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% for h in headers %}
+          {% set align = alignments[loop.index0] if alignments and loop.index0 < alignments|length else 'L' %}
+          <th style="text-align:{{ 'right' if align=='R' else ('center' if align=='C' else 'left') }}">{{ h }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          {% for cell in row %}
+          {% set align = alignments[loop.index0] if alignments and loop.index0 < alignments|length else 'L' %}
+          <td style="text-align:{{ 'right' if align=='R' else ('center' if align=='C' else 'left') }}">
+            {% if align == 'C' and cell in ['P', 'Present', 'Approved', 'Active'] %}
+              <span class="badge-status st-p"><b>{{ cell }}</b></span>
+            {% elif align == 'C' and cell in ['A', 'Absent', 'Rejected', 'Locked', 'MP'] %}
+              <span class="badge-status st-a"><b>{{ cell }}</b></span>
+            {% elif align == 'C' and cell in ['HD', 'Half Day', 'Pending'] %}
+              <span class="badge-status st-hd"><b>{{ cell }}</b></span>
+            {% elif align == 'C' and cell in ['OT', 'Overtime'] %}
+              <span class="badge-status st-ot"><b>{{ cell }}</b></span>
+            {% elif align == 'C' and cell in ['L', 'Leave', 'OD', 'On Duty'] %}
+              <span class="badge-status st-l"><b>{{ cell }}</b></span>
+            {% else %}
+              {{ cell }}
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="{{ headers|length }}" style="text-align:center;padding:24px;color:var(--print-muted)">
+            No records found matching the specified report parameters.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="signature-grid">
+      <div class="sig-col">
+        <div class="sig-line"></div>
+        <div class="sig-title">Prepared By</div>
+        <div class="sig-sub">HR Operations</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-line"></div>
+        <div class="sig-title">Verified By</div>
+        <div class="sig-sub">Department Supervisor</div>
+      </div>
+      <div class="sig-col">
+        <div class="sig-line"></div>
+        <div class="sig-title">Authorized Signatory</div>
+        <div class="sig-sub">SBG Factory Management</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if (new URLSearchParams(window.location.search).get('autoprint') === '1') {
+      window.addEventListener('load', function() {
+        setTimeout(function() { window.print(); }, 400);
+      });
+    }
+  </script>
+</body>
+</html>

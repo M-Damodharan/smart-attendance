@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for, send_file, abort
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for, send_file, abort, current_app
 from werkzeug.security import check_password_hash
 
 from .auth import employee_required
@@ -177,7 +177,12 @@ def history():
 @employee_required
 @permission_required("emp_history", "export")
 def export_history():
+    import os
     from .exports import build_employee_attendance_doc
+    from .doc_exports import (
+        fetch_attendance_report,
+        build_pdf_document, build_excel_document, build_csv_document, build_docx_document
+    )
     u, t = g.user, today()
     try:
         y, m = map(int, request.args.get("month", t.strftime("%Y-%m")).split("-"))
@@ -186,18 +191,72 @@ def export_history():
         y, m = t.year, t.month
         start, end = month_range(y, m)
     db = get_db()
-    emp = db.execute(
-        "SELECT e.*, s.name shift_name, s.start_time shift_start, s.end_time shift_end, "
-        "c.name category_name, c.code category_code, c.work_hours category_work_hours "
-        "FROM employees e LEFT JOIN shifts s ON s.id=e.shift_id "
-        "LEFT JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?", (u["id"],)
-    ).fetchone() or u
-    buf = build_employee_attendance_doc(emp, start, end, db)
-    audit("EMPLOYEE_SELF_DOC_EXPORT", "report", f"{u['emp_code']}@{start:%Y-%m}", "via employee history")
+    fmt = request.args.get("format", "xlsx").strip().lower()
+
+    if fmt == "xlsx":
+        emp = db.execute(
+            "SELECT e.*, s.name shift_name, s.start_time shift_start, s.end_time shift_end, "
+            "c.name category_name, c.code category_code, c.work_hours category_work_hours "
+            "FROM employees e LEFT JOIN shifts s ON s.id=e.shift_id "
+            "LEFT JOIN employee_categories c ON c.id=e.category_id WHERE e.id=?", (u["id"],)
+        ).fetchone() or u
+        buf = build_employee_attendance_doc(emp, start, end, db)
+        dl_name = f"{u['emp_code']}_attendance_{start:%Y_%m}.xlsx"
+        mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        from_date = d2s(start)
+        to_date = d2s(end)
+        rep_data = fetch_attendance_report(db, from_date, to_date, emp_id=u["id"])
+        dept_name = u["department"] if "department" in u.keys() and u["department"] else "General"
+        metadata = [
+            {"label": "Employee", "value": f"{u['name']} ({u['emp_code']})"},
+            {"label": "Department", "value": dept_name},
+            {"label": "Period", "value": start.strftime("%B %Y")},
+        ]
+        logo_path = os.path.join(current_app.root_path, "static", "img", "sbg_logo.png")
+        if fmt == "pdf":
+            buf = build_pdf_document(
+                title=f"Monthly Attendance Record ({start.strftime('%B %Y')})",
+                metadata=metadata,
+                headers=rep_data["headers"],
+                rows=rep_data["rows"],
+                col_widths=rep_data.get("col_widths"),
+                orientation="landscape",
+                summary_kpis=rep_data.get("summary_kpis"),
+                alignments=rep_data.get("alignments"),
+                logo_path=logo_path
+            )
+            mimetype = "application/pdf"
+            dl_name = f"{u['emp_code']}_attendance_{start:%Y_%m}.pdf"
+        elif fmt == "docx":
+            buf = build_docx_document(
+                title=f"Monthly Attendance Record ({start.strftime('%B %Y')})",
+                metadata=metadata,
+                headers=rep_data["headers"],
+                rows=rep_data["rows"],
+                summary_kpis=rep_data.get("summary_kpis"),
+                orientation="landscape",
+                alignments=rep_data.get("alignments"),
+                logo_path=logo_path
+            )
+            mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            dl_name = f"{u['emp_code']}_attendance_{start:%Y_%m}.docx"
+        elif fmt == "csv":
+            buf = build_csv_document(
+                title=f"Monthly Attendance Record ({start.strftime('%B %Y')})",
+                metadata=metadata,
+                headers=rep_data["headers"],
+                rows=rep_data["rows"]
+            )
+            mimetype = "text/csv; charset=utf-8"
+            dl_name = f"{u['emp_code']}_attendance_{start:%Y_%m}.csv"
+        else:
+            abort(400, description="Invalid export format")
+
+    audit("EMPLOYEE_SELF_DOC_EXPORT", "report", f"{u['emp_code']}@{start:%Y-%m}:{fmt}", "via employee history")
     db.commit()
-    dl_name = f"{u['emp_code']}_attendance_{start:%Y_%m}.xlsx"
     return send_file(buf, as_attachment=True, download_name=dl_name,
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                     mimetype=mimetype)
 
 
 @bp.route("/leave", methods=["GET", "POST"])
