@@ -450,6 +450,11 @@ async function setColorTheme(themeName) {
     try {
       localStorage.removeItem('sbg_custom_colors');
     } catch(e) {}
+
+    // Synchronize custom color inputs in Section 3 with the selected preset!
+    if (PRESET_PALETTES[themeName]) {
+      populateInputsFromPalette(PRESET_PALETTES[themeName]);
+    }
   }
 
   try {
@@ -457,6 +462,7 @@ async function setColorTheme(themeName) {
   } catch(e) {}
 
   updateUIIndicators();
+  updateSaveButtonState();
   await persistThemeToServer(activeTheme, activeMode, null);
 
   if (typeof showNotificationPopToast === 'function') {
@@ -473,46 +479,77 @@ async function setColorTheme(themeName) {
 function syncColorField(key, val) {
   const txt = document.getElementById(`color_${key}`);
   if (txt) txt.value = val;
-  previewCustomColorsRealtime();
+  markCustomAndPreview();
 }
 
 function syncColorPicker(key, val) {
   if (/^#[0-9A-F]{6}$/i.test(val)) {
     const pick = document.getElementById(`picker_${key}`);
     if (pick) pick.value = val;
-    previewCustomColorsRealtime();
+    markCustomAndPreview();
   }
+}
+
+function markCustomAndPreview() {
+  activeTheme = 'custom';
+  document.documentElement.setAttribute('data-color-theme', 'custom');
+  previewCustomColorsRealtime();
+  updateUIIndicators();
+  updateSaveButtonState();
 }
 
 function getCustomColorsFromInputs() {
   return {
-    primary: document.getElementById('color_primary').value,
-    secondary: document.getElementById('color_secondary').value,
-    bg: document.getElementById('color_bg').value,
-    card: document.getElementById('color_card').value,
-    sidebar: document.getElementById('color_sidebar').value,
-    text: document.getElementById('color_text').value
+    primary: document.getElementById('color_primary')?.value || '#0f2c4a',
+    secondary: document.getElementById('color_secondary')?.value || '#0284c7',
+    bg: document.getElementById('color_bg')?.value || '#edf2f7',
+    card: document.getElementById('color_card')?.value || '#ffffff',
+    sidebar: document.getElementById('color_sidebar')?.value || '#f8fafc',
+    text: document.getElementById('color_text')?.value || '#0f172a'
   };
 }
 
-function previewCustomColorsRealtime() {
-  const c = getCustomColorsFromInputs();
+function applyCustomVariables(c) {
+  if (!c) return;
   const root = document.documentElement;
-  root.setAttribute('data-color-theme', 'custom');
-  activeTheme = 'custom';
-
   if (c.primary) { root.style.setProperty('--brand-primary', c.primary); root.style.setProperty('--brand-hover', c.primary); }
   if (c.secondary) { root.style.setProperty('--brand-accent', c.secondary); root.style.setProperty('--brand-cyan', c.secondary); }
   if (c.bg) { root.style.setProperty('--bg-page', c.bg); root.style.setProperty('--bg-canvas', c.bg); }
   if (c.card) { root.style.setProperty('--bg-card', c.card); root.style.setProperty('--bg-card-elevated', c.card); }
   if (c.sidebar) { root.style.setProperty('--bg-surface', c.sidebar); }
   if (c.text) { root.style.setProperty('--text-main', c.text); root.style.setProperty('--text-default', c.text); }
+}
 
-  updateUIIndicators();
+function previewCustomColorsRealtime() {
+  const c = getCustomColorsFromInputs();
+  applyCustomVariables(c);
+  updateContrastRatio();
 }
 
 function applyCustomVariablesFromInputs() {
   previewCustomColorsRealtime();
+}
+
+function populateInputsFromPalette(pal) {
+  if (!pal) return;
+  Object.keys(pal).forEach(k => {
+    const pick = document.getElementById(`picker_${k}`);
+    const txt = document.getElementById(`color_${k}`);
+    if (pick && pal[k]) pick.value = pal[k];
+    if (txt && pal[k]) txt.value = pal[k];
+  });
+  updateContrastRatio();
+}
+
+function updateSaveButtonState() {
+  const btn = document.getElementById('btn-save-custom-theme');
+  if (!btn) return;
+  if (activeTheme === 'custom') {
+    btn.innerHTML = '<span>💾 Save &amp; Apply Custom Theme</span>';
+  } else {
+    const label = activeTheme.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    btn.innerHTML = `<span>💾 Save &amp; Apply ${label} Theme</span>`;
+  }
 }
 
 function clearCustomVariableOverrides() {
@@ -556,26 +593,26 @@ async function saveCustomTheme(e) {
     btn.innerHTML = '<span>⏳ Saving Theme...</span>';
   }
 
-  const c = getCustomColorsFromInputs();
-  activeTheme = 'custom';
-  document.documentElement.setAttribute('data-color-theme', 'custom');
-
-  // Apply to documentElement
-  const root = document.documentElement;
-  if (c.primary) { root.style.setProperty('--brand-primary', c.primary); root.style.setProperty('--brand-hover', c.primary); }
-  if (c.secondary) { root.style.setProperty('--brand-accent', c.secondary); root.style.setProperty('--brand-cyan', c.secondary); }
-  if (c.bg) { root.style.setProperty('--bg-page', c.bg); root.style.setProperty('--bg-canvas', c.bg); }
-  if (c.card) { root.style.setProperty('--bg-card', c.card); root.style.setProperty('--bg-card-elevated', c.card); }
-  if (c.sidebar) { root.style.setProperty('--bg-surface', c.sidebar); }
-  if (c.text) { root.style.setProperty('--text-main', c.text); root.style.setProperty('--text-default', c.text); }
-
-  try {
-    localStorage.setItem('sbg_color_theme', 'custom');
-    localStorage.setItem('sbg_custom_colors', JSON.stringify(c));
-  } catch(err) {}
+  if (activeTheme === 'custom') {
+    const c = getCustomColorsFromInputs();
+    document.documentElement.setAttribute('data-color-theme', 'custom');
+    applyCustomVariables(c);
+    try {
+      localStorage.setItem('sbg_color_theme', 'custom');
+      localStorage.setItem('sbg_custom_colors', JSON.stringify(c));
+    } catch(err) {}
+    await persistThemeToServer('custom', activeMode, c);
+  } else {
+    // Preset theme: clear any custom overrides and persist the active preset
+    clearCustomVariableOverrides();
+    try {
+      localStorage.removeItem('sbg_custom_colors');
+      localStorage.setItem('sbg_color_theme', activeTheme);
+    } catch(err) {}
+    await persistThemeToServer(activeTheme, activeMode, null);
+  }
 
   updateUIIndicators();
-  const ok = await persistThemeToServer('custom', activeMode, c);
 
   if (btn) {
     btn.disabled = false;
@@ -583,17 +620,18 @@ async function saveCustomTheme(e) {
     btn.style.backgroundColor = '#059669';
     btn.style.color = '#ffffff';
     setTimeout(() => {
-      btn.innerHTML = originalHtml || '<span>💾 Save &amp; Apply Custom Theme</span>';
+      updateSaveButtonState();
       btn.style.backgroundColor = '';
       btn.style.color = '';
     }, 1800);
   }
 
   if (typeof showNotificationPopToast === 'function') {
+    const formatted = activeTheme.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
     showNotificationPopToast({
       id: Date.now(),
-      title: '🎨 Custom Theme Saved',
-      message: 'Your custom corporate color palette has been saved and applied!',
+      title: '🎨 Theme Saved',
+      message: `${formatted} theme is permanently saved!`,
       kind: 'info'
     });
   }
@@ -601,15 +639,12 @@ async function saveCustomTheme(e) {
 
 function resetCustomColors() {
   clearCustomVariableOverrides();
+  try {
+    localStorage.removeItem('sbg_custom_colors');
+  } catch(e) {}
   const targetTheme = (activeTheme && activeTheme !== 'custom' && PRESET_PALETTES[activeTheme]) ? activeTheme : 'default_blue';
-  const pal = PRESET_PALETTES[targetTheme];
-  if (pal) {
-    Object.keys(pal).forEach(k => {
-      const pick = document.getElementById(`picker_${k}`);
-      const txt = document.getElementById(`color_${k}`);
-      if (pick) pick.value = pal[k];
-      if (txt) txt.value = pal[k];
-    });
+  if (PRESET_PALETTES[targetTheme]) {
+    populateInputsFromPalette(PRESET_PALETTES[targetTheme]);
   }
   setColorTheme(targetTheme);
 }
@@ -688,21 +723,28 @@ async function persistThemeToServer(themeName, themeMode, customColors) {
 
 // Initial UI Setup on page load
 document.addEventListener('DOMContentLoaded', () => {
-  // Populate custom input fields if saved in localStorage or server
-  try {
-    const saved = localStorage.getItem('sbg_custom_colors');
-    if (saved && activeTheme === 'custom') {
-      const c = JSON.parse(saved);
-      Object.keys(c).forEach(k => {
-        const pick = document.getElementById(`picker_${k}`);
-        const txt = document.getElementById(`color_${k}`);
-        if (pick && c[k]) pick.value = c[k];
-        if (txt && c[k]) txt.value = c[k];
-      });
+  if (activeTheme === 'custom') {
+    try {
+      const saved = localStorage.getItem('sbg_custom_colors');
+      if (saved) {
+        const c = typeof saved === 'string' ? JSON.parse(saved) : saved;
+        populateInputsFromPalette(c);
+        applyCustomVariables(c);
+      }
+    } catch(e) {}
+  } else {
+    // Clear any residual custom overrides and sync inputs with active preset
+    clearCustomVariableOverrides();
+    try {
+      localStorage.removeItem('sbg_custom_colors');
+    } catch(e) {}
+    if (PRESET_PALETTES[activeTheme]) {
+      populateInputsFromPalette(PRESET_PALETTES[activeTheme]);
     }
-  } catch(e) {}
+  }
 
   updateUIIndicators();
+  updateSaveButtonState();
 });
 </script>
 {% endblock %}

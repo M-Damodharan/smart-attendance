@@ -193,6 +193,37 @@ class TestThemeAndResponsiveEnhancements(unittest.TestCase):
         self.assertIn("@media (max-width: 1024px)", css)
         self.assertIn("@media (max-width: 768px)", css)
 
+    def test_07_switching_from_preset_clears_old_custom_theme_and_persists_preset(self):
+        """Verify that switching back to a preset theme wipes custom colors and renders preset palette."""
+        self._login_hr()
+        # 1. First save custom theme with green colors
+        self.client.post("/api/theme/save", json={
+            "theme_name": "custom",
+            "theme_mode": "light",
+            "custom_colors": {"primary": "#064e3b", "secondary": "#059669", "bg": "#ecfdf5", "card": "#ffffff", "sidebar": "#d1fae5", "text": "#022c22"}
+        })
+
+        # 2. Now user selects Default Blue
+        res_blue = self.client.post("/api/theme/save", json={
+            "theme_name": "default_blue",
+            "theme_mode": "light",
+            "custom_colors": None
+        })
+        self.assertEqual(res_blue.status_code, 200)
+
+        # Database must have default_blue and custom_colors=None
+        with self.app.app_context():
+            db = get_db()
+            row = db.execute("SELECT * FROM user_preferences WHERE user_id=1").fetchone()
+            self.assertEqual(row["theme_name"], "default_blue")
+            self.assertIsNone(row["custom_colors"])
+
+        # 3. GET /theme must render with default_blue palette, not old green in the input fields
+        res_page = self.client.get("/theme")
+        self.assertEqual(res_page.status_code, 200)
+        self.assertIn(b'value="#0f2c4a"', res_page.data)  # Default blue primary in inputs
+        self.assertNotIn(b'id="color_primary" name="primary" value="#064e3b"', res_page.data)  # Old green not in input
+
 
 if __name__ == "__main__":
     unittest.main()

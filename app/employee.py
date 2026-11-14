@@ -658,6 +658,17 @@ def late_coming_submit():
 
 
 # ------------------------------------------------------------------ Dedicated Theme Customizer
+PRESET_THEME_PALETTES = {
+    "default_blue": {"primary": "#0f2c4a", "secondary": "#0284c7", "bg": "#edf2f7", "card": "#ffffff", "sidebar": "#f8fafc", "text": "#0f172a"},
+    "modern_purple": {"primary": "#5b21b6", "secondary": "#7c3aed", "bg": "#f5f3ff", "card": "#ffffff", "sidebar": "#ede9fe", "text": "#1e1b4b"},
+    "emerald_green": {"primary": "#065f46", "secondary": "#059669", "bg": "#ecfdf5", "card": "#ffffff", "sidebar": "#d1fae5", "text": "#064e3b"},
+    "ocean_teal": {"primary": "#115e59", "secondary": "#0d9488", "bg": "#f0fdfa", "card": "#ffffff", "sidebar": "#ccfbf1", "text": "#134e4a"},
+    "dark_premium": {"primary": "#3b82f6", "secondary": "#60a5fa", "bg": "#0b1120", "card": "#111827", "sidebar": "#0f172a", "text": "#f9fafb"},
+    "midnight_black": {"primary": "#6366f1", "secondary": "#818cf8", "bg": "#000000", "card": "#090d16", "sidebar": "#05070a", "text": "#ffffff"},
+    "rose_pink": {"primary": "#9f1239", "secondary": "#e11d48", "bg": "#fff1f2", "card": "#ffffff", "sidebar": "#ffe4e6", "text": "#4c0519"},
+    "orange_modern": {"primary": "#9a3412", "secondary": "#ea580c", "bg": "#fff7ed", "card": "#ffffff", "sidebar": "#ffedd5", "text": "#431407"},
+}
+
 @bp.route("/settings/theme", methods=["GET"])
 @bp.route("/theme", methods=["GET"])
 def theme_settings():
@@ -669,7 +680,7 @@ def theme_settings():
     current_mode = pref["theme_mode"] if pref else (g.user.get("theme_mode") or "light")
     import json
     custom_colors = {}
-    if pref and pref["custom_colors"]:
+    if current_theme == "custom" and pref and pref["custom_colors"]:
         try:
             custom_colors = json.loads(pref["custom_colors"])
             while isinstance(custom_colors, str):
@@ -678,6 +689,8 @@ def theme_settings():
                 custom_colors = {}
         except Exception:
             custom_colors = {}
+    if not custom_colors:
+        custom_colors = PRESET_THEME_PALETTES.get(current_theme, PRESET_THEME_PALETTES["default_blue"])
     return render_template(
         "theme_settings.html",
         current_theme=current_theme,
